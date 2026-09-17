@@ -1,0 +1,17 @@
+# Auto-detect text files and normalize line endings (LF in repo, CRLF on Windows checkout)
+* text=auto
+
+# Explicit types
+*.html  text
+*.md    text
+*.css   text
+*.js    text
+*.json  text
+*.txt   text
+
+# Binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
