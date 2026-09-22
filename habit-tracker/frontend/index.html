@@ -3,132 +3,41 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>自律计划 · MVP（Day 7 第一版）</title>
+  <title>自律计划 · Step 1 骨架</title>
   <style>
-    /* === 三套主题用 CSS 变量切换（A19）；默认暖白 === */
-    :root { --bg:#fffaf3; --fg:#3a342e; --card:#ffffff; --line:#ece4d8; --accent:#b97c4a; --muted:#9a8e7e; }
-    [data-theme="dark"] { --bg:#0f1626; --fg:#e7ecf3; --card:#1a2438; --line:#2a3650; --accent:#7aa2f7; --muted:#8b97ab; }
-    [data-theme="matcha"] { --bg:#f3f7ee; --fg:#2f3a25; --card:#ffffff; --line:#dde8d2; --accent:#5d8b3a; --muted:#8a9678; }
-
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
-           background:var(--bg); color:var(--fg); min-height:100vh; padding-bottom:64px; }
-    header { padding:16px 20px; border-bottom:1px solid var(--line); display:flex;
-             align-items:center; justify-content:space-between; }
-    header h1 { font-size:18px; margin:0; }
-    header .date { color:var(--muted); font-size:13px; }
-    main { padding:16px 20px; max-width:720px; margin:0 auto; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
-            padding:12px 14px; margin-bottom:10px; }
-    .row { display:flex; gap:8px; align-items:center; }
-    button { background:var(--accent); color:#fff; border:none; border-radius:8px;
-             padding:8px 12px; cursor:pointer; font-size:14px; }
-    button.ghost { background:transparent; color:var(--fg); border:1px solid var(--line); }
-    button[disabled] { opacity:.5; cursor:not-allowed; }
-    input[type=text], input[type=time], textarea {
-      width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px;
-      background:var(--card); color:var(--fg); font-size:14px; font-family:inherit; }
-    textarea { min-height:60px; resize:vertical; }
-    nav { position:fixed; bottom:0; left:0; right:0; display:flex; background:var(--card);
-          border-top:1px solid var(--line); }
-    nav button { flex:1; border-radius:0; background:transparent; color:var(--fg); }
-    nav button.active { color:var(--accent); font-weight:600; }
-    .todo { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
-    .todo:last-child { border-bottom:none; }
-    .todo .circle { width:22px; height:22px; border:2px solid var(--accent); border-radius:50%;
-                    cursor:pointer; display:flex; align-items:center; justify-content:center; flex:none; }
-    .todo.done .circle { background:var(--accent); }
-    .todo.done .label { text-decoration:line-through; color:var(--muted); }
-    .todo .time { color:var(--muted); font-size:12px; width:48px; }
-    .todo .label { flex:1; }
-    .todo .del { background:transparent; color:var(--muted); padding:4px 6px; }
-    .mood-row { display:flex; gap:12px; padding:12px 0; }
-    .mood-row button { flex:1; font-size:22px; padding:14px 0; }
-    .muted { color:var(--muted); font-size:13px; }
-    .question { background:var(--card); border-left:3px solid var(--accent); padding:12px 14px;
-                margin-bottom:12px; border-radius:6px; }
-    .question .meta { color:var(--muted); font-size:12px; margin-top:6px; }
-    .note-card { background:var(--card); border:1px solid var(--line); border-radius:8px;
-                 padding:10px 12px; margin-bottom:8px; }
-    .note-card .ts { color:var(--muted); font-size:12px; margin-bottom:4px; }
-    .calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-top:8px; }
-    .calendar div { aspect-ratio:1; display:flex; align-items:center; justify-content:center;
-                    border-radius:6px; background:var(--card); border:1px solid var(--line); font-size:12px; }
-    .calendar .empty { background:transparent; border:none; }
-    .calendar .has-mood { font-size:18px; }
-    .hidden { display:none; }
-    .warning { color:#a85a3c; font-size:13px; }
+    /* 骨架阶段用最朴素的样式；主题系统留 Step 5 再上 */
+    body { font-family: -apple-system,"PingFang SC","Microsoft YaHei", sans-serif;
+           margin: 0; padding: 16px 20px 64px; background: #fffaf3; color: #3a342e; }
+    header { display: flex; justify-content: space-between; align-items: baseline;
+             padding-bottom: 12px; border-bottom: 1px solid #ece4d8; margin-bottom: 16px; }
+    header h1 { font-size: 18px; margin: 0; }
+    header .date { color: #9a8e7e; font-size: 13px; }
+    .empty-state { color: #9a8e7e; font-size: 14px; padding: 24px 0; text-align: center; }
+    section { display: none; }
+    section.active { display: block; }
+    nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex;
+          background: #fff; border-top: 1px solid #ece4d8; }
+    nav button { flex: 1; padding: 12px 0; background: transparent; color: #3a342e;
+                 border: none; font-size: 14px; cursor: pointer; }
+    nav button.active { color: #b97c4a; font-weight: 600; }
   </style>
 </head>
 <body>
   <header>
-    <h1 id="greeting">自律的你</h1>
-    <div class="date" id="today"></div>
+    <h1 id="greeting">自律计划</h1>
+    <div class="date" id="today-label"></div>
   </header>
 
   <main>
-    <!-- === 今日视图：F1 时间轴 + F2 心情 === -->
-    <section id="view-today">
-      <div class="row" style="margin-bottom:12px;">
-        <input id="todo-text" type="text" placeholder="今天要做什么？" />
-        <input id="todo-time" type="time" style="max-width:110px;" />
-        <button id="add-todo">+</button>
-      </div>
-      <div id="timeline"></div>
-
-      <div class="card" id="mood-card" class="hidden" style="margin-top:16px;">
-        <div class="muted">今天感觉怎样？</div>
-        <div class="mood-row" id="mood-row">
-          <button data-mood="happy">😊</button>
-          <button data-mood="calm">😐</button>
-          <button data-mood="sad">😣</button>
-        </div>
-        <div id="mood-msg" class="muted"></div>
-      </div>
+    <!-- Step 1：仅留空 section；F1/F2/F3/F5 在 Step 2-5 实现 -->
+    <section id="view-today" class="active">
+      <div class="empty-state">今日视图（Step 2 接 F1 时间轴）</div>
     </section>
-
-    <!-- === 思考视图：F3 === -->
-    <section id="view-thoughts" class="hidden">
-      <div class="question">
-        <div id="daily-question">加载中…</div>
-        <div class="meta">
-          <button class="ghost" id="rotate-q">换一个</button>
-          <span id="rotate-info"></span>
-        </div>
-      </div>
-      <textarea id="note-text" placeholder="随便写点什么…"></textarea>
-      <div class="row" style="margin-top:8px; justify-content:flex-end;">
-        <button id="save-note">记下来</button>
-      </div>
-      <div id="note-stream" style="margin-top:16px;"></div>
+    <section id="view-thoughts">
+      <div class="empty-state">思考视图（Step 4 接 F3 思考）</div>
     </section>
-
-    <!-- === 我的视图：F5 === -->
-    <section id="view-me" class="hidden">
-      <div class="card">
-        <div class="muted">称呼</div>
-        <input id="profile-name" type="text" placeholder="默认：自律的你" />
-      </div>
-      <div class="card">
-        <div class="muted">主题</div>
-        <div class="row" style="margin-top:6px;">
-          <button data-theme="light" class="ghost">暖白</button>
-          <button data-theme="dark" class="ghost">深夜蓝</button>
-          <button data-theme="matcha" class="ghost">抹茶绿</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="muted">本月日历（有记录的日期显示心情）</div>
-        <div class="calendar" id="calendar"></div>
-      </div>
-      <div class="card">
-        <div class="muted">调试用（提交示例数据）</div>
-        <div class="row" style="margin-top:6px;">
-          <button class="ghost" id="seed-demo">填充示例</button>
-          <button class="ghost" id="clear-data">清空全部</button>
-        </div>
-        <div class="muted" style="margin-top:6px;">仅本人本地浏览器；示例数据全为编造。</div>
-      </div>
+    <section id="view-me">
+      <div class="empty-state">我的视图（Step 5 接 F5 我的）</div>
     </section>
   </main>
 
@@ -139,281 +48,32 @@
   </nav>
 
   <script>
-    // ===== 数据层（铁律：所有读写只走 loadData/saveData 两个函数） =====
+    // ===== 铁律：所有 localStorage 读写只走 loadData / saveData（Step 1 即建立） =====
     const KEY = 'habit-tracker-v1';
+    const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'light' }, meta: {} });
+    const loadData = () => { try { return JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch (e) { return defaults(); } };
+    const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
-    function loadData() {
-      try { return JSON.parse(localStorage.getItem(KEY)) || defaults(); }
-      catch (e) { return defaults(); }
-    }
-    function saveData(d) { localStorage.setItem(KEY, JSON.stringify(d)); }
-    function defaults() { return { todos:{}, moods:{}, notes:[], profile:{name:'', theme:'light'}, meta:{shownQuestions:[], rotates:0} }; }
-
-    function todayStr() {
+    // ===== currentDate 状态：Step 1 即建立，F5 月历跳转要复用 =====
+    const todayStr = () => {
       const d = new Date();
       return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    }
+    };
+    let currentDate = todayStr();   // 后续 Step 5 月历点日期会改这个值
 
-    // ===== 问题池（A13：30 题生活向；今天只取 1 个，换题最多 3 次） =====
-    const QUESTIONS = [
-      '今天有什么小确幸？','你今天为自己做了什么？','这周想对谁说声谢谢？',
-      '如果今天重来一次，你会改变什么？','最近在期待什么？','今天让你最放松的瞬间是什么？',
-      '今天学到了什么？','今天让你微笑的人是谁？','如果现在能休息 1 小时，你想做什么？',
-      '今天坚持得最好的一件事是什么？','最近让你焦虑的事是什么？','你最近在逃避什么？',
-      '今天让你骄傲的一刻？','如果给今天打分，你会打几分？','今天最想记录的一句话是什么？',
-      '最近哪本书/电影/歌打动了你？','今天有没有对自己说一句温柔的话？','今天最难的一秒是哪一秒？',
-      '你最近的一次成就是什么？','今天有让你觉得被支持吗？','如果和朋友聊天，你想聊什么？',
-      '今天为你爱的人做了什么？','最近想养成的小习惯是什么？','今天有没有好好吃饭/睡觉？',
-      '今天让你惊喜的一件小事？','你现在最需要什么？','这周最想完成的一件事？',
-      '今天让你感到平静的是什么？','最近哪件事让你觉得有进步？','如果明天只能做一件事，你选什么？'
-    ];
-
-    // ===== 渲染：今日 =====
-    function renderToday() {
-      const data = loadData();
-      const day = todayStr();
-      const todays = (data.todos[day] || []);
-      // 按时间排序：有时间的在前，无时间在末尾
-      todays.sort((a,b)=>{
-        if (a.time && !b.time) return -1;
-        if (!a.time && b.time) return 1;
-        return (a.time||'').localeCompare(b.time||'');
-      });
-      const list = document.getElementById('timeline');
-      list.innerHTML = '';
-      const title = document.createElement('div');
-      title.className = 'muted';
-      title.textContent = todays.length ? '今天 ' + todays.length + ' 条待办' : '今天还没有待办，点 + 加一条';
-      list.appendChild(title);
-      todays.forEach(t => {
-        const row = document.createElement('div');
-        row.className = 'todo' + (t.done ? ' done' : '');
-        row.innerHTML = `<span class="time">${t.time || '—'}</span>
-          <div class="circle" data-id="${t.id}"></div>
-          <span class="label">${escape(t.text)}</span>
-          <button class="del" data-del="${t.id}">✕</button>`;
-        list.appendChild(row);
-      });
-
-      // 心情区：仅在 ≥1 个待办已完成时显示（A6）
-      const doneCount = todays.filter(t=>t.done).length;
-      const moodCard = document.getElementById('mood-card');
-      if (doneCount > 0) {
-        moodCard.style.display = 'block';
-        const mood = data.moods[day];
-        document.querySelectorAll('#mood-row button').forEach(b=>{
-          b.style.outline = (mood && b.dataset.mood === mood) ? '3px solid var(--accent)' : 'none';
-        });
-        document.getElementById('mood-msg').textContent = moodMsg(mood);
-      } else {
-        moodCard.style.display = 'none';
-      }
-    }
-
-    function moodMsg(m) {
-      if (m === 'happy') return '找到这一份快乐，本身就是能力。';
-      if (m === 'calm')  return '稳稳的一天，是另一种前进。';
-      if (m === 'sad')   return '辛苦了，完成本身就是赢。'; // A8：哭脸不得出现负面文案
-      return '';
-    }
-
-    function escape(s) { return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-    // ===== 渲染：思考 =====
-    function renderThoughts() {
-      const data = loadData();
-      // 每日一问：A13 当天不重复
-      const day = todayStr();
-      if (!data.meta.questionDate || data.meta.questionDate !== day) {
-        data.meta.questionDate = day;
-        data.meta.currentQ = pickQuestion(data);
-        data.meta.rotates = 0;
-        saveData(data);
-      }
-      document.getElementById('daily-question').textContent = data.meta.currentQ;
-      document.getElementById('rotate-info').textContent = `今日已换 ${data.meta.rotates}/3 次`;
-      document.getElementById('rotate-q').disabled = data.meta.rotates >= 3;
-
-      // 卡片流：倒序
-      const stream = document.getElementById('note-stream');
-      stream.innerHTML = '';
-      data.notes.slice().reverse().slice(0, 20).forEach(n => {
-        const c = document.createElement('div');
-        c.className = 'note-card';
-        c.innerHTML = `<div class="ts">${n.ts}</div><div>${escape(n.text).replace(/\n/g,'<br>')}</div>`;
-        stream.appendChild(c);
-      });
-      if (!data.notes.length) stream.innerHTML = '<div class="muted">还没有记录，写下第一句吧。</div>';
-    }
-
-    function pickQuestion(data) {
-      const shown = new Set(data.meta.shownQuestions || []);
-      const pool = QUESTIONS.map((q,i)=>({q,i})).filter(o=>!shown.has(o.i));
-      const list = pool.length ? pool : QUESTIONS.map((q,i)=>({q,i}));
-      const pick = list[Math.floor(Math.random()*list.length)];
-      data.meta.shownQuestions = Array.from(new Set([...(data.meta.shownQuestions||[]), pick.i]));
-      return pick.q;
-    }
-
-    // ===== 渲染：我的 =====
-    function renderMe() {
-      const data = loadData();
-      document.getElementById('profile-name').value = data.profile.name || '';
-      document.documentElement.setAttribute('data-theme', data.profile.theme || 'light');
-      // 称呼：欢迎 + 姓名
-      document.getElementById('greeting').textContent = data.profile.name ? data.profile.name : '自律的你';
-      // 月历
-      renderCalendar();
-    }
-
-    function renderCalendar() {
-      const data = loadData();
-      const cal = document.getElementById('calendar');
-      cal.innerHTML = '';
-      const now = new Date();
-      const y = now.getFullYear(), m = now.getMonth();
-      const first = new Date(y, m, 1);
-      const lastDay = new Date(y, m+1, 0).getDate();
-      const startW = first.getDay();
-      const MOOD = { happy:'😊', calm:'😐', sad:'😣' };
-      for (let i=0; i<startW; i++) {
-        const e = document.createElement('div'); e.className='empty'; cal.appendChild(e);
-      }
-      for (let d=1; d<=lastDay; d++) {
-        const ds = y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-        const cell = document.createElement('div');
-        cell.textContent = d;
-        if (data.moods[ds]) { cell.className='has-mood'; cell.textContent = MOOD[data.moods[ds]]; cell.title = ds; }
-        cal.appendChild(cell);
-      }
-    }
-
-    // ===== 事件绑定 =====
-    document.getElementById('today').textContent = todayStr();
-
-    // 导航
-    document.querySelectorAll('nav button').forEach(b=>{
-      b.addEventListener('click', ()=>{
-        document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
-        b.classList.add('active');
-        document.querySelectorAll('section').forEach(s=>s.classList.add('hidden'));
-        document.getElementById('view-'+b.dataset.view).classList.remove('hidden');
-        if (b.dataset.view==='today') renderToday();
-        if (b.dataset.view==='thoughts') renderThoughts();
-        if (b.dataset.view==='me') renderMe();
+    // ===== 视图切换 =====
+    document.getElementById('today-label').textContent = currentDate;
+    document.querySelectorAll('nav button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+        document.getElementById('view-' + btn.dataset.view).classList.add('active');
       });
     });
 
-    // 添加待办
-    document.getElementById('add-todo').addEventListener('click', ()=>{
-      const text = document.getElementById('todo-text').value.trim();
-      if (!text) return;
-      const time = document.getElementById('todo-time').value;
-      const data = loadData();
-      const day = todayStr();
-      data.todos[day] = data.todos[day] || [];
-      data.todos[day].push({ id:'t'+Date.now(), text, time, done:false });
-      saveData(data);
-      document.getElementById('todo-text').value='';
-      document.getElementById('todo-time').value='';
-      renderToday();
-    });
-
-    // 时间轴点击代理（勾选/删除）
-    document.getElementById('timeline').addEventListener('click', e=>{
-      const data = loadData();
-      const day = todayStr();
-      data.todos[day] = data.todos[day] || [];
-      const id = e.target.dataset.id;
-      const delId = e.target.dataset.del;
-      if (id) {
-        const t = data.todos[day].find(x=>x.id===id);
-        if (t) { t.done = !t.done; saveData(data); renderToday(); }
-      } else if (delId) {
-        if (confirm('确认删除这条待办？')) {
-          data.todos[day] = data.todos[day].filter(x=>x.id!==delId);
-          saveData(data); renderToday();
-        }
-      }
-    });
-
-    // 心情
-    document.getElementById('mood-row').addEventListener('click', e=>{
-      if (!e.target.dataset.mood) return;
-      const data = loadData();
-      data.moods[todayStr()] = e.target.dataset.mood; // A9：覆盖更新
-      saveData(data);
-      renderToday();
-    });
-
-    // 换一题
-    document.getElementById('rotate-q').addEventListener('click', ()=>{
-      const data = loadData();
-      if (data.meta.rotates >= 3) return;
-      data.meta.rotates++;
-      data.meta.currentQ = pickQuestion(data);
-      saveData(data);
-      renderThoughts();
-    });
-
-    // 保存笔记
-    document.getElementById('save-note').addEventListener('click', ()=>{
-      const text = document.getElementById('note-text').value.trim();
-      if (!text) return;
-      const data = loadData();
-      const now = new Date();
-      const ts = todayStr()+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-      data.notes.push({ ts, text });
-      saveData(data);
-      document.getElementById('note-text').value='';
-      renderThoughts();
-    });
-
-    // 姓名（保存即生效）
-    document.getElementById('profile-name').addEventListener('change', e=>{
-      const data = loadData();
-      data.profile.name = e.target.value.trim();
-      saveData(data);
-      renderMe();
-    });
-
-    // 主题
-    document.querySelectorAll('[data-theme]').forEach(b=>{
-      b.addEventListener('click', ()=>{
-        const data = loadData();
-        data.profile.theme = b.dataset.theme;
-        saveData(data);
-        renderMe();
-      });
-    });
-
-    // 调试：填充示例 / 清空
-    document.getElementById('seed-demo').addEventListener('click', ()=>{
-      if (!confirm('将填充 3 天编造的示例数据（含心情/待办/笔记），确定？')) return;
-      const data = loadData();
-      const today = new Date();
-      for (let i=0; i<3; i++) {
-        const d = new Date(today); d.setDate(today.getDate()-i);
-        const ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        data.todos[ds] = [
-          { id:'s'+i+'a', text:'读 10 分钟书', time:'08:00', done:true },
-          { id:'s'+i+'b', text:'出门散步 20 分钟', time:'18:30', done:i!==2 }
-        ];
-        data.moods[ds] = ['happy','calm','sad'][i];
-        data.notes.push({ ts: ds+' 21:00', text: '示例笔记 #'+(i+1)+'：今天还行。' });
-      }
-      saveData(data);
-      alert('示例数据已填充（3 天，全部编造）。');
-    });
-    document.getElementById('clear-data').addEventListener('click', ()=>{
-      if (!confirm('将清空本地所有数据（待办/心情/笔记/设置），确定？')) return;
-      localStorage.removeItem(KEY);
-      alert('已清空。');
-      location.reload();
-    });
-
-    // 初次渲染（默认今日视图）
-    renderToday();
+    // ===== Step 1 验证：localStorage 初始化一次，确认读写铁律可工作 =====
+    saveData(loadData());   // 触发出一次默认值写入，确保 KEY 存在
   </script>
 </body>
 </html>

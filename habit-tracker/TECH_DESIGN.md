@@ -82,40 +82,26 @@
 
 ## 二、项目结构
 
+> **更新说明（Day 7.1）**：原计划是 React/Vite 多文件结构。考虑到 MVP 28 天节奏与零基础学员门槛，**改为 vanilla 单文件 HTML，按 5 步分步交付**。React/Vite 化作为 step 5 之后或后续的优化项（独立 TECH_DESIGN v3.0），不在本阶段范围。下方结构已同步更新。
+
 ```
 habit-tracker/
-├── docs/                      ← 文档层
+├── docs/                     ← 文档层
 │   ├── research.md            （Day 3）
 │   ├── PRD.md                 （Day 4, v2.0）
-│   └── TECH_DESIGN.md         （Day 5，本文档）
-├── frontend/                  ← React/Vite 前端（Day 7 起）
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── .env                   ← 本地环境变量（.gitignore 已禁传 ✅）
-│   ├── .env.example           ← 模板，可入库
-│   └── src/
-│       ├── main.jsx           入口
-│       ├── App.jsx            视图路由（今日/思考/我的）
-│       ├── api/client.js      唯一的云端请求出口（对应铁律"读写走一个模块"）
-│       ├── store/data.js      数据模型与本地缓存
-│       ├── components/
-│       │   ├── Timeline.jsx   F1 时间轴
-│       │   ├── MoodPicker.jsx F2 今日状态
-│       │   ├── DailyQuestion.jsx + NoteCard.jsx   F3 思考
-│       │   ├── ReportView.jsx F4 报告
-│       │   └── ProfileView.jsx + MonthCalendar.jsx F5 我的
-│       └── styles/            （主题用 CSS 变量切换，3 套）
-└── cloudfunctions/            ← CloudBase 云函数（第 3 周起）
-    ├── api/                   一个函数承载全部 REST 接口（见 API 列表）
-    │   ├── index.js           路由分发
-    │   ├── db.js              PostgreSQL 连接（唯一连接出口）
-    │   ├── handlers/          按资源拆分：todos.js / moods.js / notes.js / report.js / profile.js
-    │   └── questions.js       每日一问题池与洗牌逻辑
-    └── schema.sql             建表语句（版本化管理）
+│   └── TECH_DESIGN.md         （Day 5，本文档，Day 7.1 更新结构）
+├── frontend/
+│   └── index.html            ← 单文件 vanilla HTML（Day 7 起，每步迭代）
+└── scratch/                  ← 临时试验文件（R6 要求当天清空）
 ```
 
-> 前后端各自内部保持"三文件封顶"的精神不再适用（框架天生多文件），但**"存储只走一个模块"的铁律保留**：前端所有请求过 `api/client.js`，后端所有 SQL 过 `db.js`。
+**为什么放弃 React/Vite 路线（至少在 MVP 阶段）**：
+1. **零基础友好**：无需 `npm install` / 构建工具链，打开页面就看到效果
+2. **第 1 周节奏**：PRD v2.0 + TECH_DESIGN + 第 1 周任务清单加起来已经 3 份文档，**心智能耗已近上限**；引入 React 学习曲线会压垮新功能的学习
+3. **数据模型没变**：所有 v2.0 的设计（4 张数据表、A1-A22 验收标准、3 主题 CSS 变量、规则拼装报告）都能在 vanilla 中实现
+4. **未来切换成本可控**：当所有 F1-F5 跑通后，可一次性切到 React 而无需重写产品逻辑
+
+> 前后端各自内部保持"三文件封顶"的精神不再适用（框架天生多文件），但**"存储只走一个模块"的铁律保留**：所有 localStorage 读写过 `loadData()/saveData()` 两个函数。
 
 ## 三、数据模型（CloudBase PostgreSQL）
 
