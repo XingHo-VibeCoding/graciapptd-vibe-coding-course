@@ -44,6 +44,25 @@
     body.readonly #readonly-hint { display: block; }
     body.readonly #add-form { display: none; }   /* 非今天也不允许添加，防边界问题 */
 
+    /* ===== Day 8：四种页面状态（加载 / 错误 / 空 / 数据）===== */
+    body.loading #add-form { display: none; }    /* 加载中不允许提交，防 data 未就绪 */
+    #state-error button { display: block; margin: 0 auto 16px; padding: 8px 22px;
+                          border: 1px solid #b97c4a; border-radius: 8px; background: transparent;
+                          color: #b97c4a; font-size: 14px; cursor: pointer; }
+
+    /* 演示模式横幅：mock 数据只看不存 */
+    #demo-banner { display: flex; justify-content: space-between; align-items: center;
+                   background: #f6efe4; border: 1px dashed #d8c8a8; color: #9a8e7e;
+                   font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; }
+    #demo-banner button { border: none; background: transparent; color: #b97c4a;
+                          font-size: 13px; cursor: pointer; }
+    body.demo #add-form { display: none; }       /* 假数据不落盘，演示模式只看 */
+
+    /* 空状态里的示例入口 */
+    #today-empty #load-demo { display: block; margin: 10px auto 0; padding: 7px 16px;
+                              border: 1px solid #ece4d8; border-radius: 8px; background: transparent;
+                              color: #b97c4a; font-size: 13px; cursor: pointer; }
+
     /* 待办卡片：时间点 + 圆圈 + 文字 + "···"删除 */
     .group-label { color: #9a8e7e; font-size: 12px; margin: 14px 0 6px; }
     .todo { display: flex; align-items: center; gap: 10px; background: #fff;
@@ -71,7 +90,7 @@
   </header>
 
   <main>
-    <!-- 今日视图：Step 2 = F1 时间轴（F2 心情留 Step 3） -->
+    <!-- 今日视图：Step 2 = F1 时间轴；Day 8 = 四状态 + mock 数据 -->
     <section id="view-today" class="active">
       <!-- 日期切换：浏览昨天/明天，只有今天能操作 -->
       <div class="date-nav">
@@ -82,18 +101,38 @@
 
       <div id="readonly-hint">这一天只能查看，添加和勾选仅限今天</div>
 
+      <!-- Day 8 状态①：加载中 -->
+      <div id="state-loading" class="empty-state" hidden>加载中…</div>
+
+      <!-- Day 8 状态②：错误（数据读不出来时的兜底，给用户一个重试出口） -->
+      <div id="state-error" hidden>
+        <div class="empty-state">数据读取出了点问题，稍后重试一下</div>
+        <button id="retry-btn" type="button">重试</button>
+      </div>
+
+      <div id="demo-banner" hidden>
+        <span>示例数据 · 仅演示渲染效果，不会保存</span>
+        <button id="exit-demo" type="button">退出示例</button>
+      </div>
+
       <form id="add-form">
         <input id="todo-text" placeholder="要做点什么？" maxlength="60" />
         <input id="todo-time" type="time" title="可选：几点做" />
         <button type="submit" title="添加待办">＋</button>
       </form>
 
-      <div id="timeline"></div>
-      <div id="unassigned-wrap" hidden>
-        <div class="group-label">未安排</div>
-        <div id="unassigned-list"></div>
+      <!-- Day 8 状态③空 / 状态④数据 共用这个容器，由 renderDay 决定显示哪个 -->
+      <div id="day-content">
+        <div id="timeline"></div>
+        <div id="unassigned-wrap" hidden>
+          <div class="group-label">未安排</div>
+          <div id="unassigned-list"></div>
+        </div>
+        <div id="today-empty" class="empty-state" hidden>
+          <span id="empty-text">今天还没有安排，写一条试试</span>
+          <button id="load-demo" type="button">或看看示例数据 →</button>
+        </div>
       </div>
-      <div id="today-empty" class="empty-state">今天还没有安排，写一条试试</div>
     </section>
     <section id="view-thoughts">
       <div class="empty-state">思考视图（Step 4 接 F3 思考）</div>
@@ -113,8 +152,22 @@
     // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
     const KEY = 'habit-tracker-v1';
     const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'light' }, meta: {} });
-    const loadData = () => { try { return JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch (e) { return defaults(); } };
+    const loadData = () => {
+      const raw = localStorage.getItem(KEY);
+      if (raw === null) return defaults();          // 首次使用：还没有任何数据
+      const parsed = JSON.parse(raw);               // 解析失败会抛错——错误状态要能被看见（Day 8）
+      if (parsed && typeof parsed === 'object') return parsed;
+      throw new Error('stored data is not an object');
+    };
     const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
+
+    // ===== Day 8 主任务：本地 mock 数据（内容全部编造，只演示渲染，永不落盘；R6 隐私红线） =====
+    const mockTodos = () => ([
+      { id: 'mock-1', text: '晨跑 30 分钟',   time: '07:30', done: true  },
+      { id: 'mock-2', text: '整理本周笔记',   time: '09:00', done: false },
+      { id: 'mock-3', text: '读书 30 分钟',   time: '20:30', done: false },
+      { id: 'mock-4', text: '给家里打个电话', time: null,    done: false },
+    ]);
 
     // ===== 日期工具 =====
     const pad2 = (n) => String(n).padStart(2, '0');
@@ -123,11 +176,9 @@
     // 把 YYYY-MM-DD 整体平移 n 天（用 Date 解析避免手写进位 bug）
     const shiftDate = (dateStr, n) => {
       const [y, m, d] = dateStr.split('-').map(Number);
-      const dt = new Date(y, m-1, d + n);
-      return dateToStr(dt);
+      return dateToStr(new Date(y, m-1, d + n));
     };
     const WEEK = ['日','一','二','三','四','五','六'];
-    // 视图标题：今天显示"今天"，其他天显示"9月24日 周四"
     const dateLabel = (dateStr) => {
       const [y, m, d] = dateStr.split('-').map(Number);
       const base = m + '月' + d + '日 周' + WEEK[new Date(y, m-1, d).getDay()];
@@ -135,45 +186,64 @@
       return base;
     };
 
-    // ===== 全局状态：data（唯一数据源，改动后 saveData + render）=====
-    let data = loadData();
-    let currentDate = todayStr();   // 当前查看的日期（Step 5 月历跳转会复用）
+    // ===== 全局状态 =====
+    let data = null;             // 唯一数据源，由 loadDayData 异步填入
+    let currentDate = todayStr();
+    let demoMode = false;        // mock 演示模式：只看不存
+    const el = (id) => document.getElementById(id);
+
+    // ===== Day 8：数据读取层。模拟一次异步加载——第 3 周换成真 API 时页面结构不用动 =====
+    const LOAD_DELAY = 300;      // 毫秒，故意留一点延迟让"加载中"状态肉眼可见
+    const loadDayData = () => new Promise((resolve, reject) => {
+      setTimeout(() => {
+        try { resolve(loadData()); } catch (e) { reject(e); }
+      }, LOAD_DELAY);
+    });
+
+    // ===== 四状态切换：'loading' | 'error' | 'content' =====
+    const showState = (state) => {
+      document.body.classList.toggle('loading', state === 'loading');
+      el('state-loading').hidden = state !== 'loading';
+      el('state-error').hidden = state !== 'error';
+      el('day-content').hidden = state !== 'content';
+    };
 
     // ===== F1：待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done}]）=====
     const getTodos = (date) => data.todos[date] || [];
 
     const addTodo = (text, time) => {
+      if (!data || demoMode) return;                // 数据未就绪或演示模式下不添加
       const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
                      text: text.trim(), time: time || null, done: false };
-      if (!todo.text) return;                        // 空内容不添加
+      if (!todo.text) return;                       // 空内容不添加
       (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
       saveData(data);
       renderDay();
     };
 
     const toggleTodo = (id) => {
-      if (currentDate !== todayStr()) return;        // 只能对今天打勾（A5 的数据层防线）
-      const list = getTodos(currentDate);
-      const todo = list.find(t => t.id === id);
+      if (demoMode || currentDate !== todayStr()) return;  // 只能对今天打勾（A5 数据层防线）
+      const todo = getTodos(currentDate).find(t => t.id === id);
       if (todo) { todo.done = !todo.done; saveData(data); renderDay(); }
     };
 
     const deleteTodo = (id) => {
+      if (demoMode || !data) return;                // 演示数据不属于用户，不可删
       if (!confirm('确定删除这条待办吗？')) return;  // A4：删除必须先弹确认
       data.todos[currentDate] = getTodos(currentDate).filter(t => t.id !== id);
       saveData(data);
       renderDay();
     };
 
-    // ===== F1：渲染（先改数据再渲染，铁律 2）=====
-    const makeTodoEl = (todo, isToday) => {
+    // ===== 可复用卡片组件：时间轴与"未安排"区共用同一个工厂函数（Day 8 余力加练） =====
+    const createTodoCard = (todo, interactive) => {
       const row = document.createElement('div');
       row.className = 'todo' + (todo.done ? ' done' : '');
       const check = document.createElement('button');
       check.className = 'check';
       check.title = todo.done ? '点击恢复未完成' : '点击标记完成';
       check.setAttribute('aria-label', check.title);
-      if (!isToday) check.disabled = true;           // 非今天：圆圈禁用（A5）
+      if (!interactive) check.disabled = true;      // 非今天/演示模式：圆圈禁用
       check.addEventListener('click', () => toggleTodo(todo.id));
       const time = document.createElement('span');
       time.className = 'time';
@@ -185,50 +255,80 @@
       del.className = 'del';
       del.textContent = '···';
       del.title = '删除这条待办';
+      del.hidden = demoMode;                        // 演示卡片是假数据，不给删除入口
       del.addEventListener('click', () => deleteTodo(todo.id));
       row.append(check, time, text, del);
       return row;
     };
 
+    // ===== 渲染（先改数据再渲染，铁律 2）。只在 content 状态下被调用 =====
     const renderDay = () => {
       const isToday = currentDate === todayStr();
-      document.body.classList.toggle('readonly', !isToday);
+      document.body.classList.toggle('readonly', !isToday && !demoMode);
+      document.body.classList.toggle('demo', demoMode);
+      el('demo-banner').hidden = !demoMode;
 
-      document.getElementById('view-date-label').textContent = dateLabel(currentDate);
-      document.getElementById('view-date-label').classList.toggle('not-today', !isToday);
-      document.getElementById('today-label').textContent = todayStr();
+      el('view-date-label').textContent = dateLabel(currentDate);
+      el('view-date-label').classList.toggle('not-today', !isToday);
+      el('today-label').textContent = todayStr();
 
-      const list = getTodos(currentDate);
+      // 演示模式渲染 mock 假数据；正常模式渲染 localStorage 真数据
+      const list = demoMode ? mockTodos() : getTodos(currentDate);
+      const interactive = isToday && !demoMode;
       const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
       const untimed = list.filter(t => !t.time);
 
-      const timeline = document.getElementById('timeline');
+      const timeline = el('timeline');
       timeline.textContent = '';
-      timed.forEach(t => timeline.appendChild(makeTodoEl(t, isToday)));
+      timed.forEach(t => timeline.appendChild(createTodoCard(t, interactive)));
 
-      const wrap = document.getElementById('unassigned-wrap');
-      wrap.hidden = untimed.length === 0;
-      const unList = document.getElementById('unassigned-list');
+      el('unassigned-wrap').hidden = untimed.length === 0;
+      const unList = el('unassigned-list');
       unList.textContent = '';
-      untimed.forEach(t => unList.appendChild(makeTodoEl(t, isToday)));
+      untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
 
-      document.getElementById('today-empty').style.display = list.length ? 'none' : 'block';
+      // 空状态：只有今天给"看看示例数据"入口
+      el('today-empty').hidden = list.length > 0;
+      el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
+      el('load-demo').hidden = !isToday;
+    };
+
+    // ===== Day 8：统一入口。任何"重新取数"都走这里（打开/切日期/重试/进演示） =====
+    const enterDemo = async () => {
+      demoMode = true;
+      showState('loading');                         // 演示数据也走一遍加载状态，和真数据同一条路
+      await new Promise(r => setTimeout(r, LOAD_DELAY));
+      showState('content');
+      renderDay();
+    };
+
+    const refreshDay = async () => {
+      demoMode = false;
+      el('view-date-label').textContent = dateLabel(currentDate);
+      showState('loading');
+      try {
+        data = await loadDayData();
+      } catch (e) {
+        showState('error');                         // 状态②：读不出来给重试出口
+        return;
+      }
+      if (localStorage.getItem(KEY) === null) saveData(data);  // 首次使用落一次默认结构
+      showState('content');
+      renderDay();
     };
 
     // ===== 事件绑定 =====
-    document.getElementById('add-form').addEventListener('submit', (e) => {
-      e.preventDefault();                            // 阻止表单默认的页面刷新行为
-      addTodo(document.getElementById('todo-text').value,
-              document.getElementById('todo-time').value);
-      document.getElementById('todo-text').value = '';
-      document.getElementById('todo-time').value = '';
+    el('add-form').addEventListener('submit', (e) => {
+      e.preventDefault();                           // 阻止表单默认的页面刷新行为
+      addTodo(el('todo-text').value, el('todo-time').value);
+      el('todo-text').value = '';
+      el('todo-time').value = '';
     });
-    document.getElementById('prev-day').addEventListener('click', () => {
-      currentDate = shiftDate(currentDate, -1); renderDay();
-    });
-    document.getElementById('next-day').addEventListener('click', () => {
-      currentDate = shiftDate(currentDate, 1); renderDay();
-    });
+    el('prev-day').addEventListener('click', () => { currentDate = shiftDate(currentDate, -1); refreshDay(); });
+    el('next-day').addEventListener('click', () => { currentDate = shiftDate(currentDate, 1); refreshDay(); });
+    el('retry-btn').addEventListener('click', refreshDay);
+    el('load-demo').addEventListener('click', enterDemo);
+    el('exit-demo').addEventListener('click', () => { demoMode = false; renderDay(); });
 
     // ===== 视图切换（底部导航）=====
     document.querySelectorAll('nav button').forEach(btn => {
@@ -236,13 +336,12 @@
         document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
-        document.getElementById('view-' + btn.dataset.view).classList.add('active');
+        el('view-' + btn.dataset.view).classList.add('active');
       });
     });
 
-    // ===== 启动：初始化一次 localStorage，渲染今天 =====
-    saveData(data);   // 确保默认结构写入，读写铁律可工作
-    renderDay();
+    // ===== 启动：异步加载今天的真实数据（不再同步渲染） =====
+    refreshDay();
   </script>
 </body>
 </html>
