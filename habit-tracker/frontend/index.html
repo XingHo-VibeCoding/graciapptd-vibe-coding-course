@@ -5,109 +5,204 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>自律计划</title>
   <style>
-    /* 骨架阶段用最朴素的样式；主题系统留 Step 5 再上 */
-    body { font-family: -apple-system,"PingFang SC","Microsoft YaHei", sans-serif;
-           margin: 0; padding: 16px 20px 64px; background: #fffaf3; color: #3a342e; }
-    header { display: flex; justify-content: space-between; align-items: baseline;
-             padding-bottom: 12px; border-bottom: 1px solid #ece4d8; margin-bottom: 16px; }
-    header h1 { font-size: 18px; margin: 0; }
-    header .date { color: #9a8e7e; font-size: 13px; }
-    .empty-state { color: #9a8e7e; font-size: 14px; padding: 24px 0; text-align: center; }
-    section { display: none; }
-    section.active { display: block; }
-    nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex;
-          background: #fff; border-top: 1px solid #ece4d8; }
-    nav button { flex: 1; padding: 12px 0; background: transparent; color: #3a342e;
-                 border: none; font-size: 14px; cursor: pointer; }
-    nav button.active { color: #b97c4a; font-weight: 600; }
+    /* ===== 主题：浅绿（首页改版，参照 MeGrow 布局）===== */
+    :root{
+      --bg:#e6f3e8; --bg-top:#d8eedd; --card:#ffffff;
+      --ink:#2f3b32; --muted:#87a08e;
+      --green:#3fa66a; --green-deep:#2e7d4f; --line:#dcebe0;
+    }
+    *{ box-sizing:border-box; }
+    body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+          margin:0; color:var(--ink); min-height:100vh;
+          background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg) 220px); }
+    .app{ max-width:480px; margin:0 auto; padding:18px 16px 108px; }
 
-    /* ===== F1 时间轴（Step 2）===== */
-    .date-nav { display: flex; justify-content: space-between; align-items: center;
-                margin-bottom: 12px; }
-    .date-nav button { background: transparent; border: 1px solid #ece4d8; border-radius: 6px;
-                       color: #3a342e; font-size: 16px; width: 36px; height: 30px; cursor: pointer; }
-    .date-nav #view-date-label { font-size: 14px; font-weight: 600; }
-    .date-nav #view-date-label.not-today { color: #9a8e7e; font-weight: 400; }
+    /* ===== 顶部栏：月份 + 图标占位（F4/F5 入口后续版本）===== */
+    header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+    header h1{ font-size:20px; margin:0; font-weight:700; }
+    header h1 small{ font-size:12px; color:var(--muted); font-weight:400; margin-left:6px; }
+    header .icons button{ border:none; background:transparent; font-size:18px;
+                          color:var(--muted); cursor:pointer; margin-left:8px; }
 
-    /* 添加待办表单：文本 + 可选时间 + "＋" */
-    #add-form { display: flex; gap: 8px; margin-bottom: 16px; }
-    #todo-text { flex: 1; padding: 9px 10px; border: 1px solid #ece4d8; border-radius: 8px;
-                 font-size: 14px; background: #fff; }
-    #todo-time { padding: 9px 6px; border: 1px solid #ece4d8; border-radius: 8px;
-                 font-size: 13px; background: #fff; color: #9a8e7e; }
-    #add-form button[type="submit"] { width: 40px; border: none; border-radius: 8px;
-                 background: #b97c4a; color: #fff; font-size: 18px; cursor: pointer; }
+    /* ===== 周历条：周一~周日，今天高亮，可点切换查看日 ===== */
+    .week{ display:flex; gap:4px; background:var(--card); border-radius:16px;
+            padding:10px 6px; box-shadow:0 2px 10px rgba(50,110,60,.08); margin-bottom:12px; }
+    .week button{ flex:1; border:none; background:transparent; border-radius:12px;
+                  padding:5px 0; cursor:pointer; display:flex; flex-direction:column;
+                  align-items:center; gap:2px; }
+    .week .wd{ font-size:11px; color:var(--muted); }
+    .week .dn{ font-size:15px; font-weight:600; color:var(--ink); }
+    .week button.sel .dn{ color:var(--green-deep); }
+    .week button.today{ background:var(--green); }
+    .week button.today .wd{ color:rgba(255,255,255,.85); }
+    .week button.today .dn{ color:#fff; }
 
-    /* 只读提示：切到非今天时显示（A5：不能提前打勾要有明确提示） */
-    #readonly-hint { display: none; background: #f6efe4; color: #9a8e7e; font-size: 13px;
-                     padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; }
-    body.readonly #readonly-hint { display: block; }
-    body.readonly #add-form { display: none; }   /* 非今天也不允许添加，防边界问题 */
+    /* ===== 筛选标签 ===== */
+    .tags{ display:flex; gap:8px; margin-bottom:14px; }
+    .tags button{ border:1px solid var(--line); background:var(--card); color:var(--muted);
+                  border-radius:999px; padding:5px 18px; font-size:13px; cursor:pointer; }
+    .tags button.on{ background:var(--green); border-color:var(--green); color:#fff; }
 
-    /* ===== Day 8：四种页面状态（加载 / 错误 / 空 / 数据）===== */
-    body.loading #add-form { display: none; }    /* 加载中不允许提交，防 data 未就绪 */
-    #state-error button { display: block; margin: 0 auto 16px; padding: 8px 22px;
-                          border: 1px solid #b97c4a; border-radius: 8px; background: transparent;
-                          color: #b97c4a; font-size: 14px; cursor: pointer; }
+    /* ===== Day 8 四状态：加载 / 错误（空与数据在 content 内部切换）===== */
+    .state{ text-align:center; padding:44px 0; color:var(--muted); font-size:14px; }
+    #state-error button{ display:block; margin:12px auto 0; padding:8px 24px;
+                         border:1px solid var(--green); border-radius:10px;
+                         background:transparent; color:var(--green-deep);
+                         font-size:14px; cursor:pointer; }
 
     /* 演示模式横幅：mock 数据只看不存 */
-    #demo-banner { display: flex; justify-content: space-between; align-items: center;
-                   background: #f6efe4; border: 1px dashed #d8c8a8; color: #9a8e7e;
-                   font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; }
-    #demo-banner button { border: none; background: transparent; color: #b97c4a;
-                          font-size: 13px; cursor: pointer; }
-    body.demo #add-form { display: none; }       /* 假数据不落盘，演示模式只看 */
+    #demo-banner{ display:flex; justify-content:space-between; align-items:center;
+                  background:#f2f9f3; border:1px dashed #bcd8c3; color:var(--muted);
+                  font-size:13px; padding:8px 12px; border-radius:10px; margin-bottom:12px; }
+    #demo-banner button{ border:none; background:transparent; color:var(--green-deep);
+                         font-size:13px; cursor:pointer; }
 
-    /* 空状态里的示例入口 */
-    #today-empty #load-demo { display: block; margin: 10px auto 0; padding: 7px 16px;
-                              border: 1px solid #ece4d8; border-radius: 8px; background: transparent;
-                              color: #b97c4a; font-size: 13px; cursor: pointer; }
+    /* 只读提示：查看非今天时 */
+    #readonly-hint{ display:none; background:#f2f9f3; color:var(--muted); font-size:13px;
+                    padding:8px 12px; border-radius:10px; margin-bottom:12px; }
+    body.readonly #readonly-hint{ display:block; }
+    body.readonly #add-form{ display:none; }        /* 非今天不添加，防边界问题 */
+    body.readonly #fab{ display:none; }
+    body.readonly #tomorrow-card{ display:none; }  /* 明日待做只在"今天"视图出现 */
+    body.demo #add-form{ display:none; }
+    body.demo #fab{ display:none; }                /* 假数据不落盘，演示模式只看 */
 
-    /* 待办卡片：时间点 + 圆圈 + 文字 + "···"删除 */
-    .group-label { color: #9a8e7e; font-size: 12px; margin: 14px 0 6px; }
-    .todo { display: flex; align-items: center; gap: 10px; background: #fff;
-            border: 1px solid #ece4d8; border-radius: 10px; padding: 10px 12px;
-            margin-bottom: 8px; }
-    .todo .time { color: #b97c4a; font-size: 13px; font-variant-numeric: tabular-nums;
-                  min-width: 42px; }
-    .todo .check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #b97c4a;
-                   background: transparent; cursor: pointer; flex-shrink: 0; padding: 0; }
-    .todo .text { flex: 1; font-size: 14px; }
-    .todo .del { border: none; background: transparent; color: #9a8e7e; font-size: 16px;
-                 cursor: pointer; padding: 0 4px; }
-    /* 完成态：实心圆 + 划线置灰 + 轻微下沉 */
-    .todo.done .check { background: #b97c4a; }
-    .todo.done .text { text-decoration: line-through; color: #9a8e7e; }
-    .todo.done { opacity: .75; transform: translateY(1px); }
-    /* 非今天：圆圈禁用 */
-    .todo .check:disabled { border-color: #d8cec0; cursor: not-allowed; }
+    /* ===== 卡片 ===== */
+    .card{ background:var(--card); border-radius:16px; padding:16px;
+           box-shadow:0 2px 10px rgba(50,110,60,.08); margin-bottom:14px; }
+    .card > h2{ font-size:15px; margin:0 0 12px; display:flex;
+                justify-content:space-between; align-items:baseline; }
+    .card > h2 .sub{ font-size:12px; color:var(--muted); font-weight:400; }
+
+    /* 卡片 1：今日心情 */
+    #mood-display{ text-align:center; padding:6px 0 2px; }
+    #mood-display .emoji{ font-size:52px; line-height:1.2; }
+    #mood-display .emoji.none{ font-size:36px; color:var(--muted); opacity:.7; }
+    #mood-display .label{ font-size:15px; font-weight:600; margin-top:4px; }
+    #mood-display .copy{ font-size:13px; color:var(--muted); margin-top:4px; }
+    #mood-display .mood-btn{ display:block; margin:12px auto 0; padding:8px 22px;
+        border:none; border-radius:999px; background:var(--green); color:#fff;
+        font-size:14px; cursor:pointer; }
+
+    /* 今日待做：表单 + 卡片（沿用 F1 结构，配色换绿）*/
+    #add-form{ display:flex; gap:8px; margin-bottom:14px; }
+    #todo-text{ flex:1; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
+                font-size:14px; background:var(--card); }
+    #todo-time{ padding:9px 6px; border:1px solid var(--line); border-radius:10px;
+                font-size:13px; background:var(--card); color:var(--muted); }
+    #add-form button[type="submit"]{ width:40px; border:none; border-radius:10px;
+                background:var(--green); color:#fff; font-size:18px; cursor:pointer; }
+    .group-label{ color:var(--muted); font-size:12px; margin:12px 0 6px; }
+    .todo{ display:flex; align-items:center; gap:10px; background:#f6fbf7;
+           border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+    .todo .time{ color:var(--green-deep); font-size:13px; font-variant-numeric:tabular-nums;
+                 min-width:42px; }
+    .todo .check{ width:22px; height:22px; border-radius:50%; border:2px solid var(--green);
+                  background:transparent; cursor:pointer; flex-shrink:0; padding:0; }
+    .todo .text{ flex:1; font-size:14px; }
+    .todo .del{ border:none; background:transparent; color:var(--muted); font-size:16px;
+                cursor:pointer; padding:0 4px; }
+    .todo.done .check{ background:var(--green); }
+    .todo.done .text{ text-decoration:line-through; color:var(--muted); }
+    .todo.done{ opacity:.75; transform:translateY(1px); }
+    .todo .check:disabled{ border-color:#cfe0d3; cursor:not-allowed; }
+    .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
+    .mini-empty button{ display:block; margin:10px auto 0; padding:7px 16px;
+        border:1px solid var(--line); border-radius:999px; background:transparent;
+        color:var(--green-deep); font-size:13px; cursor:pointer; }
+
+    /* 卡片 2：明日待做——彩色卡片，无勾选圆圈（明天才能打勾）*/
+    .tcard{ display:flex; align-items:center; gap:10px; border-radius:12px;
+            padding:10px 14px; margin-bottom:8px; }
+    .tcard .ttime{ font-size:12px; font-weight:600; background:rgba(255,255,255,.65);
+                   border-radius:6px; padding:2px 6px; white-space:nowrap; }
+    .tcard .ttext{ flex:1; font-size:14px; }
+    .tcard .del{ border:none; background:transparent; color:rgba(0,0,0,.35);
+                 font-size:16px; cursor:pointer; padding:0 4px; }
+    .tcard.c0{ background:#ffe9a8; } .tcard.c1{ background:#cbe4ff; }
+    .tcard.c2{ background:#ffd4de; } .tcard.c3{ background:#cdeccd; }
+    .tip{ font-size:12px; color:var(--muted); margin-top:10px; }
+
+    /* 卡片 3：今日概览 */
+    .ov-stats{ display:flex; text-align:center; }
+    .ov-stats .cell{ flex:1; }
+    .ov-stats .num{ font-size:22px; font-weight:700; color:var(--green-deep); }
+    .ov-stats .cap{ font-size:12px; color:var(--muted); margin-top:2px; }
+    .ov-stats .sep{ width:1px; background:var(--line); }
+    #ov-encourage{ font-size:13px; color:var(--green-deep); background:#f0f8f1;
+                   border-radius:10px; padding:8px 12px; margin-top:12px; text-align:center; }
+
+    /* ===== FAB：右下角 +，添加明日待办 ===== */
+    #fab{ position:fixed; bottom:78px; right:max(18px, calc(50% - 224px));
+          width:54px; height:54px; border-radius:50%; border:none;
+          background:var(--green); color:#fff; font-size:28px; cursor:pointer;
+          box-shadow:0 4px 14px rgba(46,125,79,.35); z-index:30; }
+
+    /* ===== 弹窗 ===== */
+    .overlay{ position:fixed; inset:0; background:rgba(28,48,34,.45);
+              display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
+    .overlay[hidden]{ display:none; }
+    .modal{ background:#fff; border-radius:20px; padding:20px; width:100%;
+            max-width:320px; text-align:center; }
+    .modal h3{ margin:0 0 14px; font-size:16px; }
+    .mood-opts{ display:flex; gap:10px; justify-content:center; }
+    .mood-opts button{ flex:1; border:none; background:#f6fbf7; border-radius:14px;
+                        padding:12px 4px; cursor:pointer; display:flex;
+                        flex-direction:column; align-items:center; gap:4px; }
+    .mood-opts button .face{ font-size:36px; line-height:1.2; }
+    .mood-opts button .name{ font-size:12px; color:var(--ink); }
+    .modal .tip{ font-size:12px; color:var(--muted); margin:12px 0 0; }
+    .modal .close{ display:block; margin:14px auto 0; border:none; background:transparent;
+                   color:var(--muted); font-size:13px; cursor:pointer; }
+    #tm-text{ width:100%; padding:10px 12px; border:1px solid var(--line);
+              border-radius:10px; font-size:14px; margin-bottom:10px; }
+    #tm-time{ padding:9px 10px; border:1px solid var(--line); border-radius:10px;
+              font-size:13px; color:var(--muted); margin-bottom:6px; }
+    .modal .row{ display:flex; gap:10px; margin-top:8px; }
+    .modal .row button{ flex:1; padding:10px 0; border-radius:10px; font-size:14px; cursor:pointer; }
+    #tm-cancel{ border:1px solid var(--line); background:transparent; color:var(--muted); }
+    #tm-ok{ border:none; background:var(--green); color:#fff; }
+
+    /* ===== 底部导航 ===== */
+    nav{ position:fixed; bottom:0; left:0; right:0; background:var(--card);
+         border-top:1px solid var(--line); display:flex; z-index:20; }
+    nav div{ max-width:480px; margin:0 auto; display:flex; width:100%; }
+    nav button{ flex:1; padding:12px 0; background:transparent; color:var(--ink);
+                border:none; font-size:14px; cursor:pointer; }
+    nav button.active{ color:var(--green-deep); font-weight:600; }
+    section{ display:none; }
+    section.active{ display:block; }
   </style>
 </head>
 <body>
+<div class="app">
   <header>
-    <h1 id="greeting">自律计划</h1>
-    <div class="date" id="today-label"></div>
+    <h1 id="month-title">自律计划<small id="today-label"></small></h1>
+    <div class="icons">
+      <button type="button" title="统计报告（后续版本）" aria-label="统计报告">📊</button>
+      <button type="button" title="设置（后续版本）" aria-label="设置">⚙️</button>
+    </div>
   </header>
 
   <main>
-    <!-- 今日视图：Step 2 = F1 时间轴；Day 8 = 四状态 + mock 数据 -->
+    <!-- 今日视图（首页改版）：周历条 + 筛选 + 四状态 + 四张卡片 -->
     <section id="view-today" class="active">
-      <!-- 日期切换：浏览昨天/明天，只有今天能操作 -->
-      <div class="date-nav">
-        <button id="prev-day" aria-label="前一天">‹</button>
-        <span id="view-date-label"></span>
-        <button id="next-day" aria-label="后一天">›</button>
+      <div class="week" id="week-strip"></div>
+
+      <div class="tags">
+        <button type="button" id="tag-all" class="on">全部</button>
+        <button type="button" id="tag-timeline">时间轴</button>
       </div>
 
       <div id="readonly-hint">这一天只能查看，添加和勾选仅限今天</div>
 
-      <!-- Day 8 状态①：加载中 -->
-      <div id="state-loading" class="empty-state" hidden>加载中…</div>
+      <!-- 状态① 加载中 -->
+      <div id="state-loading" class="state" hidden>加载中…</div>
 
-      <!-- Day 8 状态②：错误（数据读不出来时的兜底，给用户一个重试出口） -->
+      <!-- 状态② 错误 -->
       <div id="state-error" hidden>
-        <div class="empty-state">数据读取出了点问题，稍后重试一下</div>
-        <button id="retry-btn" type="button">重试</button>
+        <div class="state">数据读取出了点问题，稍后重试一下</div>
+        <button id="retry-btn" type="button" style="display:block;margin:0 auto;">重试</button>
       </div>
 
       <div id="demo-banner" hidden>
@@ -115,233 +210,435 @@
         <button id="exit-demo" type="button">退出示例</button>
       </div>
 
-      <form id="add-form">
-        <input id="todo-text" placeholder="要做点什么？" maxlength="60" />
-        <input id="todo-time" type="time" title="可选：几点做" />
-        <button type="submit" title="添加待办">＋</button>
-      </form>
-
-      <!-- Day 8 状态③空 / 状态④数据 共用这个容器，由 renderDay 决定显示哪个 -->
-      <div id="day-content">
-        <div id="timeline"></div>
-        <div id="unassigned-wrap" hidden>
-          <div class="group-label">未安排</div>
-          <div id="unassigned-list"></div>
+      <!-- 状态③空 / 状态④数据：content 内部切换 -->
+      <div id="content">
+        <!-- 卡片 1：今日心情（弹窗三选一，F2）-->
+        <div class="card" id="mood-card">
+          <h2>今日心情 <span class="sub" id="mood-sub"></span></h2>
+          <div id="mood-display"></div>
         </div>
-        <div id="today-empty" class="empty-state" hidden>
-          <span id="empty-text">今天还没有安排，写一条试试</span>
-          <button id="load-demo" type="button">或看看示例数据 →</button>
+
+        <!-- 今日待做（F1 时间轴，保留勾选能力）-->
+        <div class="card" id="today-card">
+          <h2>今日待做 <span class="sub" id="today-count"></span></h2>
+          <form id="add-form">
+            <input id="todo-text" placeholder="要做点什么？" maxlength="60" />
+            <input id="todo-time" type="time" title="可选：几点做" />
+            <button type="submit" title="添加待办">＋</button>
+          </form>
+          <div id="timeline"></div>
+          <div id="unassigned-wrap" hidden>
+            <div class="group-label">未安排</div>
+            <div id="unassigned-list"></div>
+          </div>
+          <div id="today-empty" class="mini-empty" hidden>
+            <span id="empty-text">今天还没有安排，写一条试试</span>
+            <button id="load-demo" type="button">或看看示例数据 →</button>
+          </div>
+        </div>
+
+        <!-- 卡片 2：明日待做（可添加/删除，不可勾选）-->
+        <div class="card" id="tomorrow-card">
+          <h2>明日待做 <span class="sub" id="tomorrow-count"></span></h2>
+          <div id="tomorrow-list"></div>
+          <div id="tomorrow-empty" class="mini-empty" hidden>
+            还没安排明天的事，点右下角 ＋ 加一条
+          </div>
+          <div class="tip">明天的事只能提前安排，到明天才能打勾</div>
+        </div>
+
+        <!-- 卡片 3：今日概览 -->
+        <div class="card" id="overview-card">
+          <h2>今日概览</h2>
+          <div class="ov-stats">
+            <div class="cell"><div class="num" id="ov-done">0</div><div class="cap">已完成</div></div>
+            <div class="sep"></div>
+            <div class="cell"><div class="num" id="ov-total">0</div><div class="cap">今日待办</div></div>
+            <div class="sep"></div>
+            <div class="cell"><div class="num" id="ov-mood">—</div><div class="cap">今日心情</div></div>
+          </div>
+          <div id="ov-encourage"></div>
         </div>
       </div>
     </section>
     <section id="view-thoughts">
-      <div class="empty-state">思考视图（Step 4 接 F3 思考）</div>
+      <div class="state">思考视图（Step 4 接 F3 思考）</div>
     </section>
     <section id="view-me">
-      <div class="empty-state">我的视图（Step 5 接 F5 我的）</div>
+      <div class="state">我的视图（Step 5 接 F5 我的）</div>
     </section>
   </main>
+</div>
 
-  <nav>
-    <button data-view="today" class="active">今日</button>
-    <button data-view="thoughts">思考</button>
-    <button data-view="me">我的</button>
-  </nav>
+<!-- FAB：添加明日待办 -->
+<button id="fab" type="button" title="添加明日待办" aria-label="添加明日待办">＋</button>
 
-  <script>
-    // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
-    const KEY = 'habit-tracker-v1';
-    const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'light' }, meta: {} });
-    const loadData = () => {
-      const raw = localStorage.getItem(KEY);
-      if (raw === null) return defaults();          // 首次使用：还没有任何数据
-      const parsed = JSON.parse(raw);               // 解析失败会抛错——错误状态要能被看见（Day 8）
-      if (parsed && typeof parsed === 'object') return parsed;
-      throw new Error('stored data is not an object');
-    };
-    const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
+<!-- 弹窗 1：心情三选一（F2）-->
+<div class="overlay" id="mood-modal" hidden>
+  <div class="modal">
+    <h3>今天感觉怎样？</h3>
+    <div class="mood-opts">
+      <button type="button" data-mood="happy"><span class="face">😊</span><span class="name">开心</span></button>
+      <button type="button" data-mood="calm"><span class="face">😐</span><span class="name">平静</span></button>
+      <button type="button" data-mood="sad"><span class="face">😣</span><span class="name">辛苦了</span></button>
+    </div>
+    <p class="tip">随时可以换，以最后一次为准</p>
+    <button class="close" id="mood-close" type="button">先不选</button>
+  </div>
+</div>
 
-    // ===== Day 8 主任务：本地 mock 数据（内容全部编造，只演示渲染，永不落盘；R6 隐私红线） =====
-    const mockTodos = () => ([
-      { id: 'mock-1', text: '晨跑 30 分钟',   time: '07:30', done: true  },
-      { id: 'mock-2', text: '整理本周笔记',   time: '09:00', done: false },
-      { id: 'mock-3', text: '读书 30 分钟',   time: '20:30', done: false },
-      { id: 'mock-4', text: '给家里打个电话', time: null,    done: false },
-    ]);
+<!-- 弹窗 2：添加明日待办 -->
+<div class="overlay" id="tm-modal" hidden>
+  <div class="modal">
+    <h3>添加明日待办</h3>
+    <input id="tm-text" placeholder="明天要做什么？" maxlength="60" />
+    <input id="tm-time" type="time" title="可选：几点做" style="width:100%;" />
+    <div class="row">
+      <button id="tm-cancel" type="button">取消</button>
+      <button id="tm-ok" type="button">添加</button>
+    </div>
+  </div>
+</div>
 
-    // ===== 日期工具 =====
-    const pad2 = (n) => String(n).padStart(2, '0');
-    const dateToStr = (d) => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
-    const todayStr = () => dateToStr(new Date());
-    // 把 YYYY-MM-DD 整体平移 n 天（用 Date 解析避免手写进位 bug）
-    const shiftDate = (dateStr, n) => {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      return dateToStr(new Date(y, m-1, d + n));
-    };
-    const WEEK = ['日','一','二','三','四','五','六'];
-    const dateLabel = (dateStr) => {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      const base = m + '月' + d + '日 周' + WEEK[new Date(y, m-1, d).getDay()];
-      if (dateStr === todayStr()) return '今天 · ' + base;
-      return base;
-    };
+<nav><div>
+  <button data-view="today" class="active">今日</button>
+  <button data-view="thoughts">思考</button>
+  <button data-view="me">我的</button>
+</div></nav>
 
-    // ===== 全局状态 =====
-    let data = null;             // 唯一数据源，由 loadDayData 异步填入
-    let currentDate = todayStr();
-    let demoMode = false;        // mock 演示模式：只看不存
-    const el = (id) => document.getElementById(id);
+<script>
+  // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
+  const KEY = 'habit-tracker-v1';
+  const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'light' }, meta: {} });
+  const loadData = () => {
+    const raw = localStorage.getItem(KEY);
+    if (raw === null) return defaults();
+    const parsed = JSON.parse(raw);               // 解析失败抛错 → 错误状态可见（Day 8）
+    if (parsed && typeof parsed === 'object') return parsed;
+    throw new Error('stored data is not an object');
+  };
+  const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
-    // ===== Day 8：数据读取层。模拟一次异步加载——第 3 周换成真 API 时页面结构不用动 =====
-    const LOAD_DELAY = 300;      // 毫秒，故意留一点延迟让"加载中"状态肉眼可见
-    const loadDayData = () => new Promise((resolve, reject) => {
-      setTimeout(() => {
-        try { resolve(loadData()); } catch (e) { reject(e); }
-      }, LOAD_DELAY);
-    });
+  // ===== mock 示例数据（内容全部编造，只演示渲染，永不落盘；R6 隐私红线）=====
+  const mockToday = () => ([
+    { id: 'mock-1', text: '晨跑 30 分钟',   time: '07:30', done: true  },
+    { id: 'mock-2', text: '整理本周笔记',   time: '09:00', done: false },
+    { id: 'mock-3', text: '读书 30 分钟',   time: '20:30', done: false },
+    { id: 'mock-4', text: '给家里打个电话', time: null,    done: false },
+  ]);
+  const mockTomorrow = () => ([
+    { id: 'mt-1', text: '整理书桌',     time: '10:00', done: false },
+    { id: 'mt-2', text: '给朋友回消息', time: null,    done: false },
+  ]);
+  const MOCK_MOOD = 'happy';
 
-    // ===== 四状态切换：'loading' | 'error' | 'content' =====
-    const showState = (state) => {
-      document.body.classList.toggle('loading', state === 'loading');
-      el('state-loading').hidden = state !== 'loading';
-      el('state-error').hidden = state !== 'error';
-      el('day-content').hidden = state !== 'content';
-    };
+  // ===== 心情字典：哭脸只配安抚文案，不出现任何负面/警告语（A8）=====
+  const MOOD = {
+    happy: { emoji:'😊', label:'开心',    copy:'今天有值得开心的时刻，很好' },
+    calm:  { emoji:'😐', label:'平静',    copy:'平静地过好一天，也很了不起' },
+    sad:   { emoji:'😣', label:'辛苦了',  copy:'辛苦了，完成本身就是赢' },
+  };
 
-    // ===== F1：待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done}]）=====
-    const getTodos = (date) => data.todos[date] || [];
+  // ===== 日期工具 =====
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const dateToStr = (d) => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+  const todayStr = () => dateToStr(new Date());
+  const shiftDate = (ds, n) => {
+    const [y, m, d] = ds.split('-').map(Number);
+    return dateToStr(new Date(y, m-1, d + n));
+  };
 
-    const addTodo = (text, time) => {
-      if (!data || demoMode) return;                // 数据未就绪或演示模式下不添加
-      const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
-                     text: text.trim(), time: time || null, done: false };
-      if (!todo.text) return;                       // 空内容不添加
-      (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
-      saveData(data);
-      renderDay();
-    };
+  // ===== 全局状态 =====
+  let data = null;
+  let currentDate = todayStr();   // 正在查看的日期（周历条切换）
+  let demoMode = false;           // mock 演示模式：只看不存
+  let filter = 'all';             // 'all' | 'timeline'
+  const el = (id) => document.getElementById(id);
 
-    const toggleTodo = (id) => {
-      if (demoMode || currentDate !== todayStr()) return;  // 只能对今天打勾（A5 数据层防线）
-      const todo = getTodos(currentDate).find(t => t.id === id);
-      if (todo) { todo.done = !todo.done; saveData(data); renderDay(); }
-    };
+  // ===== 数据读取层：模拟一次异步（第 3 周换真 API 时页面结构不动）=====
+  const LOAD_DELAY = 300;
+  const loadDayData = () => new Promise((resolve, reject) => {
+    setTimeout(() => {
+      try { resolve(loadData()); } catch (e) { reject(e); }
+    }, LOAD_DELAY);
+  });
 
-    const deleteTodo = (id) => {
-      if (demoMode || !data) return;                // 演示数据不属于用户，不可删
-      if (!confirm('确定删除这条待办吗？')) return;  // A4：删除必须先弹确认
-      data.todos[currentDate] = getTodos(currentDate).filter(t => t.id !== id);
-      saveData(data);
-      renderDay();
-    };
+  // ===== 四状态切换：'loading' | 'error' | 'content' =====
+  const showState = (state) => {
+    document.body.classList.toggle('loading', state === 'loading');
+    el('state-loading').hidden = state !== 'loading';
+    el('state-error').hidden = state !== 'error';
+    el('content').hidden = state !== 'content';
+    el('week-strip').hidden = state === 'error';   // 错误时连周历也收起，聚焦重试
+  };
 
-    // ===== 可复用卡片组件：时间轴与"未安排"区共用同一个工厂函数（Day 8 余力加练） =====
-    const createTodoCard = (todo, interactive) => {
+  // ===== 待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done}]）=====
+  const getTodos = (date) => data.todos[date] || [];
+
+  const addTodo = (text, time) => {
+    if (!data || demoMode) return;
+    const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
+                   text: text.trim(), time: time || null, done: false };
+    if (!todo.text) return;
+    (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
+    saveData(data); renderAll();
+  };
+
+  const addTomorrowTodo = (text, time) => {
+    if (!data || demoMode) return;
+    const tmr = shiftDate(todayStr(), 1);
+    const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
+                   text: text.trim(), time: time || null, done: false };
+    if (!todo.text) return;
+    (data.todos[tmr] = data.todos[tmr] || []).push(todo);
+    saveData(data); renderAll();
+  };
+
+  const toggleTodo = (id) => {
+    if (demoMode || currentDate !== todayStr()) return;   // 只能对今天打勾（A5 数据层防线）
+    const todo = getTodos(currentDate).find(t => t.id === id);
+    if (todo) { todo.done = !todo.done; saveData(data); renderAll(); }
+  };
+
+  const deleteTodoAt = (date, id) => {
+    if (demoMode || !data) return;
+    if (!confirm('确定删除这条待办吗？')) return;          // A4：删除必须先弹确认
+    data.todos[date] = getTodos(date).filter(t => t.id !== id);
+    saveData(data); renderAll();
+  };
+
+  // ===== 周历条：本周周一~周日，今天绿底高亮，点击切换查看日 =====
+  const renderWeek = () => {
+    const strip = el('week-strip');
+    strip.textContent = '';
+    const [y, m, d] = todayStr().split('-').map(Number);
+    const t = new Date(y, m-1, d);
+    const monday = new Date(t); monday.setDate(t.getDate() - (t.getDay()+6)%7);
+    for (let i = 0; i < 7; i++) {
+      const dt = new Date(monday); dt.setDate(monday.getDate() + i);
+      const ds = dateToStr(dt);
+      const b = document.createElement('button');
+      b.type = 'button';
+      if (ds === todayStr()) b.classList.add('today');
+      if (ds === currentDate) b.classList.add('sel');
+      const wd = document.createElement('span'); wd.className = 'wd';
+      wd.textContent = '周' + '一二三四五六日'[i];
+      const dn = document.createElement('span'); dn.className = 'dn';
+      dn.textContent = dt.getDate();
+      b.append(wd, dn);
+      b.addEventListener('click', () => { if (!demoMode) { currentDate = ds; renderAll(); } });
+      strip.appendChild(b);
+    }
+    el('month-title').firstChild.textContent = y + ' 年 ' + m + ' 月 · 自律计划';
+  };
+
+  // ===== 卡片 1：今日心情 =====
+  const renderMood = () => {
+    const isToday = currentDate === todayStr();
+    const mood = demoMode ? MOCK_MOOD : (data.moods[currentDate] || null);
+    const box = el('mood-display');
+    box.textContent = '';
+    const emoji = document.createElement('div');
+    const label = document.createElement('div');
+    const copy  = document.createElement('div');
+    if (mood) {
+      const m = MOOD[mood];
+      emoji.className = 'emoji';      emoji.textContent = m.emoji;
+      label.className = 'label';      label.textContent = m.label;
+      copy.className = 'copy';       copy.textContent = m.copy;
+    } else {
+      emoji.className = 'emoji none'; emoji.textContent = '🙂';
+      label.className = 'label';      label.textContent = isToday ? '今天感觉怎样？' : '这一天没有记录心情';
+      copy.className = 'copy';        copy.textContent = isToday ? '选一个表情，几秒钟的事' : '心情不能补记，明天的自己会更好';
+    }
+    box.append(emoji, label, copy);
+    if (isToday && !demoMode) {                        // 只有今天可弹窗选心情（无惩罚：不选也行）
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'mood-btn';
+      btn.textContent = mood ? '换一个' : '选一选';
+      btn.addEventListener('click', () => { el('mood-modal').hidden = false; });
+      box.appendChild(btn);
+    }
+    el('mood-sub').textContent = isToday ? '选一个就好，随时可换' : '仅查看';
+  };
+
+  // ===== 可复用卡片组件：时间轴与"未安排"区共用（Day 8 余力加练）=====
+  const createTodoCard = (todo, interactive) => {
+    const row = document.createElement('div');
+    row.className = 'todo' + (todo.done ? ' done' : '');
+    const check = document.createElement('button');
+    check.className = 'check'; check.type = 'button';
+    check.title = todo.done ? '点击恢复未完成' : '点击标记完成';
+    check.setAttribute('aria-label', check.title);
+    if (!interactive) check.disabled = true;
+    check.addEventListener('click', () => toggleTodo(todo.id));
+    const time = document.createElement('span');
+    time.className = 'time'; time.textContent = todo.time || '';
+    const text = document.createElement('span');
+    text.className = 'text'; text.textContent = todo.text;
+    const del = document.createElement('button');
+    del.className = 'del'; del.type = 'button'; del.textContent = '···';
+    del.title = '删除这条待办'; del.hidden = demoMode;
+    del.addEventListener('click', () => deleteTodoAt(currentDate, todo.id));
+    row.append(check, time, text, del);
+    return row;
+  };
+
+  // ===== 今日待做（F1）=====
+  const renderToday = () => {
+    const isToday = currentDate === todayStr();
+    let list = demoMode ? mockToday() : getTodos(currentDate);
+    if (filter === 'timeline') list = list.filter(t => t.time);   // 筛选：时间轴=只看带时间的
+    const interactive = isToday && !demoMode;
+    const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
+    const untimed = list.filter(t => !t.time);
+
+    const timeline = el('timeline'); timeline.textContent = '';
+    timed.forEach(t => timeline.appendChild(createTodoCard(t, interactive)));
+
+    el('unassigned-wrap').hidden = untimed.length === 0;
+    const unList = el('unassigned-list'); unList.textContent = '';
+    untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
+
+    const total = (demoMode ? mockToday() : getTodos(currentDate)).length;
+    const done  = (demoMode ? mockToday() : getTodos(currentDate)).filter(t => t.done).length;
+    el('today-count').textContent = total ? (done + '/' + total + ' 已完成') : '';
+
+    el('today-empty').hidden = total > 0;
+    el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
+    el('load-demo').hidden = !isToday;
+  };
+
+  // ===== 卡片 2：明日待做（只在"今天"视图出现；无勾选圆圈）=====
+  const renderTomorrow = () => {
+    if (currentDate !== todayStr()) return;
+    const list = demoMode ? mockTomorrow() : getTodos(shiftDate(todayStr(), 1));
+    const wrap = el('tomorrow-list'); wrap.textContent = '';
+    list.forEach((t, i) => {
       const row = document.createElement('div');
-      row.className = 'todo' + (todo.done ? ' done' : '');
-      const check = document.createElement('button');
-      check.className = 'check';
-      check.title = todo.done ? '点击恢复未完成' : '点击标记完成';
-      check.setAttribute('aria-label', check.title);
-      if (!interactive) check.disabled = true;      // 非今天/演示模式：圆圈禁用
-      check.addEventListener('click', () => toggleTodo(todo.id));
+      row.className = 'tcard c' + (i % 4);
       const time = document.createElement('span');
-      time.className = 'time';
-      time.textContent = todo.time || '';
+      time.className = 'ttime'; time.textContent = t.time || '时间待定';
       const text = document.createElement('span');
-      text.className = 'text';
-      text.textContent = todo.text;
-      const del = document.createElement('button');
-      del.className = 'del';
-      del.textContent = '···';
-      del.title = '删除这条待办';
-      del.hidden = demoMode;                        // 演示卡片是假数据，不给删除入口
-      del.addEventListener('click', () => deleteTodo(todo.id));
-      row.append(check, time, text, del);
-      return row;
-    };
-
-    // ===== 渲染（先改数据再渲染，铁律 2）。只在 content 状态下被调用 =====
-    const renderDay = () => {
-      const isToday = currentDate === todayStr();
-      document.body.classList.toggle('readonly', !isToday && !demoMode);
-      document.body.classList.toggle('demo', demoMode);
-      el('demo-banner').hidden = !demoMode;
-
-      el('view-date-label').textContent = dateLabel(currentDate);
-      el('view-date-label').classList.toggle('not-today', !isToday);
-      el('today-label').textContent = todayStr();
-
-      // 演示模式渲染 mock 假数据；正常模式渲染 localStorage 真数据
-      const list = demoMode ? mockTodos() : getTodos(currentDate);
-      const interactive = isToday && !demoMode;
-      const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
-      const untimed = list.filter(t => !t.time);
-
-      const timeline = el('timeline');
-      timeline.textContent = '';
-      timed.forEach(t => timeline.appendChild(createTodoCard(t, interactive)));
-
-      el('unassigned-wrap').hidden = untimed.length === 0;
-      const unList = el('unassigned-list');
-      unList.textContent = '';
-      untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
-
-      // 空状态：只有今天给"看看示例数据"入口
-      el('today-empty').hidden = list.length > 0;
-      el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
-      el('load-demo').hidden = !isToday;
-    };
-
-    // ===== Day 8：统一入口。任何"重新取数"都走这里（打开/切日期/重试/进演示） =====
-    const enterDemo = async () => {
-      demoMode = true;
-      showState('loading');                         // 演示数据也走一遍加载状态，和真数据同一条路
-      await new Promise(r => setTimeout(r, LOAD_DELAY));
-      showState('content');
-      renderDay();
-    };
-
-    const refreshDay = async () => {
-      demoMode = false;
-      el('view-date-label').textContent = dateLabel(currentDate);
-      showState('loading');
-      try {
-        data = await loadDayData();
-      } catch (e) {
-        showState('error');                         // 状态②：读不出来给重试出口
-        return;
+      text.className = 'ttext'; text.textContent = t.text;
+      row.append(time, text);
+      if (!demoMode) {                                   // 演示数据不可删
+        const del = document.createElement('button');
+        del.className = 'del'; del.type = 'button'; del.textContent = '···';
+        del.title = '删除这条明日待办';
+        del.addEventListener('click', () => deleteTodoAt(shiftDate(todayStr(), 1), t.id));
+        row.appendChild(del);
       }
-      if (localStorage.getItem(KEY) === null) saveData(data);  // 首次使用落一次默认结构
-      showState('content');
-      renderDay();
-    };
-
-    // ===== 事件绑定 =====
-    el('add-form').addEventListener('submit', (e) => {
-      e.preventDefault();                           // 阻止表单默认的页面刷新行为
-      addTodo(el('todo-text').value, el('todo-time').value);
-      el('todo-text').value = '';
-      el('todo-time').value = '';
+      wrap.appendChild(row);
     });
-    el('prev-day').addEventListener('click', () => { currentDate = shiftDate(currentDate, -1); refreshDay(); });
-    el('next-day').addEventListener('click', () => { currentDate = shiftDate(currentDate, 1); refreshDay(); });
-    el('retry-btn').addEventListener('click', refreshDay);
-    el('load-demo').addEventListener('click', enterDemo);
-    el('exit-demo').addEventListener('click', () => { demoMode = false; renderDay(); });
+    el('tomorrow-empty').hidden = list.length > 0;
+    el('tomorrow-count').textContent = list.length ? (list.length + ' 条') : '';
+  };
 
-    // ===== 视图切换（底部导航）=====
-    document.querySelectorAll('nav button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
-        el('view-' + btn.dataset.view).classList.add('active');
-      });
+  // ===== 卡片 3：今日概览 =====
+  const renderOverview = () => {
+    const list = demoMode ? mockToday() : getTodos(currentDate);
+    const total = list.length;
+    const done = list.filter(t => t.done).length;
+    const mood = demoMode ? MOCK_MOOD : (data.moods[currentDate] || null);
+    el('ov-done').textContent = done;
+    el('ov-total').textContent = total;
+    el('ov-mood').textContent = mood ? MOOD[mood].emoji : '—';
+    let line;
+    if (total === 0)            line = '新的一天，从一个小的安排开始';
+    else if (done === total)    line = '全部完成，今天很棒！';
+    else if (done === 0)        line = '不着急，什么时候开始都不晚';
+    else                         line = '已完成 ' + done + ' 件，稳步向前';
+    if (mood === 'sad')         line = '辛苦了，完成本身就是赢';
+    el('ov-encourage').textContent = line;
+  };
+
+  // ===== 总渲染 =====
+  const renderAll = () => {
+    const isToday = currentDate === todayStr();
+    document.body.classList.toggle('readonly', !isToday && !demoMode);
+    document.body.classList.toggle('demo', demoMode);
+    el('demo-banner').hidden = !demoMode;
+    el('today-label').textContent = todayStr();
+    renderWeek(); renderMood(); renderToday(); renderTomorrow(); renderOverview();
+  };
+
+  // ===== 统一取数入口（打开 / 重试）=====
+  const refreshDay = async () => {
+    demoMode = false;
+    showState('loading');
+    try { data = await loadDayData(); }
+    catch (e) { showState('error'); return; }
+    if (localStorage.getItem(KEY) === null) saveData(data);
+    showState('content');
+    renderAll();
+  };
+
+  const enterDemo = async () => {
+    demoMode = true;
+    showState('loading');
+    await new Promise(r => setTimeout(r, LOAD_DELAY));
+    showState('content');
+    renderAll();
+  };
+
+  // ===== 事件绑定 =====
+  el('add-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    addTodo(el('todo-text').value, el('todo-time').value);
+    el('todo-text').value = ''; el('todo-time').value = '';
+  });
+  el('retry-btn').addEventListener('click', refreshDay);
+  el('load-demo').addEventListener('click', enterDemo);
+  el('exit-demo').addEventListener('click', () => { demoMode = false; renderAll(); });
+
+  // 筛选标签
+  el('tag-all').addEventListener('click', () => { filter = 'all'; syncTags(); });
+  el('tag-timeline').addEventListener('click', () => { filter = 'timeline'; syncTags(); });
+  const syncTags = () => {
+    el('tag-all').classList.toggle('on', filter === 'all');
+    el('tag-timeline').classList.toggle('on', filter === 'timeline');
+    renderToday();
+  };
+
+  // 心情弹窗（F2）：覆盖更新，以最后一次为准（A9）
+  document.querySelectorAll('#mood-modal .mood-opts button').forEach(b => {
+    b.addEventListener('click', () => {
+      if (!data || demoMode || currentDate !== todayStr()) return;
+      data.moods[currentDate] = b.dataset.mood;
+      saveData(data);
+      el('mood-modal').hidden = true;
+      renderAll();
     });
+  });
+  el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
 
-    // ===== 启动：异步加载今天的真实数据（不再同步渲染） =====
-    refreshDay();
-  </script>
+  // FAB → 添加明日待办弹窗
+  el('fab').addEventListener('click', () => {
+    el('tm-modal').hidden = false;
+    el('tm-text').value = ''; el('tm-time').value = '';
+    el('tm-text').focus();
+  });
+  el('tm-cancel').addEventListener('click', () => { el('tm-modal').hidden = true; });
+  const submitTomorrow = () => {
+    addTomorrowTodo(el('tm-text').value, el('tm-time').value);
+    el('tm-modal').hidden = true;
+  };
+  el('tm-ok').addEventListener('click', submitTomorrow);
+  el('tm-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitTomorrow(); } });
+
+  // 底部导航
+  document.querySelectorAll('nav button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+      el('view-' + btn.dataset.view).classList.add('active');
+    });
+  });
+
+  // ===== 启动 =====
+  refreshDay();
+</script>
 </body>
 </html>
