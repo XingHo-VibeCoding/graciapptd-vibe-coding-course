@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>自律计划 · Step 1 骨架</title>
+  <title>自律计划</title>
   <style>
     /* 骨架阶段用最朴素的样式；主题系统留 Step 5 再上 */
     body { font-family: -apple-system,"PingFang SC","Microsoft YaHei", sans-serif;
@@ -20,6 +20,48 @@
     nav button { flex: 1; padding: 12px 0; background: transparent; color: #3a342e;
                  border: none; font-size: 14px; cursor: pointer; }
     nav button.active { color: #b97c4a; font-weight: 600; }
+
+    /* ===== F1 时间轴（Step 2）===== */
+    .date-nav { display: flex; justify-content: space-between; align-items: center;
+                margin-bottom: 12px; }
+    .date-nav button { background: transparent; border: 1px solid #ece4d8; border-radius: 6px;
+                       color: #3a342e; font-size: 16px; width: 36px; height: 30px; cursor: pointer; }
+    .date-nav #view-date-label { font-size: 14px; font-weight: 600; }
+    .date-nav #view-date-label.not-today { color: #9a8e7e; font-weight: 400; }
+
+    /* 添加待办表单：文本 + 可选时间 + "＋" */
+    #add-form { display: flex; gap: 8px; margin-bottom: 16px; }
+    #todo-text { flex: 1; padding: 9px 10px; border: 1px solid #ece4d8; border-radius: 8px;
+                 font-size: 14px; background: #fff; }
+    #todo-time { padding: 9px 6px; border: 1px solid #ece4d8; border-radius: 8px;
+                 font-size: 13px; background: #fff; color: #9a8e7e; }
+    #add-form button[type="submit"] { width: 40px; border: none; border-radius: 8px;
+                 background: #b97c4a; color: #fff; font-size: 18px; cursor: pointer; }
+
+    /* 只读提示：切到非今天时显示（A5：不能提前打勾要有明确提示） */
+    #readonly-hint { display: none; background: #f6efe4; color: #9a8e7e; font-size: 13px;
+                     padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; }
+    body.readonly #readonly-hint { display: block; }
+    body.readonly #add-form { display: none; }   /* 非今天也不允许添加，防边界问题 */
+
+    /* 待办卡片：时间点 + 圆圈 + 文字 + "···"删除 */
+    .group-label { color: #9a8e7e; font-size: 12px; margin: 14px 0 6px; }
+    .todo { display: flex; align-items: center; gap: 10px; background: #fff;
+            border: 1px solid #ece4d8; border-radius: 10px; padding: 10px 12px;
+            margin-bottom: 8px; }
+    .todo .time { color: #b97c4a; font-size: 13px; font-variant-numeric: tabular-nums;
+                  min-width: 42px; }
+    .todo .check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #b97c4a;
+                   background: transparent; cursor: pointer; flex-shrink: 0; padding: 0; }
+    .todo .text { flex: 1; font-size: 14px; }
+    .todo .del { border: none; background: transparent; color: #9a8e7e; font-size: 16px;
+                 cursor: pointer; padding: 0 4px; }
+    /* 完成态：实心圆 + 划线置灰 + 轻微下沉 */
+    .todo.done .check { background: #b97c4a; }
+    .todo.done .text { text-decoration: line-through; color: #9a8e7e; }
+    .todo.done { opacity: .75; transform: translateY(1px); }
+    /* 非今天：圆圈禁用 */
+    .todo .check:disabled { border-color: #d8cec0; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -29,9 +71,29 @@
   </header>
 
   <main>
-    <!-- Step 1：仅留空 section；F1/F2/F3/F5 在 Step 2-5 实现 -->
+    <!-- 今日视图：Step 2 = F1 时间轴（F2 心情留 Step 3） -->
     <section id="view-today" class="active">
-      <div class="empty-state">今日视图（Step 2 接 F1 时间轴）</div>
+      <!-- 日期切换：浏览昨天/明天，只有今天能操作 -->
+      <div class="date-nav">
+        <button id="prev-day" aria-label="前一天">‹</button>
+        <span id="view-date-label"></span>
+        <button id="next-day" aria-label="后一天">›</button>
+      </div>
+
+      <div id="readonly-hint">这一天只能查看，添加和勾选仅限今天</div>
+
+      <form id="add-form">
+        <input id="todo-text" placeholder="要做点什么？" maxlength="60" />
+        <input id="todo-time" type="time" title="可选：几点做" />
+        <button type="submit" title="添加待办">＋</button>
+      </form>
+
+      <div id="timeline"></div>
+      <div id="unassigned-wrap" hidden>
+        <div class="group-label">未安排</div>
+        <div id="unassigned-list"></div>
+      </div>
+      <div id="today-empty" class="empty-state">今天还没有安排，写一条试试</div>
     </section>
     <section id="view-thoughts">
       <div class="empty-state">思考视图（Step 4 接 F3 思考）</div>
@@ -48,21 +110,127 @@
   </nav>
 
   <script>
-    // ===== 铁律：所有 localStorage 读写只走 loadData / saveData（Step 1 即建立） =====
+    // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
     const KEY = 'habit-tracker-v1';
     const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'light' }, meta: {} });
     const loadData = () => { try { return JSON.parse(localStorage.getItem(KEY)) || defaults(); } catch (e) { return defaults(); } };
     const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
-    // ===== currentDate 状态：Step 1 即建立，F5 月历跳转要复用 =====
-    const todayStr = () => {
-      const d = new Date();
-      return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    // ===== 日期工具 =====
+    const pad2 = (n) => String(n).padStart(2, '0');
+    const dateToStr = (d) => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
+    const todayStr = () => dateToStr(new Date());
+    // 把 YYYY-MM-DD 整体平移 n 天（用 Date 解析避免手写进位 bug）
+    const shiftDate = (dateStr, n) => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dt = new Date(y, m-1, d + n);
+      return dateToStr(dt);
     };
-    let currentDate = todayStr();   // 后续 Step 5 月历点日期会改这个值
+    const WEEK = ['日','一','二','三','四','五','六'];
+    // 视图标题：今天显示"今天"，其他天显示"9月24日 周四"
+    const dateLabel = (dateStr) => {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const base = m + '月' + d + '日 周' + WEEK[new Date(y, m-1, d).getDay()];
+      if (dateStr === todayStr()) return '今天 · ' + base;
+      return base;
+    };
 
-    // ===== 视图切换 =====
-    document.getElementById('today-label').textContent = currentDate;
+    // ===== 全局状态：data（唯一数据源，改动后 saveData + render）=====
+    let data = loadData();
+    let currentDate = todayStr();   // 当前查看的日期（Step 5 月历跳转会复用）
+
+    // ===== F1：待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done}]）=====
+    const getTodos = (date) => data.todos[date] || [];
+
+    const addTodo = (text, time) => {
+      const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
+                     text: text.trim(), time: time || null, done: false };
+      if (!todo.text) return;                        // 空内容不添加
+      (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
+      saveData(data);
+      renderDay();
+    };
+
+    const toggleTodo = (id) => {
+      if (currentDate !== todayStr()) return;        // 只能对今天打勾（A5 的数据层防线）
+      const list = getTodos(currentDate);
+      const todo = list.find(t => t.id === id);
+      if (todo) { todo.done = !todo.done; saveData(data); renderDay(); }
+    };
+
+    const deleteTodo = (id) => {
+      if (!confirm('确定删除这条待办吗？')) return;  // A4：删除必须先弹确认
+      data.todos[currentDate] = getTodos(currentDate).filter(t => t.id !== id);
+      saveData(data);
+      renderDay();
+    };
+
+    // ===== F1：渲染（先改数据再渲染，铁律 2）=====
+    const makeTodoEl = (todo, isToday) => {
+      const row = document.createElement('div');
+      row.className = 'todo' + (todo.done ? ' done' : '');
+      const check = document.createElement('button');
+      check.className = 'check';
+      check.title = todo.done ? '点击恢复未完成' : '点击标记完成';
+      check.setAttribute('aria-label', check.title);
+      if (!isToday) check.disabled = true;           // 非今天：圆圈禁用（A5）
+      check.addEventListener('click', () => toggleTodo(todo.id));
+      const time = document.createElement('span');
+      time.className = 'time';
+      time.textContent = todo.time || '';
+      const text = document.createElement('span');
+      text.className = 'text';
+      text.textContent = todo.text;
+      const del = document.createElement('button');
+      del.className = 'del';
+      del.textContent = '···';
+      del.title = '删除这条待办';
+      del.addEventListener('click', () => deleteTodo(todo.id));
+      row.append(check, time, text, del);
+      return row;
+    };
+
+    const renderDay = () => {
+      const isToday = currentDate === todayStr();
+      document.body.classList.toggle('readonly', !isToday);
+
+      document.getElementById('view-date-label').textContent = dateLabel(currentDate);
+      document.getElementById('view-date-label').classList.toggle('not-today', !isToday);
+      document.getElementById('today-label').textContent = todayStr();
+
+      const list = getTodos(currentDate);
+      const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
+      const untimed = list.filter(t => !t.time);
+
+      const timeline = document.getElementById('timeline');
+      timeline.textContent = '';
+      timed.forEach(t => timeline.appendChild(makeTodoEl(t, isToday)));
+
+      const wrap = document.getElementById('unassigned-wrap');
+      wrap.hidden = untimed.length === 0;
+      const unList = document.getElementById('unassigned-list');
+      unList.textContent = '';
+      untimed.forEach(t => unList.appendChild(makeTodoEl(t, isToday)));
+
+      document.getElementById('today-empty').style.display = list.length ? 'none' : 'block';
+    };
+
+    // ===== 事件绑定 =====
+    document.getElementById('add-form').addEventListener('submit', (e) => {
+      e.preventDefault();                            // 阻止表单默认的页面刷新行为
+      addTodo(document.getElementById('todo-text').value,
+              document.getElementById('todo-time').value);
+      document.getElementById('todo-text').value = '';
+      document.getElementById('todo-time').value = '';
+    });
+    document.getElementById('prev-day').addEventListener('click', () => {
+      currentDate = shiftDate(currentDate, -1); renderDay();
+    });
+    document.getElementById('next-day').addEventListener('click', () => {
+      currentDate = shiftDate(currentDate, 1); renderDay();
+    });
+
+    // ===== 视图切换（底部导航）=====
     document.querySelectorAll('nav button').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -72,8 +240,9 @@
       });
     });
 
-    // ===== Step 1 验证：localStorage 初始化一次，确认读写铁律可工作 =====
-    saveData(loadData());   // 触发出一次默认值写入，确保 KEY 存在
+    // ===== 启动：初始化一次 localStorage，渲染今天 =====
+    saveData(data);   // 确保默认结构写入，读写铁律可工作
+    renderDay();
   </script>
 </body>
 </html>
