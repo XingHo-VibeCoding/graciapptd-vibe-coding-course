@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 620" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif">
+  <!-- 自律计划 · 当前项目结构图（Day 7 余力加练；配色与页面主题一致） -->
+  <rect width="720" height="620" fill="#fffaf3"/>
+  <text x="36" y="46" font-size="20" font-weight="700" fill="#3a342e">vibe-coding-course · 当前项目结构图</text>
+  <text x="36" y="70" font-size="12" fill="#9a8e7e">生成于 Day 7（2026-09-23）· 每个节点右侧标注它属于哪天的任务</text>
+
+  <!-- 根节点 -->
+  <rect x="36" y="94" width="250" height="40" rx="8" fill="#3a342e"/>
+  <text x="52" y="119" font-size="15" font-weight="600" fill="#fffaf3">vibe-coding-course/　仓库根</text>
+  <rect x="300" y="102" width="64" height="24" rx="12" fill="#ece4d8"/>
+  <text x="332" y="118" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 2</text>
+
+  <!-- 主干连线 -->
+  <path d="M60 134 V540" stroke="#d8cec0" stroke-width="1.5" fill="none"/>
+
+  <!-- 根下文件与目录 -->
+  <g>
+    <rect x="80" y="150" width="340" height="36" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="96" y="173" font-size="13" fill="#3a342e">AGENTS.md — 协作规则（R1-R7）</text>
+    <rect x="440" y="156" width="86" height="24" rx="12" fill="#ece4d8"/>
+    <text x="483" y="172" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 1/6/7</text>
+
+    <rect x="80" y="196" width="340" height="36" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="96" y="219" font-size="13" fill="#3a342e">index.html — 仓库主页（占位）</text>
+    <rect x="440" y="202" width="64" height="24" rx="12" fill="#ece4d8"/>
+    <text x="472" y="218" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 3</text>
+
+    <rect x="80" y="242" width="340" height="36" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="96" y="265" font-size="13" fill="#3a342e">notes/ — 学习笔记 day-01 ~ day-06</text>
+    <rect x="440" y="248" width="64" height="24" rx="12" fill="#ece4d8"/>
+    <text x="472" y="264" font-size="11" text-anchor="middle" fill="#9a8e7e">每天</text>
+
+    <rect x="80" y="288" width="340" height="36" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="96" y="311" font-size="13" fill="#3a342e">screenshots/ — 每日作业截图</text>
+    <rect x="440" y="294" width="64" height="24" rx="12" fill="#f6efe4"/>
+    <text x="472" y="310" font-size="11" text-anchor="middle" fill="#9a8e7e">待交</text>
+  </g>
+
+  <!-- habit-tracker 子项目（重点，用强调色） -->
+  <path d="M60 356 H88" stroke="#d8cec0" stroke-width="1.5"/>
+  <rect x="88" y="338" width="332" height="40" rx="8" fill="#b97c4a"/>
+  <text x="104" y="363" font-size="15" font-weight="600" fill="#ffffff">habit-tracker/　自律计划（主项目）</text>
+  <rect x="440" y="346" width="86" height="24" rx="12" fill="#ece4d8"/>
+  <text x="483" y="362" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 3 起</text>
+
+  <!-- habit-tracker 下的子节点连线 -->
+  <path d="M112 378 V552" stroke="#e4c9ab" stroke-width="1.5" fill="none"/>
+  <g>
+    <path d="M112 400 H140" stroke="#e4c9ab" stroke-width="1.5"/>
+    <rect x="140" y="384" width="280" height="34" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="154" y="406" font-size="13" fill="#3a342e">research.md — 竞品调研</text>
+    <rect x="440" y="389" width="64" height="24" rx="12" fill="#ece4d8"/>
+    <text x="472" y="405" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 3</text>
+
+    <path d="M112 433 H140" stroke="#e4c9ab" stroke-width="1.5"/>
+    <rect x="140" y="417" width="280" height="34" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="154" y="439" font-size="13" fill="#3a342e">PRD.md — 需求文档（A1-A22）</text>
+    <rect x="440" y="422" width="64" height="24" rx="12" fill="#ece4d8"/>
+    <text x="472" y="438" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 4</text>
+
+    <path d="M112 466 H140" stroke="#e4c9ab" stroke-width="1.5"/>
+    <rect x="140" y="450" width="280" height="34" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="154" y="472" font-size="13" fill="#3a342e">TECH_DESIGN.md — 技术设计 v2.0</text>
+    <rect x="440" y="455" width="86" height="24" rx="12" fill="#ece4d8"/>
+    <text x="483" y="471" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 5/7</text>
+
+    <path d="M112 499 H140" stroke="#e4c9ab" stroke-width="1.5"/>
+    <rect x="140" y="483" width="280" height="34" rx="8" fill="#ffffff" stroke="#b97c4a" stroke-width="1.5"/>
+    <text x="154" y="505" font-size="13" fill="#3a342e">RUN.md — 运行说明 ★ 今日新增</text>
+    <rect x="440" y="488" width="64" height="24" rx="12" fill="#b97c4a"/>
+    <text x="472" y="504" font-size="11" text-anchor="middle" fill="#ffffff">Day 7</text>
+
+    <path d="M112 532 H140" stroke="#e4c9ab" stroke-width="1.5"/>
+    <rect x="140" y="516" width="280" height="34" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="154" y="538" font-size="13" fill="#3a342e">frontend/index.html — 全部前端代码</text>
+    <rect x="440" y="521" width="86" height="24" rx="12" fill="#ece4d8"/>
+    <text x="483" y="537" font-size="11" text-anchor="middle" fill="#9a8e7e">Day 7/8</text>
+
+    <path d="M112 565 H140" stroke="#e4c9ab" stroke-width="1.5"/>
+    <rect x="140" y="549" width="280" height="34" rx="8" fill="#ffffff" stroke="#ece4d8"/>
+    <text x="154" y="571" font-size="13" fill="#3a342e">scratch/ — 试验区（当天清空，R6）</text>
+    <rect x="440" y="554" width="64" height="24" rx="12" fill="#f6efe4"/>
+    <text x="472" y="570" font-size="11" text-anchor="middle" fill="#9a8e7e">空</text>
+  </g>
+
+  <!-- 页脚说明 -->
+  <text x="36" y="604" font-size="11" fill="#9a8e7e">五步计划进度：Step 1 骨架 ✓ → Step 2 F1 时间轴 ✓ → Step 3 F2 心情（待做）→ Step 4 F3 思考 → Step 5 F5 我的</text>
+</svg>
