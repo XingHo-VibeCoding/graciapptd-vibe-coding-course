@@ -366,6 +366,11 @@
   const pad2 = (n) => String(n).padStart(2, '0');
   const dateToStr = (d) => d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate());
   const todayStr = () => dateToStr(new Date());
+  const fmtDateLabel = (ds) => {
+    const [y, m, d] = ds.split('-').map(Number);
+    const date = new Date(y, m-1, d);
+    return `${m}月${d}日 周${'日一二三四五六'[date.getDay()]}`;
+  };
   const shiftDate = (ds, n) => {
     const [y, m, d] = ds.split('-').map(Number);
     return dateToStr(new Date(y, m-1, d + n));
@@ -582,7 +587,7 @@
     document.body.classList.toggle('readonly', !isToday && !demoMode);
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
-    el('today-label').textContent = todayStr();
+    el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
     renderWeek(); renderMood(); renderToday(); renderTomorrow(); renderOverview();
   };
 
