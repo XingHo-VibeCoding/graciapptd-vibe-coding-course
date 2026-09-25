@@ -82,7 +82,6 @@
     body.readonly #readonly-hint{ display:block; }
     body.readonly #add-form{ display:none; }        /* 非今天不添加，防边界问题 */
     body.readonly #fab{ display:none; }
-    body.readonly #tomorrow-card{ display:none; }  /* 明日待做只在"今天"视图出现 */
     body.demo #add-form{ display:none; }
     body.demo #fab{ display:none; }                /* 假数据不落盘，演示模式只看 */
 
@@ -93,17 +92,7 @@
                 justify-content:space-between; align-items:baseline; }
     .card > h2 .sub{ font-size:12px; color:var(--muted); font-weight:400; }
 
-    /* 卡片 1：今日心情 */
-    #mood-display{ text-align:center; padding:6px 0 2px; }
-    #mood-display .emoji{ font-size:52px; line-height:1.2; }
-    #mood-display .emoji.none{ font-size:36px; color:var(--muted); opacity:.85; }
-    #mood-display .label{ font-size:15px; font-weight:600; margin-top:4px; }
-    #mood-display .copy{ font-size:13px; color:var(--muted); margin-top:4px; }
-    #mood-display .mood-btn{ display:block; margin:12px auto 0; padding:8px 22px;
-        border:none; border-radius:999px; background:var(--green); color:#fff;
-        font-size:14px; cursor:pointer; }
-
-    /* 今日待做：表单 + 卡片（沿用 F1 结构，配色换绿）*/
+    /* 今日待做：表单 + 卡片（F1 时间轴）*/
     #add-form{ display:flex; gap:8px; margin-bottom:14px; }
     #todo-text{ flex:1; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
                 font-size:14px; background:var(--card); } /* min-width:0 防窄屏溢出（R-容错）*/
@@ -131,31 +120,45 @@
         border:1px solid var(--line); border-radius:999px; background:transparent;
         color:var(--green-deep); font-size:13px; cursor:pointer; }
 
-    /* 卡片 2：明日待做——彩色卡片，无勾选圆圈（明天才能打勾）*/
-    .tcard{ display:flex; align-items:center; gap:10px; border-radius:12px;
-            padding:10px 14px; margin-bottom:8px; }
-    .tcard .ttime{ font-size:12px; font-weight:600; background:rgba(255,255,255,.65);
-                   border-radius:6px; padding:2px 6px; white-space:nowrap; }
-    .tcard .ttext{ flex:1; font-size:14px; }
-    .tcard .del{ border:none; background:transparent; color:rgba(0,0,0,.55);
-                 font-size:16px; cursor:pointer; padding:8px 6px; margin-right:-4px;
-                 position:relative; }
-    .tcard .del::after{ content:""; position:absolute; inset:-10px; } /* 透明命中区 ~44px */
-    .tcard.c0{ background:#ffe9a8; } .tcard.c1{ background:#cbe4ff; }
-    .tcard.c2{ background:#ffd4de; } .tcard.c3{ background:#cdeccd; }
-    .tip{ font-size:12px; color:var(--muted); margin-top:12px; } /* 10px→12px：与概览卡脚注统一 */
+    /* ===== 我的页面（F5 MVP）===== */
+    .profile{ display:flex; align-items:center; gap:14px; }
+    .profile .avatar{ width:56px; height:56px; border-radius:50%; background:#f0f8f1;
+                      font-size:30px; display:flex; align-items:center;
+                      justify-content:center; flex-shrink:0; }
+    .profile .pinfo{ flex:1; min-width:0; }
+    .profile .pname{ font-size:17px; font-weight:600; display:flex; align-items:center;
+                     gap:8px; flex-wrap:wrap; }
+    .profile .pname button{ border:none; background:transparent; color:var(--green-deep);
+                            font-size:12px; cursor:pointer; padding:4px 6px; position:relative; }
+    .profile .pname button::after{ content:""; position:absolute; inset:-6px; }
+    #name-input{ font-size:15px; padding:4px 8px; border:1px solid var(--line);
+                 border-radius:8px; width:9em; max-width:100%; }
+    .profile .pdays{ font-size:12px; color:var(--muted); margin-top:4px; }
+    .profile .pdays b{ color:var(--green-deep); font-size:14px; }
 
-    /* 卡片 3：今日概览 */
-    .ov-stats{ display:flex; text-align:center; }
-    .ov-stats .cell{ flex:1; }
-    .ov-stats .num{ font-size:22px; font-weight:700; color:var(--green-deep);
-                    line-height:1.3; }   /* 数字与 emoji 基线对齐（R-对齐）*/
-    .ov-stats .cap{ font-size:12px; color:var(--muted); margin-top:2px; }
-    .ov-stats .sep{ width:1px; background:var(--line); }
-    #ov-encourage{ font-size:13px; color:var(--green-deep); background:#f0f8f1;
-                   border-radius:10px; padding:8px 12px; margin-top:12px; text-align:center; }
+    /* 情绪板块：最近 7 天 */
+    .mood-week{ display:flex; gap:4px; }
+    .mday{ flex:1; background:#f6fbf7; border:1px solid var(--line); border-radius:10px;
+           padding:8px 2px; text-align:center; display:flex; flex-direction:column;
+           gap:4px; align-items:center; }
+    .mday .md-date{ font-size:12px; color:var(--muted); }
+    .mday .md-emoji{ font-size:20px; line-height:1.3; min-height:26px; }
+    .mday .md-emoji.none{ color:var(--muted); font-size:14px; }
+    .mday .md-wd{ font-size:12px; color:var(--muted); }
+    .mday.today-cell{ border-color:var(--green); cursor:pointer; background:#f0f8f1; }
+    .mday.today-cell .md-wd{ color:var(--green-deep); font-weight:600; }
+    .mood-tip{ font-size:12px; color:var(--muted); margin-top:12px; }
 
-    /* ===== FAB：右下角 +，添加明日待办 ===== */
+    /* 设置 / 指南 */
+    .set-row{ display:flex; justify-content:space-between; align-items:center;
+              padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
+    .set-row:last-child{ border-bottom:none; }
+    .set-row .sv{ color:var(--muted); font-size:13px; }
+    .guide li{ font-size:13px; color:var(--ink); margin:0 0 8px; line-height:1.6; }
+    .guide{ margin:0; padding-left:18px; }
+    .guide li b{ color:var(--green-deep); }
+
+    /* ===== FAB：右下角 +，仅"今天"视图显示，添加今日待办 ===== */
     #fab{ position:fixed; bottom:78px; right:max(18px, calc(50% - 224px));
           width:54px; height:54px; border-radius:50%; border:none;
           background:var(--green); color:#fff; font-size:28px; cursor:pointer;
@@ -168,12 +171,13 @@
     .modal{ background:#fff; border-radius:20px; padding:20px; width:100%;
             max-width:320px; text-align:center; }
     .modal h3{ margin:0 0 14px; font-size:16px; }
-    .mood-opts{ display:flex; gap:10px; justify-content:center; }
-    .mood-opts button{ flex:1; border:none; background:#f6fbf7; border-radius:14px;
-                        padding:12px 4px; cursor:pointer; display:flex;
+    .mood-opts{ display:flex; gap:6px; justify-content:center; }
+    .mood-opts button{ flex:1; min-width:0; border:none; background:#f6fbf7; border-radius:12px;
+                        padding:10px 2px; cursor:pointer; display:flex;
                         flex-direction:column; align-items:center; gap:4px; }
-    .mood-opts button .face{ font-size:36px; line-height:1.2; }
+    .mood-opts button .face{ font-size:26px; line-height:1.2; }
     .mood-opts button .name{ font-size:12px; color:var(--ink); }
+    .mood-opts button.sad-opt .name{ color:var(--muted); }
     .modal .tip{ font-size:12px; color:var(--muted); margin:12px 0 0; }
     .modal .close{ display:block; margin:14px auto 0; border:none; background:transparent;
                    color:var(--muted); font-size:13px; cursor:pointer; }
@@ -208,7 +212,7 @@
   </header>
 
   <main>
-    <!-- 今日视图（首页改版）：周历条 + 筛选 + 四状态 + 四张卡片 -->
+    <!-- 今天视图：周历条 + 筛选 + 四状态 + 今日待做 -->
     <section id="view-today" class="active">
       <div class="week" id="week-strip"></div>
 
@@ -235,13 +239,6 @@
 
       <!-- 状态③空 / 状态④数据：content 内部切换 -->
       <div id="content">
-        <!-- 卡片 1：今日心情（弹窗三选一，F2）-->
-        <div class="card" id="mood-card">
-          <h2>今日心情 <span class="sub" id="mood-sub"></span></h2>
-          <div id="mood-display"></div>
-        </div>
-
-        <!-- 今日待做（F1 时间轴，保留勾选能力）-->
         <div class="card" id="today-card">
           <h2>今日待做 <span class="sub" id="today-count"></span></h2>
           <form id="add-form">
@@ -259,62 +256,78 @@
             <button id="load-demo" type="button">或看看示例数据 →</button>
           </div>
         </div>
-
-        <!-- 卡片 2：明日待做（可添加/删除，不可勾选）-->
-        <div class="card" id="tomorrow-card">
-          <h2>明日待做 <span class="sub" id="tomorrow-count"></span></h2>
-          <div id="tomorrow-list"></div>
-          <div id="tomorrow-empty" class="mini-empty" hidden>
-            还没安排明天的事，点右下角 ＋ 加一条
-          </div>
-          <div class="tip">明天的事只能提前安排，到明天才能打勾</div>
-        </div>
-
-        <!-- 卡片 3：今日概览 -->
-        <div class="card" id="overview-card">
-          <h2>今日概览</h2>
-          <div class="ov-stats">
-            <div class="cell"><div class="num" id="ov-done">0</div><div class="cap">已完成</div></div>
-            <div class="sep"></div>
-            <div class="cell"><div class="num" id="ov-total">0</div><div class="cap">今日待办</div></div>
-            <div class="sep"></div>
-            <div class="cell"><div class="num" id="ov-mood">—</div><div class="cap">今日心情</div></div>
-          </div>
-          <div id="ov-encourage"></div>
-        </div>
       </div>
     </section>
+
     <section id="view-thoughts">
       <div class="state">思考视图（Step 4 接 F3 思考）</div>
     </section>
+
+    <!-- 我的视图（F5 MVP）：头像/名字/使用天数/情绪板块/设置/指南 -->
     <section id="view-me">
-      <div class="state">我的视图（Step 5 接 F5 我的）</div>
+      <div class="card">
+        <div class="profile">
+          <div class="avatar" id="me-avatar">🌱</div>
+          <div class="pinfo">
+            <div class="pname">
+              <span id="me-name-text"></span>
+              <input id="name-input" hidden maxlength="12" aria-label="修改名字" />
+              <button id="name-edit" type="button">改名</button>
+            </div>
+            <div class="pdays">使用自律计划的第 <b id="me-days">1</b> 天</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>最近情绪</h2>
+        <div class="mood-week" id="mood-week"></div>
+        <div class="mood-tip" id="mood-tip">点今天的格子可以重新选心情，历史日期只看不改</div>
+      </div>
+
+      <div class="card">
+        <h2>通用设置</h2>
+        <div class="set-row"><span>主题</span><span class="sv">浅色（后续版本支持换肤）</span></div>
+        <div class="set-row"><span>数据存储</span><span class="sv">仅本机浏览器，不上传</span></div>
+      </div>
+
+      <div class="card">
+        <h2>使用指南</h2>
+        <ul class="guide">
+          <li><b>加待办</b>：在「今天」输入内容，可选时间点，点 ＋ 或回车</li>
+          <li><b>完成 / 删除</b>：点圆圈打勾，再点恢复；点 ··· 删除（会先确认）</li>
+          <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
+          <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
+        </ul>
+      </div>
     </section>
   </main>
 </div>
 
-<!-- FAB：添加明日待办 -->
-<button id="fab" type="button" title="添加明日待办" aria-label="添加明日待办">＋</button>
+<!-- FAB：添加今日待办（仅今天视图显示） -->
+<button id="fab" type="button" hidden title="添加今日待办" aria-label="添加今日待办">＋</button>
 
-<!-- 弹窗 1：心情三选一（F2）-->
+<!-- 弹窗 1：心情五选一（F2）-->
 <div class="overlay" id="mood-modal" hidden>
   <div class="modal">
     <h3>今天感觉怎样？</h3>
     <div class="mood-opts">
-      <button type="button" data-mood="happy"><span class="face">😊</span><span class="name">开心</span></button>
+      <button type="button" data-mood="sad"     class="sad-opt"><span class="face">😢</span><span class="name">伤心</span></button>
+      <button type="button" data-mood="blue"    class="sad-opt"><span class="face">😞</span><span class="name">忧郁</span></button>
       <button type="button" data-mood="calm"><span class="face">😐</span><span class="name">平静</span></button>
-      <button type="button" data-mood="sad"><span class="face">😣</span><span class="name">辛苦了</span></button>
+      <button type="button" data-mood="cozy"><span class="face">😌</span><span class="name">惬意</span></button>
+      <button type="button" data-mood="joy"><span class="face">😄</span><span class="name">喜悦</span></button>
     </div>
-    <p class="tip">随时可以换，以最后一次为准</p>
+    <p class="tip">选一个就好，随时可以在「我的 · 最近情绪」里换</p>
     <button class="close" id="mood-close" type="button">先不选</button>
   </div>
 </div>
 
-<!-- 弹窗 2：添加明日待办 -->
+<!-- 弹窗 2：添加今日待办 -->
 <div class="overlay" id="tm-modal" hidden>
   <div class="modal">
-    <h3>添加明日待办</h3>
-    <input id="tm-text" placeholder="明天要做什么？" maxlength="60" />
+    <h3>添加今日待办</h3>
+    <input id="tm-text" placeholder="今天要做什么？" maxlength="60" />
     <input id="tm-time" type="time" title="可选：几点做" />
     <div class="row">
       <button id="tm-cancel" type="button">取消</button>
@@ -324,7 +337,7 @@
 </div>
 
 <nav><div>
-  <button data-view="today" class="active">今日</button>
+  <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
   <button data-view="me">我的</button>
 </div></nav>
@@ -349,17 +362,15 @@
     { id: 'mock-3', text: '读书 30 分钟',   time: '20:30', done: false },
     { id: 'mock-4', text: '给家里打个电话', time: null,    done: false },
   ]);
-  const mockTomorrow = () => ([
-    { id: 'mt-1', text: '整理书桌',     time: '10:00', done: false },
-    { id: 'mt-2', text: '给朋友回消息', time: null,    done: false },
-  ]);
-  const MOCK_MOOD = 'happy';
+  const MOCK_MOOD = 'joy';
 
-  // ===== 心情字典：哭脸只配安抚文案，不出现任何负面/警告语（A8）=====
+  // ===== 心情字典：伤心/忧郁只配安抚文案，不出现任何负面/警告语（A8）=====
   const MOOD = {
-    happy: { emoji:'😊', label:'开心',    copy:'今天有值得开心的时刻，很好' },
-    calm:  { emoji:'😐', label:'平静',    copy:'平静地过好一天，也很了不起' },
-    sad:   { emoji:'😣', label:'辛苦了',  copy:'辛苦了，完成本身就是赢' },
+    sad:  { emoji:'😢', label:'伤心', copy:'难过的时候，允许自己慢一点' },
+    blue: { emoji:'😞', label:'忧郁', copy:'有点灰蒙蒙也没关系，明天会轻一些' },
+    calm: { emoji:'😐', label:'平静', copy:'平静地过好一天，也很了不起' },
+    cozy: { emoji:'😌', label:'惬意', copy:'舒服自在的一天，值得记下' },
+    joy:  { emoji:'😄', label:'喜悦', copy:'今天有值得开心的时刻，很好' },
   };
 
   // ===== 日期工具 =====
@@ -375,12 +386,19 @@
     const [y, m, d] = ds.split('-').map(Number);
     return dateToStr(new Date(y, m-1, d + n));
   };
+  const daysBetween = (a, b) => {                    // b - a 的天数
+    const [y1, m1, d1] = a.split('-').map(Number);
+    const [y2, m2, d2] = b.split('-').map(Number);
+    return Math.round((new Date(y2, m2-1, d2) - new Date(y1, m1-1, d1)) / 86400000);
+  };
 
   // ===== 全局状态 =====
   let data = null;
   let currentDate = todayStr();   // 正在查看的日期（周历条切换）
   let demoMode = false;           // mock 演示模式：只看不存
   let filter = 'all';             // 'all' | 'timeline'
+  let currentView = 'today';      // 'today' | 'thoughts' | 'me'（FAB 仅今天显示）
+  let moodAutoAsked = false;      // 本次打开是否已自动问过心情（含跳过）
   const el = (id) => document.getElementById(id);
 
   // ===== 数据读取层：模拟一次异步（第 3 周换真 API 时页面结构不动）=====
@@ -405,20 +423,11 @@
 
   const addTodo = (text, time) => {
     if (!data || demoMode) return;
+    if (currentDate !== todayStr()) return;           // FAB/表单只在今天视图可见，双保险
     const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
                    text: text.trim(), time: time || null, done: false };
     if (!todo.text) return;
     (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
-    saveData(data); renderAll();
-  };
-
-  const addTomorrowTodo = (text, time) => {
-    if (!data || demoMode) return;
-    const tmr = shiftDate(todayStr(), 1);
-    const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
-                   text: text.trim(), time: time || null, done: false };
-    if (!todo.text) return;
-    (data.todos[tmr] = data.todos[tmr] || []).push(todo);
     saveData(data); renderAll();
   };
 
@@ -458,36 +467,6 @@
       strip.appendChild(b);
     }
     el('month-title').firstChild.textContent = y + ' 年 ' + m + ' 月 · 自律计划';
-  };
-
-  // ===== 卡片 1：今日心情 =====
-  const renderMood = () => {
-    const isToday = currentDate === todayStr();
-    const mood = demoMode ? MOCK_MOOD : (data.moods[currentDate] || null);
-    const box = el('mood-display');
-    box.textContent = '';
-    const emoji = document.createElement('div');
-    const label = document.createElement('div');
-    const copy  = document.createElement('div');
-    if (mood) {
-      const m = MOOD[mood];
-      emoji.className = 'emoji';      emoji.textContent = m.emoji;
-      label.className = 'label';      label.textContent = m.label;
-      copy.className = 'copy';       copy.textContent = m.copy;
-    } else {
-      emoji.className = 'emoji none'; emoji.textContent = '🙂';
-      label.className = 'label';      label.textContent = isToday ? '今天感觉怎样？' : '这一天没有记录心情';
-      copy.className = 'copy';        copy.textContent = isToday ? '选一个表情，几秒钟的事' : '心情不能补记，明天的自己会更好';
-    }
-    box.append(emoji, label, copy);
-    if (isToday && !demoMode) {                        // 只有今天可弹窗选心情（无惩罚：不选也行）
-      const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'mood-btn';
-      btn.textContent = mood ? '换一个' : '选一选';
-      btn.addEventListener('click', () => { el('mood-modal').hidden = false; });
-      box.appendChild(btn);
-    }
-    el('mood-sub').textContent = isToday ? '选一个就好，随时可换' : '仅查看';
   };
 
   // ===== 可复用卡片组件：时间轴与"未安排"区共用（Day 8 余力加练）=====
@@ -537,48 +516,57 @@
     el('load-demo').hidden = !isToday;
   };
 
-  // ===== 卡片 2：明日待做（只在"今天"视图出现；无勾选圆圈）=====
-  const renderTomorrow = () => {
-    if (currentDate !== todayStr()) return;
-    const list = demoMode ? mockTomorrow() : getTodos(shiftDate(todayStr(), 1));
-    const wrap = el('tomorrow-list'); wrap.textContent = '';
-    list.forEach((t, i) => {
-      const row = document.createElement('div');
-      row.className = 'tcard c' + (i % 4);
-      const time = document.createElement('span');
-      time.className = 'ttime'; time.textContent = t.time || '时间待定';
-      const text = document.createElement('span');
-      text.className = 'ttext'; text.textContent = t.text;
-      row.append(time, text);
-      if (!demoMode) {                                   // 演示数据不可删
-        const del = document.createElement('button');
-        del.className = 'del'; del.type = 'button'; del.textContent = '···';
-        del.title = '删除这条明日待办';
-        del.addEventListener('click', () => deleteTodoAt(shiftDate(todayStr(), 1), t.id));
-        row.appendChild(del);
+  // ===== 我的（F5 MVP）：名字 / 使用天数 / 最近 7 天情绪 =====
+  const renderMe = () => {
+    // 名字：编辑态时不覆盖输入框
+    if (el('name-input').hidden) {
+      el('me-name-text').textContent = (data.profile.name || '').trim() || '自律的你';
+    }
+    // 使用天数：首次使用日自动记录，第 N 天 = 差值 + 1
+    if (!data.meta.firstUseDate) { data.meta.firstUseDate = todayStr(); saveData(data); }
+    el('me-days').textContent = daysBetween(data.meta.firstUseDate, todayStr()) + 1;
+
+    // 情绪板块：最近 7 天（含今天）；今天可点重选，历史只读
+    const wrap = el('mood-week');
+    wrap.textContent = '';
+    for (let i = 6; i >= 0; i--) {
+      const ds = shiftDate(todayStr(), -i);
+      const mood = demoMode ? (i === 0 ? MOCK_MOOD : null) : (data.moods[ds] || null);
+      const cell = document.createElement('div');
+      cell.className = 'mday' + (i === 0 ? ' today-cell' : '');
+      const dateSpan = document.createElement('span');
+      dateSpan.className = 'md-date';
+      const [, m, d] = ds.split('-');
+      dateSpan.textContent = m + '/' + d;
+      const emoji = document.createElement('span');
+      if (mood) { emoji.className = 'md-emoji'; emoji.textContent = MOOD[mood].emoji; }
+      else      { emoji.className = 'md-emoji none'; emoji.textContent = '·'; }
+      const wd = document.createElement('span');
+      wd.className = 'md-wd';
+      wd.textContent = i === 0 ? '今天' : (i === 1 ? '昨天' : '周' + '日一二三四五六'[new Date(ds.split('-')[0], ds.split('-')[1]-1, ds.split('-')[2]).getDay()]);
+      cell.append(dateSpan, emoji, wd);
+      if (i === 0) {
+        cell.setAttribute('role', 'button');
+        cell.title = '点一下，重新选今天的心情';
+        cell.addEventListener('click', () => {
+          if (demoMode || !data) return;
+          el('mood-modal').hidden = false;
+        });
       }
-      wrap.appendChild(row);
-    });
-    el('tomorrow-empty').hidden = list.length > 0;
-    el('tomorrow-count').textContent = list.length ? (list.length + ' 条') : '';
+      wrap.appendChild(cell);
+    }
+    // 今天选了伤心/忧郁时，板块下方显示安抚句（A8：只安抚，不警告）
+    const todayMood = demoMode ? MOCK_MOOD : data.moods[todayStr()];
+    el('mood-tip').textContent = (todayMood === 'sad' || todayMood === 'blue')
+      ? MOOD[todayMood].copy
+      : '点今天的格子可以重新选心情，历史日期只看不改';
   };
 
-  // ===== 卡片 3：今日概览 =====
-  const renderOverview = () => {
-    const list = demoMode ? mockToday() : getTodos(currentDate);
-    const total = list.length;
-    const done = list.filter(t => t.done).length;
-    const mood = demoMode ? MOCK_MOOD : (data.moods[currentDate] || null);
-    el('ov-done').textContent = done;
-    el('ov-total').textContent = total;
-    el('ov-mood').textContent = mood ? MOOD[mood].emoji : '—';
-    let line;
-    if (total === 0)            line = '新的一天，从一个小的安排开始';
-    else if (done === total)    line = '全部完成，今天很棒！';
-    else if (done === 0)        line = '不着急，什么时候开始都不晚';
-    else                         line = '已完成 ' + done + ' 件，稳步向前';
-    if (mood === 'sad')         line = '辛苦了，完成本身就是赢';
-    el('ov-encourage').textContent = line;
+  // ===== FAB 显隐：仅"今天"视图 + 今天 + 非演示（用户第 3 条要求）=====
+  const syncFab = () => {
+    el('fab').hidden = !(currentView === 'today'
+                      && currentDate === todayStr()
+                      && !demoMode && data);
   };
 
   // ===== 总渲染 =====
@@ -588,7 +576,7 @@
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
-    renderWeek(); renderMood(); renderToday(); renderTomorrow(); renderOverview();
+    renderWeek(); renderToday(); renderMe(); syncFab();
   };
 
   // ===== 统一取数入口（打开 / 重试）=====
@@ -600,6 +588,14 @@
     if (localStorage.getItem(KEY) === null) saveData(data);
     showState('content');
     renderAll();
+    maybeAskMood();
+  };
+
+  // ===== 心情自动弹窗（A6）：本次打开只问一次，跳过后不再打扰 =====
+  const maybeAskMood = () => {
+    if (moodAutoAsked || !data || demoMode) return;
+    moodAutoAsked = true;
+    if (!data.moods[todayStr()]) el('mood-modal').hidden = false;
   };
 
   const enterDemo = async () => {
@@ -633,7 +629,7 @@
   document.querySelectorAll('#mood-modal .mood-opts button').forEach(b => {
     b.addEventListener('click', () => {
       if (!data || demoMode || currentDate !== todayStr()) return;
-      data.moods[currentDate] = b.dataset.mood;
+      data.moods[todayStr()] = b.dataset.mood;
       saveData(data);
       el('mood-modal').hidden = true;
       renderAll();
@@ -641,27 +637,53 @@
   });
   el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
 
-  // FAB → 添加明日待办弹窗
+  // FAB → 添加今日待办弹窗
   el('fab').addEventListener('click', () => {
     el('tm-modal').hidden = false;
     el('tm-text').value = ''; el('tm-time').value = '';
     el('tm-text').focus();
   });
   el('tm-cancel').addEventListener('click', () => { el('tm-modal').hidden = true; });
-  const submitTomorrow = () => {
-    addTomorrowTodo(el('tm-text').value, el('tm-time').value);
+  const submitToday = () => {
+    addTodo(el('tm-text').value, el('tm-time').value);
     el('tm-modal').hidden = true;
   };
-  el('tm-ok').addEventListener('click', submitTomorrow);
-  el('tm-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitTomorrow(); } });
+  el('tm-ok').addEventListener('click', submitToday);
+  el('tm-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitToday(); } });
 
-  // 底部导航
+  // 我的：名字编辑（回车或失焦保存，空名回落默认）
+  const startEditName = () => {
+    const input = el('name-input');
+    el('me-name-text').hidden = true;
+    input.hidden = false;
+    input.value = data.profile.name || '';
+    input.focus(); input.select();
+  };
+  const commitEditName = () => {
+    const input = el('name-input');
+    if (!input.hidden) {
+      data.profile.name = input.value.trim();
+      saveData(data);
+      input.hidden = true;
+      el('me-name-text').hidden = false;
+      el('me-name-text').textContent = data.profile.name || '自律的你';
+    }
+  };
+  el('name-edit').addEventListener('click', startEditName);
+  el('name-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitEditName(); }
+  });
+  el('name-input').addEventListener('blur', commitEditName);
+
+  // 底部导航：切换视图 + FAB 只跟"今天"走
   document.querySelectorAll('nav button').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
       el('view-' + btn.dataset.view).classList.add('active');
+      currentView = btn.dataset.view;
+      syncFab();
     });
   });
 
