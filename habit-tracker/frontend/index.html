@@ -5,62 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>自律计划</title>
   <style>
-    /* ===== 主题：浅绿（首页改版，参照 MeGrow 布局）=====
-       可复用组件约束（Day 9 设计规则固化，新增样式必须遵守）：
-       C1 文字对比度：辅助文字一律用 var(--muted)（白底 4.82:1，AA 达标），
-          禁止新造任何更浅的灰绿色文字
-       C2 实心按钮：白字底色一律用 var(--green)（白字 4.82:1，AA 达标），
-          浅底上的文字一律用 var(--green-deep)（白底 5.05:1）
+    /* ===== 主题：深色 + 落日 hero（Day 12 改版，弃用浅绿）=====
+       可复用组件约束（Day 9 固化，新增样式必须遵守，Day 12 随深色主题更新基准）：
+       C1 文字对比度：辅助文字一律用 var(--muted)（深色卡上 ≥4.5:1，AA），
+          禁止新造更深的灰字；浅色文字在彩色底上必须 ≥4.5:1
+       C2 实心按钮：亮底（--green）上配深字 var(--green-ink)（≥4.5:1），
+          深底上的强调文字用 var(--green-deep)
        C3 间距节奏：模块间距 14px，卡片内元素间距只用 8/10/12/16
-          （周历/心情区等原子组件内部允许 2/4px 微间距），不引入新数值 */
+          （周历/心情区等原子组件内部允许 2/4px 微间距），不引入新数值
+       C4 象限色板：四象限 + 未分类共五色，只从 QUADS 字典取，
+          禁止在样式表或 JS 里新造第六种分类色 */
     :root{
-      --bg:#e6f3e8; --bg-top:#d8eedd; --card:#ffffff;
-      --ink:#2f3b32; --muted:#5e7866;
-      --green:#2a8151; --green-deep:#2e7d4f; --line:#dcebe0;
+      --bg:#0b0c0e; --card:#15181d; --card2:#1c2128;
+      --ink:#e9ecef; --muted:#a3adb8;
+      --green:#3ecf8e; --green-ink:#06281a; --green-deep:#7ddcb0; --line:#272e37;
+      /* 四象限 + 未分类五色（C4）：与 PRD v2.2 一一对应 */
+      --q1:#e8604c; --q2:#f5b04b; --q3:#5aa2f0; --q4:#8a94a3; --q5:#7f8ea3;
     }
     *{ box-sizing:border-box; }
     /* 键盘焦点态：Tab 能看清当前在哪（Day 9 R-容错）*/
-    button:focus-visible, input:focus-visible{
-      outline:2px solid var(--green-deep); outline-offset:2px; }
-    /* 鼠标态：悬停变深、按下微沉（只调明度，不新增视觉元素）*/
-    button:not(:disabled):hover{ filter:brightness(.92); }
-    button:not(:disabled):active{ filter:brightness(.88); transform:translateY(1px); }
+    button:focus-visible, input:focus-visible, select:focus-visible{
+      outline:2px solid var(--green); outline-offset:2px; }
+    /* 鼠标态：悬停提亮、按下微沉（深色下用提亮而非压暗）*/
+    button:not(:disabled):hover{ filter:brightness(1.12); }
+    button:not(:disabled):active{ filter:brightness(.94); transform:translateY(1px); }
     body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
           margin:0; color:var(--ink); min-height:100vh;
-          background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg) 220px); }
-    .app{ max-width:480px; margin:0 auto; padding:18px 16px 108px; }
+          background:var(--bg); }
+    .app{ max-width:480px; margin:0 auto; padding:0 16px 108px; }
 
-    /* ===== 顶部栏：月份 + 图标占位（F4/F5 入口后续版本）=====
-       窄屏（≤320px）标题+日期+图标放不下时允许换行，不溢出（R-容错）*/
-    header{ display:flex; justify-content:space-between; align-items:center;
-            flex-wrap:wrap; gap:8px 10px; margin-bottom:14px; }
-    header h1{ font-size:20px; margin:0; font-weight:700; }
-    header h1 small{ font-size:12px; color:var(--muted); font-weight:400; margin-left:6px; }
-    header .icons button{ border:none; background:transparent; font-size:18px;
-                          color:var(--muted); cursor:pointer; padding:6px;
-                          margin-left:2px; position:relative; }
-    /* 触控区扩展：::after 是透明命中区，不产生任何视觉元素（R-容错 44px 标准）*/
-    header .icons button::after{ content:""; position:absolute; inset:-8px; }
+    /* ===== hero：落日图置顶，向下渐变入黑（仅"今天"视图）=====
+       竖版 1125×1920 用 cover 裁切；55vh 优先，窄屏回落 220px */
+    .hero{ position:relative; height:clamp(220px, 55vh, 460px);
+           margin:0 -16px 14px; background:#0b0c0e url('assets/hero.jpg')
+           center 30%/cover no-repeat; }
+    .hero::after{ content:""; position:absolute; inset:0;
+           background:linear-gradient(180deg, rgba(11,12,14,.42) 0%, rgba(11,12,14,0) 26%,
+                       rgba(11,12,14,.55) 72%, rgba(11,12,14,.92) 94%, var(--bg) 100%); }
+    .hero header{ position:absolute; top:0; left:0; right:0; z-index:1;
+           display:flex; justify-content:space-between; align-items:center;
+           flex-wrap:wrap; gap:8px 10px; padding:16px 18px 0; }
+    .hero h1{ font-size:20px; margin:0; font-weight:700; color:#fff;
+           text-shadow:0 1px 8px rgba(0,0,0,.55); }
+    .hero h1 small{ font-size:12px; color:rgba(255,255,255,.92); font-weight:400;
+           margin-left:6px; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+    .hero .icons button{ border:none; background:transparent; font-size:18px;
+           color:#fff; cursor:pointer; padding:6px; margin-left:2px;
+           position:relative; text-shadow:0 1px 6px rgba(0,0,0,.6); }
+    .hero .icons button::after{ content:""; position:absolute; inset:-8px; }
+
+    /* 其他视图的标题（黑底页面头部）*/
+    .vh{ font-size:20px; margin:18px 0 14px; font-weight:700; }
 
     /* ===== 周历条：周一~周日，今天高亮，可点切换查看日 ===== */
     .week{ display:flex; gap:4px; background:var(--card); border-radius:16px;
-            padding:10px 6px; box-shadow:0 2px 10px rgba(50,110,60,.08); margin-bottom:14px; }
+            padding:10px 6px; border:1px solid var(--line); margin-bottom:14px; }
     .week button{ flex:1; border:none; background:transparent; border-radius:12px;
                   padding:5px 0; cursor:pointer; display:flex; flex-direction:column;
                   align-items:center; gap:2px; }
     .week .wd{ font-size:12px; color:var(--muted); line-height:1.2; } /* 12px：中文小字下限 */
     .week .dn{ font-size:15px; font-weight:600; color:var(--ink); line-height:1.4; }
-    .week button.sel{ box-shadow:inset 0 -3px 0 var(--green); } /* 选中日：绿色下划线，状态指示非装饰 */
+    .week button.sel{ box-shadow:inset 0 -3px 0 var(--green); } /* 选中日下划线，状态指示非装饰 */
     .week button.sel .dn{ color:var(--green-deep); }
     .week button.today{ background:var(--green); }
-    .week button.today .wd{ color:#fff; }
-    .week button.today .dn{ color:#fff; }
+    .week button.today .wd{ color:var(--green-ink); }
+    .week button.today .dn{ color:var(--green-ink); }
 
     /* ===== 筛选标签 ===== */
     .tags{ display:flex; gap:8px; margin-bottom:14px; }
     .tags button{ border:1px solid var(--line); background:var(--card); color:var(--muted);
                   border-radius:999px; padding:5px 18px; font-size:13px; cursor:pointer; }
-    .tags button.on{ background:var(--green); border-color:var(--green); color:#fff; }
+    .tags button.on{ background:var(--green); border-color:var(--green); color:var(--green-ink); }
 
     /* ===== Day 8 四状态：加载 / 错误（空与数据在 content 内部切换）===== */
     .state{ text-align:center; padding:44px 0; color:var(--muted); font-size:14px; }
@@ -71,38 +86,44 @@
 
     /* 演示模式横幅：mock 数据只看不存 */
     #demo-banner{ display:flex; justify-content:space-between; align-items:center;
-                  background:#f2f9f3; border:1px dashed #bcd8c3; color:var(--muted);
+                  background:var(--card2); border:1px dashed var(--line); color:var(--muted);
                   font-size:13px; padding:8px 12px; border-radius:10px; margin-bottom:12px; }
     #demo-banner button{ border:none; background:transparent; color:var(--green-deep);
                          font-size:13px; cursor:pointer; }
 
     /* 只读提示：查看非今天时 */
-    #readonly-hint{ display:none; background:#f2f9f3; color:var(--muted); font-size:13px;
+    #readonly-hint{ display:none; background:var(--card2); color:var(--muted); font-size:13px;
                     padding:8px 12px; border-radius:10px; margin-bottom:12px; }
     body.readonly #readonly-hint{ display:block; }
     body.readonly #add-form{ display:none; }        /* 非今天不添加，防边界问题 */
     body.readonly #fab{ display:none; }
     body.demo #add-form{ display:none; }
-    body.demo #fab{ display:none; }                /* 假数据不落盘，演示模式只看 */
+    body.demo #fab{ display:none; }                  /* 假数据不落盘，演示模式只看 */
 
     /* ===== 卡片 ===== */
     .card{ background:var(--card); border-radius:16px; padding:16px;
-           box-shadow:0 2px 10px rgba(50,110,60,.08); margin-bottom:14px; }
+           border:1px solid var(--line); margin-bottom:14px; }
     .card > h2{ font-size:15px; margin:0 0 12px; display:flex;
                 justify-content:space-between; align-items:baseline; }
     .card > h2 .sub{ font-size:12px; color:var(--muted); font-weight:400; }
 
-    /* 今日待做：表单 + 卡片（F1 时间轴）*/
+    /* 今日待做：表单 + 卡片（F1 时间轴 + 四象限标注）*/
     #add-form{ display:flex; gap:8px; margin-bottom:14px; }
     #todo-text{ flex:1; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
-                font-size:14px; background:var(--card); } /* min-width:0 防窄屏溢出（R-容错）*/
+                font-size:14px; background:var(--card2); color:var(--ink); } /* min-width:0 防窄屏溢出 */
     #todo-time{ padding:9px 6px; border:1px solid var(--line); border-radius:10px;
-                font-size:13px; background:var(--card); color:var(--muted); }
+                font-size:13px; background:var(--card2); color:var(--muted);
+                color-scheme:dark; }
+    #todo-quad{ padding:9px 6px; border:1px solid var(--line); border-radius:10px;
+                font-size:13px; background:var(--card2); color:var(--muted); max-width:8.5em; }
     #add-form button[type="submit"]{ width:40px; border:none; border-radius:10px;
-                background:var(--green); color:#fff; font-size:18px; cursor:pointer; }
-    .group-label{ color:var(--muted); font-size:12px; margin:12px 0 8px; } /* 6px→8px 归入 C3 */
-    .todo{ display:flex; align-items:center; gap:10px; background:#f6fbf7;
+                background:var(--green); color:var(--green-ink); font-size:18px; cursor:pointer; }
+    .group-label{ color:var(--muted); font-size:12px; margin:12px 0 8px; }
+    .todo{ display:flex; align-items:center; gap:10px; background:var(--card2);
            border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+    /* 四象限色标：卡片最左 4px 竖条，颜色由 QUADS 字典注入（C4）*/
+    .todo .qbar{ width:4px; align-self:stretch; border-radius:2px; flex-shrink:0;
+                 background:var(--q5); }
     .todo .time{ color:var(--green-deep); font-size:13px; font-variant-numeric:tabular-nums;
                  min-width:42px; }
     .todo .check{ width:22px; height:22px; border-radius:50%; border:2px solid var(--green);
@@ -113,7 +134,7 @@
     .todo .del::after{ content:""; position:absolute; inset:-10px; } /* 透明命中区 ~44px */
     .todo.done .check{ background:var(--green); }
     .todo.done .text{ text-decoration:line-through; color:var(--muted); }
-    .todo.done{ opacity:.85; transform:translateY(1px); }
+    .todo.done{ opacity:.75; transform:translateY(1px); }
     .todo .check:disabled{ border-color:var(--muted); cursor:not-allowed; }
     .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
     .mini-empty button{ display:block; margin:10px auto 0; padding:7px 16px;
@@ -122,7 +143,7 @@
 
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
-    .profile .avatar{ width:56px; height:56px; border-radius:50%; background:#f0f8f1;
+    .profile .avatar{ width:56px; height:56px; border-radius:50%; background:var(--card2);
                       font-size:30px; display:flex; align-items:center;
                       justify-content:center; flex-shrink:0; }
     .profile .pinfo{ flex:1; min-width:0; }
@@ -132,20 +153,21 @@
                             font-size:12px; cursor:pointer; padding:4px 6px; position:relative; }
     .profile .pname button::after{ content:""; position:absolute; inset:-6px; }
     #name-input{ font-size:15px; padding:4px 8px; border:1px solid var(--line);
-                 border-radius:8px; width:9em; max-width:100%; }
+                 border-radius:8px; width:9em; max-width:100%;
+                 background:var(--card2); color:var(--ink); }
     .profile .pdays{ font-size:12px; color:var(--muted); margin-top:4px; }
     .profile .pdays b{ color:var(--green-deep); font-size:14px; }
 
     /* 情绪板块：最近 7 天 */
     .mood-week{ display:flex; gap:4px; }
-    .mday{ flex:1; background:#f6fbf7; border:1px solid var(--line); border-radius:10px;
+    .mday{ flex:1; background:var(--card2); border:1px solid var(--line); border-radius:10px;
            padding:8px 2px; text-align:center; display:flex; flex-direction:column;
            gap:4px; align-items:center; }
     .mday .md-date{ font-size:12px; color:var(--muted); }
     .mday .md-emoji{ font-size:20px; line-height:1.3; min-height:26px; }
     .mday .md-emoji.none{ color:var(--muted); font-size:14px; }
     .mday .md-wd{ font-size:12px; color:var(--muted); }
-    .mday.today-cell{ border-color:var(--green); cursor:pointer; background:#f0f8f1; }
+    .mday.today-cell{ border-color:var(--green); cursor:pointer; }
     .mday.today-cell .md-wd{ color:var(--green-deep); font-weight:600; }
     .mood-tip{ font-size:12px; color:var(--muted); margin-top:12px; }
 
@@ -157,22 +179,24 @@
     .guide li{ font-size:13px; color:var(--ink); margin:0 0 8px; line-height:1.6; }
     .guide{ margin:0; padding-left:18px; }
     .guide li b{ color:var(--green-deep); }
+    .guide .dot{ display:inline-block; width:8px; height:8px; border-radius:50%;
+                 margin-right:2px; vertical-align:1px; }
 
     /* ===== FAB：右下角 +，仅"今天"视图显示，添加今日待办 ===== */
     #fab{ position:fixed; bottom:78px; right:max(18px, calc(50% - 224px));
           width:54px; height:54px; border-radius:50%; border:none;
-          background:var(--green); color:#fff; font-size:28px; cursor:pointer;
-          box-shadow:0 4px 14px rgba(46,125,79,.35); z-index:30; }
+          background:var(--green); color:var(--green-ink); font-size:28px; cursor:pointer;
+          box-shadow:0 4px 14px rgba(0,0,0,.5); z-index:30; }
 
-    /* ===== 弹窗 ===== */
-    .overlay{ position:fixed; inset:0; background:rgba(28,48,34,.45);
+    /* ===== 弹窗（深色）===== */
+    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6);
               display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
     .overlay[hidden]{ display:none; }
-    .modal{ background:#fff; border-radius:20px; padding:20px; width:100%;
-            max-width:320px; text-align:center; }
+    .modal{ background:var(--card); border:1px solid var(--line); border-radius:20px;
+            padding:20px; width:100%; max-width:320px; text-align:center; }
     .modal h3{ margin:0 0 14px; font-size:16px; }
     .mood-opts{ display:flex; gap:6px; justify-content:center; }
-    .mood-opts button{ flex:1; min-width:0; border:none; background:#f6fbf7; border-radius:12px;
+    .mood-opts button{ flex:1; min-width:0; border:none; background:var(--card2); border-radius:12px;
                         padding:10px 2px; cursor:pointer; display:flex;
                         flex-direction:column; align-items:center; gap:4px; }
     .mood-opts button .face{ font-size:26px; line-height:1.2; }
@@ -182,19 +206,24 @@
     .modal .close{ display:block; margin:14px auto 0; border:none; background:transparent;
                    color:var(--muted); font-size:13px; cursor:pointer; }
     #tm-text{ width:100%; padding:10px 12px; border:1px solid var(--line);
-              border-radius:10px; font-size:14px; margin-bottom:10px; }
+              border-radius:10px; font-size:14px; margin-bottom:10px;
+              background:var(--card2); color:var(--ink); }
     #tm-time{ width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
-              font-size:13px; color:var(--muted); margin-bottom:10px; } /* 间距统一 10px（C3）*/
+              font-size:13px; color:var(--muted); margin-bottom:10px;
+              background:var(--card2); color-scheme:dark; } /* 间距统一 10px（C3）*/
+    #tm-quad{ width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
+              font-size:13px; color:var(--muted); margin-bottom:10px;
+              background:var(--card2); }
     .modal .row{ display:flex; gap:10px; margin-top:0; }
     .modal .row button{ flex:1; padding:10px 0; border-radius:10px; font-size:14px; cursor:pointer; }
     #tm-cancel{ border:1px solid var(--line); background:transparent; color:var(--muted); }
-    #tm-ok{ border:none; background:var(--green); color:#fff; }
+    #tm-ok{ border:none; background:var(--green); color:var(--green-ink); }
 
-    /* ===== 底部导航 ===== */
+    /* ===== 底部导航（深色）===== */
     nav{ position:fixed; bottom:0; left:0; right:0; background:var(--card);
          border-top:1px solid var(--line); display:flex; z-index:20; }
     nav div{ max-width:480px; margin:0 auto; display:flex; width:100%; }
-    nav button{ flex:1; padding:12px 0; background:transparent; color:var(--ink);
+    nav button{ flex:1; padding:12px 0; background:transparent; color:var(--muted);
                 border:none; font-size:14px; cursor:pointer; }
     nav button.active{ color:var(--green-deep); font-weight:600; }
     section{ display:none; }
@@ -203,17 +232,20 @@
 </head>
 <body>
 <div class="app">
-  <header>
-    <h1 id="month-title">自律计划<small id="today-label"></small></h1>
-    <div class="icons">
-      <button type="button" title="统计报告（后续版本）" aria-label="统计报告">📊</button>
-      <button type="button" title="设置（后续版本）" aria-label="设置">⚙️</button>
-    </div>
-  </header>
 
   <main>
-    <!-- 今天视图：周历条 + 筛选 + 四状态 + 今日待做 -->
+    <!-- 今天视图：hero 落日图 + 周历条 + 筛选 + 四状态 + 今日待做 -->
     <section id="view-today" class="active">
+      <div class="hero">
+        <header>
+          <h1 id="month-title">自律计划<small id="today-label"></small></h1>
+          <div class="icons">
+            <button type="button" title="统计报告（后续版本）" aria-label="统计报告">📊</button>
+            <button type="button" title="设置（后续版本）" aria-label="设置">⚙️</button>
+          </div>
+        </header>
+      </div>
+
       <div class="week" id="week-strip"></div>
 
       <div class="tags">
@@ -244,6 +276,13 @@
           <form id="add-form">
             <input id="todo-text" placeholder="要做点什么？" maxlength="60" />
             <input id="todo-time" type="time" title="可选：几点做" />
+            <select id="todo-quad" title="可选：四象限分类">
+              <option value="">象限</option>
+              <option value="q1">Q1 重要且紧急</option>
+              <option value="q2">Q2 重要不紧急</option>
+              <option value="q3">Q3 紧急不重要</option>
+              <option value="q4">Q4 不重要不紧急</option>
+            </select>
             <button type="submit" title="添加待办">＋</button>
           </form>
           <div id="timeline"></div>
@@ -260,11 +299,13 @@
     </section>
 
     <section id="view-thoughts">
+      <h2 class="vh">思考</h2>
       <div class="state">思考视图（Step 4 接 F3 思考）</div>
     </section>
 
     <!-- 我的视图（F5 MVP）：头像/名字/使用天数/情绪板块/设置/指南 -->
     <section id="view-me">
+      <h2 class="vh">我的</h2>
       <div class="card">
         <div class="profile">
           <div class="avatar" id="me-avatar">🌱</div>
@@ -287,14 +328,15 @@
 
       <div class="card">
         <h2>通用设置</h2>
-        <div class="set-row"><span>主题</span><span class="sv">浅色（后续版本支持换肤）</span></div>
+        <div class="set-row"><span>主题</span><span class="sv">深色（后续版本支持换肤）</span></div>
         <div class="set-row"><span>数据存储</span><span class="sv">仅本机浏览器，不上传</span></div>
       </div>
 
       <div class="card">
         <h2>使用指南</h2>
         <ul class="guide">
-          <li><b>加待办</b>：在「今天」输入内容，可选时间点，点 ＋ 或回车</li>
+          <li><b>加待办</b>：在「今天」输入内容，可选时间点和象限，点 ＋ 或回车</li>
+          <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
           <li><b>完成 / 删除</b>：点圆圈打勾，再点恢复；点 ··· 删除（会先确认）</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
@@ -323,12 +365,19 @@
   </div>
 </div>
 
-<!-- 弹窗 2：添加今日待办 -->
+<!-- 弹窗 2：添加今日待办（含四象限） -->
 <div class="overlay" id="tm-modal" hidden>
   <div class="modal">
     <h3>添加今日待办</h3>
     <input id="tm-text" placeholder="今天要做什么？" maxlength="60" />
     <input id="tm-time" type="time" title="可选：几点做" />
+    <select id="tm-quad" title="可选：四象限分类">
+      <option value="">象限：不选就是普通待办</option>
+      <option value="q1">Q1 重要且紧急</option>
+      <option value="q2">Q2 重要不紧急</option>
+      <option value="q3">Q3 紧急不重要</option>
+      <option value="q4">Q4 不重要不紧急</option>
+    </select>
     <div class="row">
       <button id="tm-cancel" type="button">取消</button>
       <button id="tm-ok" type="button">添加</button>
@@ -345,7 +394,7 @@
 <script>
   // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
   const KEY = 'habit-tracker-v1';
-  const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'light' }, meta: {} });
+  const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'dark' }, meta: {} });
   const loadData = () => {
     const raw = localStorage.getItem(KEY);
     if (raw === null) return defaults();
@@ -355,12 +404,22 @@
   };
   const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
+  // ===== 四象限字典（C4 象限色板唯一来源）：q1-q4 + 未分类共五色 =====
+  const QUADS = {
+    q1: { label: 'Q1 重要且紧急',   color: 'var(--q1)' },
+    q2: { label: 'Q2 重要不紧急',   color: 'var(--q2)' },
+    q3: { label: 'Q3 紧急不重要',   color: 'var(--q3)' },
+    q4: { label: 'Q4 不重要不紧急', color: 'var(--q4)' },
+  };
+  const quadOf = (todo) => (todo && todo.quad && QUADS[todo.quad]) ? todo.quad : null;
+  const quadInfo = (todo) => QUADS[quadOf(todo)] || { label: '普通待办（未分类）', color: 'var(--q5)' };
+
   // ===== mock 示例数据（内容全部编造，只演示渲染，永不落盘；R6 隐私红线）=====
   const mockToday = () => ([
-    { id: 'mock-1', text: '晨跑 30 分钟',   time: '07:30', done: true  },
-    { id: 'mock-2', text: '整理本周笔记',   time: '09:00', done: false },
-    { id: 'mock-3', text: '读书 30 分钟',   time: '20:30', done: false },
-    { id: 'mock-4', text: '给家里打个电话', time: null,    done: false },
+    { id: 'mock-1', text: '晨跑 30 分钟',   time: '07:30', done: true,  quad: 'q2' },
+    { id: 'mock-2', text: '整理本周笔记',   time: '09:00', done: false, quad: 'q1' },
+    { id: 'mock-3', text: '读书 30 分钟',   time: '20:30', done: false, quad: 'q4' },
+    { id: 'mock-4', text: '给家里打个电话', time: null,    done: false, quad: null  },
   ]);
   const MOCK_MOOD = 'joy';
 
@@ -418,14 +477,15 @@
     el('week-strip').hidden = state === 'error';   // 错误时连周历也收起，聚焦重试
   };
 
-  // ===== 待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done}]）=====
+  // ===== 待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done,quad}]）=====
   const getTodos = (date) => data.todos[date] || [];
 
-  const addTodo = (text, time) => {
+  const addTodo = (text, time, quad) => {
     if (!data || demoMode) return;
     if (currentDate !== todayStr()) return;           // FAB/表单只在今天视图可见，双保险
     const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
-                   text: text.trim(), time: time || null, done: false };
+                   text: text.trim(), time: time || null, done: false,
+                   quad: (quad && QUADS[quad]) ? quad : null };   // 象限可空 = 未分类
     if (!todo.text) return;
     (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
     saveData(data); renderAll();
@@ -444,7 +504,7 @@
     saveData(data); renderAll();
   };
 
-  // ===== 周历条：本周周一~周日，今天绿底高亮，点击切换查看日 =====
+  // ===== 周历条：本周周一~周日，今天高亮，点击切换查看日 =====
   const renderWeek = () => {
     const strip = el('week-strip');
     strip.textContent = '';
@@ -473,6 +533,13 @@
   const createTodoCard = (todo, interactive) => {
     const row = document.createElement('div');
     row.className = 'todo' + (todo.done ? ' done' : '');
+    // 四象限色标（C4）：颜色只从 QUADS 取，未分类走 q5 雾蓝
+    const info = quadInfo(todo);
+    const qbar = document.createElement('span');
+    qbar.className = 'qbar';
+    qbar.style.background = info.color;
+    qbar.title = info.label;
+    row.appendChild(qbar);
     const check = document.createElement('button');
     check.className = 'check'; check.type = 'button';
     check.title = todo.done ? '点击恢复未完成' : '点击标记完成';
@@ -491,7 +558,7 @@
     return row;
   };
 
-  // ===== 今日待做（F1）=====
+  // ===== 今日待做（F1 + 四象限标注）=====
   const renderToday = () => {
     const isToday = currentDate === todayStr();
     let list = demoMode ? mockToday() : getTodos(currentDate);
@@ -609,8 +676,8 @@
   // ===== 事件绑定 =====
   el('add-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    addTodo(el('todo-text').value, el('todo-time').value);
-    el('todo-text').value = ''; el('todo-time').value = '';
+    addTodo(el('todo-text').value, el('todo-time').value, el('todo-quad').value);
+    el('todo-text').value = ''; el('todo-time').value = ''; el('todo-quad').value = '';
   });
   el('retry-btn').addEventListener('click', refreshDay);
   el('load-demo').addEventListener('click', enterDemo);
@@ -637,15 +704,15 @@
   });
   el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
 
-  // FAB → 添加今日待办弹窗
+  // FAB → 添加今日待办弹窗（含象限）
   el('fab').addEventListener('click', () => {
     el('tm-modal').hidden = false;
-    el('tm-text').value = ''; el('tm-time').value = '';
+    el('tm-text').value = ''; el('tm-time').value = ''; el('tm-quad').value = '';
     el('tm-text').focus();
   });
   el('tm-cancel').addEventListener('click', () => { el('tm-modal').hidden = true; });
   const submitToday = () => {
-    addTodo(el('tm-text').value, el('tm-time').value);
+    addTodo(el('tm-text').value, el('tm-time').value, el('tm-quad').value);
     el('tm-modal').hidden = true;
   };
   el('tm-ok').addEventListener('click', submitToday);
