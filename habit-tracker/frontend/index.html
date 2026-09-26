@@ -298,24 +298,22 @@
 
     /* ===== 应用页入口列表（F6 骨架，Day 17）：仿九宫格应用中心的列表形态 ===== */
     .apps-list{ display:flex; flex-direction:column; gap:10px; }
-    .app-item{ display:flex; align-items:center; gap:12px; width:100%;
-               background:var(--card2); border:1px solid var(--line);
+    .app-item{ display:grid; grid-template-columns:40px 1fr 30px; align-items:center;
+               gap:12px; width:100%; background:var(--card2); border:1px solid var(--line);
                border-radius:14px; padding:12px 14px; cursor:pointer;
                color:var(--ink); font-size:15px; font-family:inherit;
                text-align:left; }
-    .app-item .ai-badge{ flex:none; width:40px; height:40px; border-radius:11px;
-               display:flex; align-items:center; justify-content:center;
-               font-size:20px; line-height:1; }
-    .app-item .ai-txt{ flex:1; min-width:0; }
-    .app-item .ai-txt b{ display:block; font-size:15px; font-weight:600; }
-    .app-item .ai-txt span{ display:block; font-size:12px; color:var(--muted); margin-top:2px; }
-    .app-item .ai-arrow{ flex:none; color:var(--muted); font-size:16px; }
-    .app-item .ai-soon{ flex:none; font-size:11px; color:var(--muted);
-               border:1px solid var(--line); border-radius:99px; padding:2px 8px; }
+    .app-item .ai-badge{ display:flex; align-items:center; justify-content:center;
+               width:40px; height:40px; border-radius:11px; font-size:20px; line-height:1; }
+    .app-item .ai-txt{ overflow:hidden; }
+    .app-item .ai-txt b{ display:block; font-size:15px; font-weight:600;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .app-item .ai-txt span{ display:block; font-size:12px; color:var(--muted); margin-top:2px;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .app-item .ai-arrow{ text-align:center; color:var(--muted); font-size:16px; }
+    .app-item .ai-soon{ text-align:center; font-size:16px; color:var(--muted); }
     .app-item:disabled{ cursor:not-allowed; }
     .app-item:disabled .ai-txt b{ color:var(--muted); }
-
-    /* ===== 底部导航（深色）===== */
     nav{ position:fixed; bottom:0; left:0; right:0; background:var(--card);
          border-top:1px solid var(--line); display:flex; z-index:20; }
     nav div{ max-width:480px; margin:0 auto; display:flex; width:100%; }
@@ -416,7 +414,8 @@
     <!-- 应用视图（F6 骨架，Day 17）：入口列表，子功能 Day 18-21 逐个开放 -->
     <section id="view-apps">
       <h2 class="vh">应用</h2>
-      <div class="apps-list" id="apps-list">
+      <div class="card">
+        <div class="apps-list" id="apps-list">
         <button type="button" class="app-item" data-app="todo">
           <span class="ai-badge" style="background:var(--q2)">📋</span>
           <span class="ai-txt"><b>待办事项</b><span>查看和管理今天的安排</span></span>
@@ -425,30 +424,31 @@
         <button type="button" class="app-item" data-app="timer" disabled>
           <span class="ai-badge" style="background:var(--q3)">⏱️</span>
           <span class="ai-txt"><b>专注计时</b><span>番茄钟和正计时，帮你沉下心</span></span>
-          <span class="ai-soon">Day 18</span>
+          <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="ledger" disabled>
           <span class="ai-badge" style="background:var(--q1)">💰</span>
           <span class="ai-txt"><b>记账</b><span>记一笔收支，看看本月结余</span></span>
-          <span class="ai-soon">Day 19</span>
+          <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="memorial" disabled>
           <span class="ai-badge" style="background:var(--q5)">📅</span>
           <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
-          <span class="ai-soon">Day 20</span>
+          <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="affirm" disabled>
           <span class="ai-badge" style="background:var(--green)">🌱</span>
           <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
-          <span class="ai-soon">Day 21</span>
+          <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="widget" disabled>
           <span class="ai-badge" style="background:var(--q4)">🪴</span>
           <span class="ai-txt"><b>小组件</b><span>签到盆栽、完美日、喝水打卡</span></span>
-          <span class="ai-soon">Day 22</span>
+          <span class="ai-soon">🔒</span>
         </button>
       </div>
-    </section>
+    </div>
+  </section>
 
     <!-- 我的视图（F5 MVP）：头像/名字/使用天数/情绪板块/设置/指南 -->
     <section id="view-me">
@@ -1236,6 +1236,10 @@
 
   // ===== 启动 =====
   refreshDay();
+
+  // URL hash 直连视图（测试截图用，不影响正常访问）
+  const viewByHash = { '#today':'today','#thoughts':'thoughts','#apps':'apps','#me':'me' }[location.hash];
+  if (viewByHash) document.querySelector('nav button[data-view="' + viewByHash + '"]').click();
 </script>
 </body>
 </html>
