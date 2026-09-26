@@ -168,6 +168,24 @@
         border:1px solid var(--line); border-radius:999px; background:transparent;
         color:var(--green-deep); font-size:13px; cursor:pointer; }
 
+    /* ===== 思考页（F3 MVP，Day 14）：卡片流 + 长文折叠 ===== */
+    .note{ background:var(--card2); border:1px solid var(--line); border-radius:14px;
+           padding:12px 14px; margin-bottom:10px; }
+    .note .note-date{ font-size:11px; color:var(--muted); margin-bottom:6px; }
+    .note .note-text{ font-size:14px; line-height:1.7; white-space:pre-wrap;
+                      word-break:break-word; margin:0; }
+    .note .note-text.clamp{ display:-webkit-box; -webkit-box-orient:vertical;
+                            -webkit-line-clamp:4; overflow:hidden; }  /* 超 4 行折叠 */
+    .note .note-more{ border:none; background:transparent; color:var(--green-deep);
+                      font-size:12px; padding:6px 0 0; cursor:pointer; }
+    #note-fab{ position:fixed; bottom:78px; left:50%; transform:translateX(-50%);
+               width:54px; height:54px; border-radius:50%; border:none;
+               background:var(--green); color:var(--green-ink); font-size:28px; cursor:pointer;
+               box-shadow:0 4px 14px rgba(0,0,0,.5); z-index:30; }
+    #note-area{ width:100%; min-height:120px; padding:10px 12px; border:1px solid var(--line);
+                border-radius:10px; font-size:14px; background:var(--card2); color:var(--ink);
+                resize:vertical; font-family:inherit; margin-bottom:10px; box-sizing:border-box; }
+
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
     .profile .avatar{ width:56px; height:56px; border-radius:50%; background:var(--card2);
@@ -340,9 +358,16 @@
       </div>
     </section>
 
+    <!-- 思考视图（F3 MVP，Day 14）：卡片流，新的在上，长文折叠 -->
     <section id="view-thoughts">
       <h2 class="vh">思考</h2>
-      <div class="state">思考视图（Step 4 接 F3 思考）</div>
+      <div class="card">
+        <h2>想法流 <span class="sub" id="note-count"></span></h2>
+        <div id="note-list"></div>
+        <div id="note-empty" class="mini-empty" hidden>
+          <span>还没有记录过想法，点下面的 ＋ 随手写一条</span>
+        </div>
+      </div>
     </section>
 
     <!-- 我的视图（F5 MVP）：头像/名字/使用天数/情绪板块/设置/指南 -->
@@ -380,6 +405,7 @@
           <li><b>加待办</b>：在「今天」输入内容，可选时间点和象限，点 ＋ 或回车</li>
           <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
           <li><b>完成 / 删除 / 移动</b>：点圆圈打勾，再点恢复；点 ··· 可以删除（会先确认）或移动到其他日期</li>
+          <li><b>思考</b>：切到「思考」页，点底部中间的 ＋ 随手写一条（Ctrl+Enter 可快捷保存）；长的自动折叠，点「展开全文」看全</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
         </ul>
@@ -390,6 +416,9 @@
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
 <button id="fab" type="button" hidden title="添加今日待办" aria-label="添加今日待办">＋</button>
+
+<!-- FAB：记一条想法（仅思考视图显示，底部居中；Day 14 F3） -->
+<button id="note-fab" type="button" hidden title="记一条想法" aria-label="记一条想法">＋</button>
 
 <!-- 弹窗 1：心情五选一（F2）-->
 <div class="overlay" id="mood-modal" hidden>
@@ -440,6 +469,18 @@
   </div>
 </div>
 
+<!-- 弹窗 4：记一条想法（Day 14，F3） -->
+<div class="overlay" id="note-modal" hidden>
+  <div class="modal">
+    <h3>记一条想法</h3>
+    <textarea id="note-area" maxlength="2000" placeholder="想到什么写什么，不用标题和排版"></textarea>
+    <div class="row">
+      <button id="note-cancel" type="button">取消</button>
+      <button id="note-ok" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -480,6 +521,15 @@
     { id: 'mock-4', text: '给家里打个电话', time: null,    done: false, quad: null  },
   ]);
   const MOCK_MOOD = 'joy';
+  // 思考页示例（Day 14）：内容全部编造，只演示卡片流与折叠效果（R6 隐私红线）
+  const MOCK_NOTES = [
+    { id: 'mock-n1', ts: Date.now() - 30*60e3, text:
+      '今天把待办清单砍到了三件事，反而全做完了。以前总觉得列得越多越自律，' +
+      '其实列得多只是在缓解焦虑，做得多才是真的往前走。少一点，稳一点，' +
+      '这个思路值得留下来了，以后每周日开始都先做一次减法，把下周的计划先砍一半再说。' },
+    { id: 'mock-n2', ts: Date.now() - 5*3600e3, text: '傍晚散步的时候发现楼下的桂花开了，今年的第一口秋天的味道。' },
+    { id: 'mock-n3', ts: Date.now() - 26*3600e3, text: '读《纳瓦尔宝典》有感：把时间花在不会被清零的事情上。' },
+  ];
 
   // ===== 心情字典：伤心/忧郁只配安抚文案，不出现任何负面/警告语（A8）=====
   const MOOD = {
@@ -507,6 +557,11 @@
     const [y1, m1, d1] = a.split('-').map(Number);
     const [y2, m2, d2] = b.split('-').map(Number);
     return Math.round((new Date(y2, m2-1, d2) - new Date(y1, m1-1, d1)) / 86400000);
+  };
+  const fmtTs = (ts) => {                            // 思考卡片时间戳：M月D日 周X HH:MM
+    const dt = new Date(ts);
+    return `${dt.getMonth()+1}月${dt.getDate()}日 周${'日一二三四五六'[dt.getDay()]} `
+         + `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`;
   };
 
   // ===== 全局状态 =====
@@ -705,6 +760,38 @@
     el('load-demo').hidden = !isToday;
   };
 
+  // ===== 思考卡片（F3 MVP，Day 14）：超 100 字折叠到 4 行，点「展开全文」看全 =====
+  const NOTE_CLAMP = 100;
+  const createNoteCard = (n) => {
+    const card = document.createElement('div');
+    card.className = 'note'; card.dataset.id = n.id;
+    const date = document.createElement('div');
+    date.className = 'note-date'; date.textContent = fmtTs(n.ts);
+    const p = document.createElement('p');
+    p.className = 'note-text' + (n.text.length > NOTE_CLAMP ? ' clamp' : '');
+    p.textContent = n.text;
+    card.append(date, p);
+    if (n.text.length > NOTE_CLAMP) {
+      const more = document.createElement('button');
+      more.type = 'button'; more.className = 'note-more'; more.textContent = '展开全文';
+      more.addEventListener('click', () => {
+        const collapsed = p.classList.toggle('clamp');
+        more.textContent = collapsed ? '展开全文' : '收起';
+      });
+      card.appendChild(more);
+    }
+    return card;
+  };
+
+  const renderThoughts = () => {
+    const listEl = el('note-list'); listEl.textContent = '';
+    const list = demoMode ? MOCK_NOTES
+      : (data ? data.notes.slice().sort((a, b) => b.ts - a.ts) : []);   // 新的在上
+    list.forEach(n => listEl.appendChild(createNoteCard(n)));
+    el('note-empty').hidden = list.length > 0;
+    el('note-count').textContent = list.length ? list.length + ' 条' : '';
+  };
+
   // ===== 我的（F5 MVP）：名字 / 使用天数 / 最近 7 天情绪 =====
   const renderMe = () => {
     // 名字：编辑态时不覆盖输入框
@@ -751,11 +838,13 @@
       : '点今天的格子可以重新选心情，历史日期只看不改';
   };
 
-  // ===== FAB 显隐：仅"今天"视图 + 今天 + 非演示（用户第 3 条要求）=====
+  // ===== FAB 显隐：今天视图右下角＋ / 思考视图底部居中＋（Day 14），均非演示模式 =====
   const syncFab = () => {
     el('fab').hidden = !(currentView === 'today'
                       && currentDate === todayStr()
                       && !demoMode && data);
+    el('note-fab').hidden = !(currentView === 'thoughts'
+                           && !demoMode && data);
   };
 
   // ===== 总渲染 =====
@@ -765,7 +854,7 @@
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
-    renderWeek(); renderToday(); renderMe(); syncFab();
+    renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
   };
 
   // ===== 统一取数入口（打开 / 重试）=====
@@ -854,6 +943,28 @@
     const to = el('move-date').value;
     if (!to) { showToast('先选一个日期'); return; }
     if (moveTodoTo(moveCtx.id, moveCtx.from, to)) el('move-modal').hidden = true;
+  });
+
+  // 记想法弹窗（Day 14，F3）：空内容拦截，保存后新卡片出现在最上面
+  el('note-fab').addEventListener('click', () => {
+    el('note-area').value = '';
+    el('note-modal').hidden = false;
+    el('note-area').focus();
+  });
+  el('note-cancel').addEventListener('click', () => { el('note-modal').hidden = true; });
+  el('note-ok').addEventListener('click', () => {
+    if (demoMode || !data) { el('note-modal').hidden = true; return; }
+    const text = el('note-area').value.trim();
+    if (!text) { showToast('写点什么再保存吧'); return; }
+    data.notes.unshift({ id: Date.now() + '-' + Math.floor(Math.random()*1000),
+                          text, ts: Date.now() });
+    saveData(data);
+    el('note-modal').hidden = true;
+    renderThoughts();
+    showToast('已记下一条想法');
+  });
+  el('note-area').addEventListener('keydown', (e) => {   // Ctrl/⌘ + Enter 快捷保存
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); el('note-ok').click(); }
   });
 
   // 我的：名字编辑（回车或失焦保存，空名回落默认）
