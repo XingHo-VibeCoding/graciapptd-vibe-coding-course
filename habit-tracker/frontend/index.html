@@ -127,14 +127,31 @@
     .todo .time{ color:var(--green-deep); font-size:13px; font-variant-numeric:tabular-nums;
                  min-width:42px; }
     .todo .check{ width:22px; height:22px; border-radius:50%; border:2px solid var(--green);
-                  background:transparent; cursor:pointer; flex-shrink:0; padding:0; }
+                  background:transparent; cursor:pointer; flex-shrink:0; padding:0;
+                  transition:background .15s, transform .15s; }
+    .todo .check:hover{ transform:scale(1.12); }
+    .todo .check:active{ transform:scale(.9); }
     .todo .text{ flex:1; font-size:14px; }
     .todo .del{ border:none; background:transparent; color:var(--muted); font-size:16px;
                 cursor:pointer; padding:8px 6px; margin-right:-2px; position:relative; }
     .todo .del::after{ content:""; position:absolute; inset:-10px; } /* 透明命中区 ~44px */
     .todo.done .check{ background:var(--green); }
-    .todo.done .text{ text-decoration:line-through; color:var(--muted); }
+    .todo.done .text{ text-decoration:line-through; text-decoration-color:var(--muted);
+                      color:var(--muted); }
     .todo.done{ opacity:.75; transform:translateY(1px); }
+    /* ===== 交互反馈动画（Day 11）：只作用于"刚点的那张卡"（.just），
+       避免重渲染时已完成卡片反复重播 ===== */
+    @keyframes check-pop{ 0%{transform:scale(1);} 45%{transform:scale(1.35);} 100%{transform:scale(1);} }
+    @keyframes strike-in{ from{text-decoration-color:transparent;} to{text-decoration-color:var(--muted);} }
+    @keyframes card-settle{ from{opacity:1; transform:translateY(0);} to{opacity:.75; transform:translateY(1px);} }
+    .todo.just .check{ animation:check-pop .28s ease-out; }
+    .todo.just .text{ animation:strike-in .35s ease-out; }
+    .todo.just{ animation:card-settle .25s ease-out; }
+    /* 无障碍：系统开启"减少动态效果"时关掉动效，保留静态反馈（划线/置灰） */
+    @media (prefers-reduced-motion: reduce){
+      .todo.just .check, .todo.just .text, .todo.just{ animation:none; }
+      .todo .check{ transition:none; }
+    }
     .todo .check:disabled{ border-color:var(--muted); cursor:not-allowed; }
     .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
     .mini-empty button{ display:block; margin:10px auto 0; padding:7px 16px;
@@ -187,6 +204,16 @@
           width:54px; height:54px; border-radius:50%; border:none;
           background:var(--green); color:var(--green-ink); font-size:28px; cursor:pointer;
           box-shadow:0 4px 14px rgba(0,0,0,.5); z-index:30; }
+
+    /* ===== Toast 轻提示（Day 11 交互反馈）：底部居中，自动消失 ===== */
+    #toast{ position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(8px);
+            background:var(--card2); border:1px solid var(--line); color:var(--ink);
+            font-size:13px; padding:9px 16px; border-radius:999px; z-index:60;
+            box-shadow:0 4px 16px rgba(0,0,0,.5); max-width:82vw; white-space:nowrap;
+            overflow:hidden; text-overflow:ellipsis;
+            opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; }
+    #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+    @media (prefers-reduced-motion: reduce){ #toast{ transition:none; } }
 
     /* ===== 弹窗（深色）===== */
     .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6);
@@ -391,6 +418,9 @@
   <button data-view="me">我的</button>
 </div></nav>
 
+<!-- Toast 轻提示（Day 11 交互反馈） -->
+<div id="toast" role="status" aria-live="polite"></div>
+
 <script>
   // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
   const KEY = 'habit-tracker-v1';
@@ -491,10 +521,31 @@
     saveData(data); renderAll();
   };
 
+  // ===== Toast 轻提示（Day 11 交互反馈）：底部居中，约 1.8 秒自动消失 =====
+  // 连续操作时复用同一个元素：换文案 + 重置计时，避免叠一堆提示
+  let toastTimer = null;
+  const showToast = (msg) => {
+    const t = el('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'),
+                            window.__TOAST_MS || 1800);
+  };
+
   const toggleTodo = (id) => {
     if (demoMode || currentDate !== todayStr()) return;   // 只能对今天打勾（A5 数据层防线）
     const todo = getTodos(currentDate).find(t => t.id === id);
-    if (todo) { todo.done = !todo.done; saveData(data); renderAll(); }
+    if (todo) {
+      todo.done = !todo.done; saveData(data); renderAll();
+      // Day 11 反馈：只给刚点的卡片加 .just 触发动效（重渲染不会波及其他卡片）
+      const row = document.querySelector('.todo[data-id="' + id + '"]');
+      if (row && todo.done) row.classList.add('just');
+      // Toast 文案：完成显示累计数，恢复单独一句（连续操作时合并为一条，不叠放）
+      const done = getTodos(currentDate).filter(t => t.done).length;
+      showToast(todo.done ? '✓ 已完成 · 今天 ' + done + ' 件事'
+                           : '已恢复为未完成');
+    }
   };
 
   const deleteTodoAt = (date, id) => {
@@ -533,6 +584,7 @@
   const createTodoCard = (todo, interactive) => {
     const row = document.createElement('div');
     row.className = 'todo' + (todo.done ? ' done' : '');
+    row.dataset.id = todo.id;   // Day 11：toggle 后定位"刚点的这张卡"触发动画
     // 四象限色标（C4）：颜色只从 QUADS 取，未分类走 q5 雾蓝
     const info = quadInfo(todo);
     const qbar = document.createElement('span');
