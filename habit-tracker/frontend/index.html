@@ -186,6 +186,23 @@
                 border-radius:10px; font-size:14px; background:var(--card2); color:var(--ink);
                 resize:vertical; font-family:inherit; margin-bottom:10px; box-sizing:border-box; }
 
+    /* ===== AI 洞察（Day 15，F3）：本地规则版，数据不出设备 ===== */
+    .insight-entry{ display:flex; align-items:center; gap:12px; }
+    .insight-entry .ie-txt{ flex:1; min-width:0; }
+    .insight-entry .ie-txt h2{ margin-bottom:4px; }
+    .insight-entry .ie-txt p{ margin:0; font-size:12px; color:var(--muted); }
+    .insight-entry button{ border:none; background:var(--green); color:var(--green-ink);
+                           border-radius:999px; padding:9px 16px; font-size:13px;
+                           cursor:pointer; flex-shrink:0; }
+    .imodes{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; justify-content:center; }
+    .imodes button{ border:1px solid var(--line); background:var(--card2); color:var(--muted);
+                    border-radius:999px; padding:7px 12px; font-size:12px; cursor:pointer; }
+    .imodes button.on{ border-color:var(--green); color:var(--green-deep); }
+    .iout{ background:var(--card2); border:1px solid var(--line); border-radius:12px;
+           padding:12px 14px; font-size:13px; line-height:1.8; color:var(--ink);
+           min-height:76px; white-space:pre-wrap; text-align:left; }
+    .iout .i-head{ color:var(--muted); font-size:11px; display:block; margin-bottom:6px; }
+
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
     .profile .avatar{ width:56px; height:56px; border-radius:50%; background:var(--card2);
@@ -361,6 +378,13 @@
     <!-- 思考视图（F3 MVP，Day 14）：卡片流，新的在上，长文折叠 -->
     <section id="view-thoughts">
       <h2 class="vh">思考</h2>
+      <div class="card insight-entry">
+        <div class="ie-txt">
+          <h2>AI 洞察 <span class="sub">5 种视角</span></h2>
+          <p>基于你本机数据的轻量洞察，数据不出设备</p>
+        </div>
+        <button id="insight-open" type="button">看看 ✨</button>
+      </div>
       <div class="card">
         <h2>想法流 <span class="sub" id="note-count"></span></h2>
         <div id="note-list"></div>
@@ -406,6 +430,7 @@
           <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
           <li><b>完成 / 删除 / 移动</b>：点圆圈打勾，再点恢复；点 ··· 可以删除（会先确认）或移动到其他日期</li>
           <li><b>思考</b>：切到「思考」页，点底部中间的 ＋ 随手写一条（Ctrl+Enter 可快捷保存）；长的自动折叠，点「展开全文」看全</li>
+          <li><b>AI 洞察</b>：「思考」页顶部的 ✨，五种视角（默认/价值澄清/MBTI/每日回顾/随机漫步）——本地规则拼装，数据不上传，MBTI 仅供自娱</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
         </ul>
@@ -478,6 +503,26 @@
       <button id="note-cancel" type="button">取消</button>
       <button id="note-ok" type="button">保存</button>
     </div>
+  </div>
+</div>
+
+<!-- 弹窗 5：AI 洞察（Day 15，F3，本地规则版） -->
+<div class="overlay" id="insight-modal" hidden>
+  <div class="modal">
+    <h3>AI 洞察</h3>
+    <div class="imodes" id="imodes">
+      <button type="button" data-mode="default" class="on">默认洞察</button>
+      <button type="button" data-mode="value">价值澄清</button>
+      <button type="button" data-mode="mbti">MBTI</button>
+      <button type="button" data-mode="daily">每日回顾</button>
+      <button type="button" data-mode="wander">随机漫步</button>
+    </div>
+    <div class="iout" id="iout"></div>
+    <div class="row">
+      <button id="i-regen" type="button">换一句</button>
+      <button id="i-close" type="button">关闭</button>
+    </div>
+    <p class="tip">本地规则版 · 只读你的数据，不上传</p>
   </div>
 </div>
 
@@ -792,6 +837,105 @@
     el('note-count').textContent = list.length ? list.length + ' 条' : '';
   };
 
+  // ===== AI 洞察（Day 15，F3）：本地规则拼装，只读本机数据，不上传 =====
+  // 五种模式共用一份"最近 7 天"统计；演示模式给一份编造的示例统计
+  const weekStats = () => {
+    if (demoMode) return { total: 4, done: 1, quad: { q1:1, q2:1, q3:0, q4:1, q0:1 },
+                           moods: { joy:1 }, notes: 3 };
+    let total = 0, done = 0, notes = data ? data.notes.length : 0;
+    const quad = { q1:0, q2:0, q3:0, q4:0, q0:0 }, moods = {};
+    for (let i = 6; i >= 0; i--) {
+      const ds = shiftDate(todayStr(), -i);
+      (getTodos(ds)).forEach(t => { total++; if (t.done) done++;
+        const q = QUADS[t.quad] ? t.quad : 'q0'; quad[q]++; });
+      const m = data.moods[ds]; if (m) moods[m] = (moods[m] || 0) + 1;
+    }
+    return { total, done, quad, moods, notes };
+  };
+
+  const insightDefault = (s) => {
+    if (!s.total) return '数据还不多。先安心用几天，再来这里看看自己。';
+    const rate = Math.round(s.done / s.total * 100);
+    const topQuad = Object.entries(s.quad).sort((a, b) => b[1] - a[1])[0];
+    const lines = [`最近 7 天你安排了 ${s.total} 件事，完成了 ${s.done} 件（约 ${rate}%）。`];
+    if (topQuad[0] === 'q2') lines.push('其中"重要不紧急"的事最多——你在为未来铺路，这很自律。');
+    else if (topQuad[0] === 'q1') lines.push('紧急的事偏多，偶尔也留一块给"重要不紧急"，未来的你会感谢现在。');
+    else if (topQuad[0] === 'q0') lines.push('很多事没标象限，试试随手标一下，能看更清自己把时间花在了哪。');
+    else lines.push('象限用得挺匀称，说明你对自己的时间有自己的判断。');
+    const topMood = Object.entries(s.moods).sort((a, b) => b[1] - a[1])[0];
+    if (topMood && topMood[1] > 0) lines.push(`最近出现最多的心情是「${MOOD[topMood[0]].label}」——${MOOD[topMood[0]].copy}`);
+    return lines.join('\n');
+  };
+
+  const insightValue = (s) => {
+    if (!s.total) return '价值澄清需要一点数据。先记几件你真正想做的事，再来问自己。';
+    const q2 = s.quad.q2, q1 = s.quad.q1;
+    return `过去 7 天：${q1} 件"重要且紧急"，${q2} 件"重要不紧急"，${s.quad.q3 + s.quad.q4} 件其他。\n`
+         + '问自己一个问题：如果下周只能保留三件事，会是哪三件？\n'
+         + (q2 >= q1 ? '你最近把不少时间给了"重要不紧急"——那通常就是你真正在乎的东西。'
+                     : '紧急的事在挤占重要的事，本周试着每天先做一件"重要不紧急"。');
+  };
+
+  const insightMbti = (s) => {                          // 娱乐版，仅供自娱
+    const pos = (s.moods.joy || 0) + (s.moods.cozy || 0);
+    const quiet = (s.moods.calm || 0) + (s.moods.sad || 0) + (s.moods.blue || 0);
+    const E = pos >= quiet, N = s.quad.q2 + s.quad.q0 >= s.quad.q1 + s.quad.q3,
+          F = s.notes > 0, J = s.total && s.done / s.total >= 0.7;
+    return `你的娱乐版人格：${E ? 'E' : 'I'}${N ? 'N' : 'S'}${F ? 'F' : 'T'}${J ? 'J' : 'P'}\n`
+         + `${E ? 'E：最近正面情绪偏多，像是从生活和人群里充电。' : 'I：最近偏安静，独处的时候更像自己。'}\n`
+         + `${N ? 'N：不少事不设时间、不标象限，想得比较远。' : 'S：大部分事都落在具体时刻，脚踏实地。'}\n`
+         + `${F ? 'F：你会写下想法和自己对话，感受先行。' : 'T：先做事再说话，判断先行。'}\n`
+         + `${J ? 'J：完成率很高，说做就做。' : 'P：节奏松弛一点，慢慢来也挺好。'}\n`
+         + '（本地规则拼装，仅供自娱，不是心理测评）';
+  };
+
+  const insightDaily = (s) => {
+    if (demoMode) return '示例数据版本：今天 4 件事完成了 1 件，心情是 😄喜悦，想法流里有 3 条记录。';
+    const todos = getTodos(todayStr());
+    const done = todos.filter(t => t.done).length;
+    const mood = data.moods[todayStr()];
+    const notesToday = data.notes.filter(n => dateToStr(new Date(n.ts)) === todayStr()).length;
+    if (!todos.length && !mood && !notesToday)
+      return '今天还没留下记录。待会儿来回顾一下，也是一种对自己的照顾。';
+    const lines = [];
+    if (todos.length) lines.push(`今天安排了 ${todos.length} 件事，完成了 ${done} 件${done === todos.length && done > 0 ? '，全部完成，很棒' : ''}。`);
+    if (mood) lines.push(`今天的心情是「${MOOD[mood].label}」——${MOOD[mood].copy}`);
+    if (notesToday) lines.push(`今天写下了 ${notesToday} 条想法。`);
+    if (!lines.length) lines.push('今天还没有记录。');
+    return lines.join('\n');
+  };
+
+  const WANDER_POOL = [
+    '如果给今天起一个标题，会是什么？',
+    '最近哪件小事让你开心，但没来得及记下来？',
+    '这周想对谁说一声谢谢？',
+    '如果今天重来一次，你会改变什么？',
+    '最近在期待什么？',
+    '你今天为自己做了什么？',
+    '哪件事拖了很久，其实 10 分钟就能做完？',
+    '最近什么让你觉得"值得"？',
+  ];
+  const insightWander = (s) => {
+    let out = WANDER_POOL[Math.floor(Math.random() * WANDER_POOL.length)];
+    if (s.notes && data && data.notes.length) {
+      const n = data.notes[Math.floor(Math.random() * data.notes.length)];
+      out += `\n\n你曾写过：「${n.text.slice(0, 50)}${n.text.length > 50 ? '…' : ''}」`;
+    }
+    return out;
+  };
+
+  const INSIGHT_MODES = {
+    default: insightDefault, value: insightValue, mbti: insightMbti,
+    daily: insightDaily, wander: insightWander,
+  };
+  let insightMode = 'default';
+  const renderInsight = () => {
+    const s = weekStats();
+    el('iout').textContent = INSIGHT_MODES[insightMode](s);   // 纯文本，防注入
+    document.querySelectorAll('#imodes button').forEach(b =>
+      b.classList.toggle('on', b.dataset.mode === insightMode));
+  };
+
   // ===== 我的（F5 MVP）：名字 / 使用天数 / 最近 7 天情绪 =====
   const renderMe = () => {
     // 名字：编辑态时不覆盖输入框
@@ -965,6 +1109,17 @@
   });
   el('note-area').addEventListener('keydown', (e) => {   // Ctrl/⌘ + Enter 快捷保存
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); el('note-ok').click(); }
+  });
+
+  // AI 洞察弹窗（Day 15）：切模式即重新生成，全部本地计算
+  el('insight-open').addEventListener('click', () => {
+    renderInsight();
+    el('insight-modal').hidden = false;
+  });
+  el('i-close').addEventListener('click', () => { el('insight-modal').hidden = true; });
+  el('i-regen').addEventListener('click', renderInsight);
+  document.querySelectorAll('#imodes button').forEach(b => {
+    b.addEventListener('click', () => { insightMode = b.dataset.mode; renderInsight(); });
   });
 
   // 我的：名字编辑（回车或失焦保存，空名回落默认）
