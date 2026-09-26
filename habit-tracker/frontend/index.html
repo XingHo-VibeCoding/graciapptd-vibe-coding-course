@@ -245,7 +245,8 @@
            padding:8px 2px; text-align:center; display:flex; flex-direction:column;
            gap:4px; align-items:center; }
     .mday .md-date{ font-size:12px; color:var(--muted); }
-    .mday .md-emoji{ font-size:20px; line-height:1.3; min-height:26px; }
+    .mday .md-emoji{ width:26px; height:26px; display:flex; align-items:center; justify-content:center; }
+    .mday .md-emoji img{ width:24px; height:24px; object-fit:contain; display:block; }
     .mday .md-emoji.none{ color:var(--muted); font-size:14px; }
     .mday .md-wd{ font-size:12px; color:var(--muted); }
     .mday.today-cell{ border-color:var(--green); cursor:pointer; }
@@ -290,7 +291,8 @@
     .mood-opts button{ flex:1; min-width:0; border:none; background:var(--card2); border-radius:12px;
                         padding:10px 2px; cursor:pointer; display:flex;
                         flex-direction:column; align-items:center; gap:4px; }
-    .mood-opts button .face{ font-size:26px; line-height:1.2; }
+    .mood-opts button .face{ width:42px; height:42px; display:flex; align-items:center; justify-content:center; }
+    .mood-opts button .face img{ width:38px; height:38px; object-fit:contain; display:block; }
     .mood-opts button .name{ font-size:12px; color:var(--ink); }
     .mood-opts button.sad-opt .name{ color:var(--muted); }
     .modal .tip{ font-size:12px; color:var(--muted); margin:12px 0 0; }
@@ -528,11 +530,11 @@
   <div class="modal">
     <h3>今天感觉怎样？</h3>
     <div class="mood-opts">
-      <button type="button" data-mood="sad"     class="sad-opt"><span class="face">😢</span><span class="name">伤心</span></button>
-      <button type="button" data-mood="blue"    class="sad-opt"><span class="face">😞</span><span class="name">忧郁</span></button>
-      <button type="button" data-mood="calm"><span class="face">😐</span><span class="name">平静</span></button>
-      <button type="button" data-mood="cozy"><span class="face">😌</span><span class="name">惬意</span></button>
-      <button type="button" data-mood="joy"><span class="face">😄</span><span class="name">喜悦</span></button>
+      <button type="button" data-mood="sad"  class="sad-opt"><span class="face"><img src="assets/mood-sad.png" alt="伤心" /></span><span class="name">伤心</span></button>
+      <button type="button" data-mood="blue" class="sad-opt"><span class="face"><img src="assets/mood-blue.png" alt="忧郁" /></span><span class="name">忧郁</span></button>
+      <button type="button" data-mood="calm"><span class="face"><img src="assets/mood-calm.png" alt="平静" /></span><span class="name">平静</span></button>
+      <button type="button" data-mood="cozy"><span class="face"><img src="assets/mood-cozy.png" alt="惬意" /></span><span class="name">惬意</span></button>
+      <button type="button" data-mood="joy"><span class="face"><img src="assets/mood-joy.png" alt="喜悦" /></span><span class="name">喜悦</span></button>
     </div>
     <p class="tip">选一个就好，随时可以在「我的 · 最近情绪」里换</p>
     <button class="close" id="mood-close" type="button">先不选</button>
@@ -678,11 +680,11 @@
 
   // ===== 心情字典：伤心/忧郁只配安抚文案，不出现任何负面/警告语（A8）=====
   const MOOD = {
-    sad:  { emoji:'😢', label:'伤心', copy:'难过的时候，允许自己慢一点' },
-    blue: { emoji:'😞', label:'忧郁', copy:'有点灰蒙蒙也没关系，明天会轻一些' },
-    calm: { emoji:'😐', label:'平静', copy:'平静地过好一天，也很了不起' },
-    cozy: { emoji:'😌', label:'惬意', copy:'舒服自在的一天，值得记下' },
-    joy:  { emoji:'😄', label:'喜悦', copy:'今天有值得开心的时刻，很好' },
+    sad:  { emoji:'伤心', img:'assets/mood-sad.png',  label:'伤心', copy:'难过的时候，允许自己慢一点' },
+    blue: { emoji:'忧郁', img:'assets/mood-blue.png', label:'忧郁', copy:'有点灰蒙蒙也没关系，明天会轻一些' },
+    calm: { emoji:'平静', img:'assets/mood-calm.png', label:'平静', copy:'平静地过好一天，也很了不起' },
+    cozy: { emoji:'惬意', img:'assets/mood-cozy.png', label:'惬意', copy:'舒服自在的一天，值得记下' },
+    joy:  { emoji:'喜悦', img:'assets/mood-joy.png',  label:'喜悦', copy:'今天有值得开心的时刻，很好' },
   };
 
   // ===== 日期工具 =====
@@ -1065,8 +1067,12 @@
       const [, m, d] = ds.split('-');
       dateSpan.textContent = m + '/' + d;
       const emoji = document.createElement('span');
-      if (mood) { emoji.className = 'md-emoji'; emoji.textContent = MOOD[mood].emoji; }
-      else      { emoji.className = 'md-emoji none'; emoji.textContent = '·'; }
+      if (mood) {
+        emoji.className = 'md-emoji';
+        const img = document.createElement('img');
+        img.src = MOOD[mood].img; img.alt = MOOD[mood].label;
+        emoji.appendChild(img);
+      } else { emoji.className = 'md-emoji none'; emoji.textContent = '·'; }
       const wd = document.createElement('span');
       wd.className = 'md-wd';
       wd.textContent = isToday ? '今天' : '周' + '一二三四五六日'[i];
