@@ -487,7 +487,7 @@
   let demoMode = false;           // mock 演示模式：只看不存
   let filter = 'all';             // 'all' | 'timeline'
   let currentView = 'today';      // 'today' | 'thoughts' | 'me'（FAB 仅今天显示）
-  let moodAutoAsked = false;      // 本次打开是否已自动问过心情（含跳过）
+  let moodAskedDate = null;      // 最近一次询问心情的日期（跨天自动重置，A6）
   const el = (id) => document.getElementById(id);
 
   // ===== 数据读取层：模拟一次异步（第 3 周换真 API 时页面结构不动）=====
@@ -574,7 +574,7 @@
       const dn = document.createElement('span'); dn.className = 'dn';
       dn.textContent = dt.getDate();
       b.append(wd, dn);
-      b.addEventListener('click', () => { if (!demoMode) { currentDate = ds; renderAll(); } });
+      b.addEventListener('click', () => { if (!demoMode) { currentDate = ds; renderAll(); maybeAskMood(); } });
       strip.appendChild(b);
     }
     el('month-title').firstChild.textContent = y + ' 年 ' + m + ' 月 · 自律计划';
@@ -710,11 +710,16 @@
     maybeAskMood();
   };
 
-  // ===== 心情自动弹窗（A6）：本次打开只问一次，跳过后不再打扰 =====
+  // ===== 心情自动弹窗（A6）：每次进入「今天」视图都检查当天是否已选/已问；
+  // 跳过后当天不再打扰，跨天自动重置 =====
   const maybeAskMood = () => {
-    if (moodAutoAsked || !data || demoMode) return;
-    moodAutoAsked = true;
-    if (!data.moods[todayStr()]) el('mood-modal').hidden = false;
+    if (!data || demoMode) return;
+    const today = todayStr();
+    if (moodAskedDate === today) return;                    // 今天已问过（选了或跳过）
+    if (currentView !== 'today' || currentDate !== today) return;  // 只在"今天"视图问今天
+    if (data.moods[today]) { moodAskedDate = today; return; }     // 今天已有心情，不用问
+    moodAskedDate = today;
+    el('mood-modal').hidden = false;
   };
 
   const enterDemo = async () => {
@@ -745,11 +750,13 @@
   };
 
   // 心情弹窗（F2）：覆盖更新，以最后一次为准（A9）
+  // 修复：弹窗问的永远是"今天"，与当前查看的日期无关，去掉 currentDate 守卫
   document.querySelectorAll('#mood-modal .mood-opts button').forEach(b => {
     b.addEventListener('click', () => {
-      if (!data || demoMode || currentDate !== todayStr()) return;
+      if (!data || demoMode) return;
       data.moods[todayStr()] = b.dataset.mood;
       saveData(data);
+      moodAskedDate = todayStr();                 // 已回答，今天不再自动弹
       el('mood-modal').hidden = true;
       renderAll();
     });
@@ -794,7 +801,7 @@
   });
   el('name-input').addEventListener('blur', commitEditName);
 
-  // 底部导航：切换视图 + FAB 只跟"今天"走
+  // 底部导航：切换视图 + FAB 只跟"今天"走 + 回到今天视图时检查心情弹窗（A6 修复）
   document.querySelectorAll('nav button').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -803,6 +810,7 @@
       el('view-' + btn.dataset.view).classList.add('active');
       currentView = btn.dataset.view;
       syncFab();
+      if (currentView === 'today') maybeAskMood();
     });
   });
 
