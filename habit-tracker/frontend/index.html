@@ -203,6 +203,25 @@
            min-height:76px; white-space:pre-wrap; text-align:left; }
     .iout .i-head{ color:var(--muted); font-size:11px; display:block; margin-bottom:6px; }
 
+    /* ===== 专注计时（Day 18，F6）===== */
+    .timer-display{ font-size:64px; font-weight:700; letter-spacing:2px;
+                    font-variant-numeric:tabular-nums; margin:8px 0 18px;
+                    color:var(--ink); text-align:center; }
+    .timer-status{ font-size:13px; color:var(--muted); text-align:center; margin-bottom:18px; }
+    .timer-presets{ display:flex; gap:8px; justify-content:center; margin-bottom:18px; }
+    .timer-presets button{ border:1px solid var(--line); background:var(--card2);
+                           color:var(--muted); border-radius:999px; padding:6px 12px;
+                           font-size:12px; cursor:pointer; }
+    .timer-presets button.on{ border-color:var(--green); color:var(--green-deep); }
+    .timer-ctrls{ display:flex; gap:10px; justify-content:center; }
+    .timer-ctrls button{ flex:1; padding:12px 0; border-radius:12px; font-size:15px;
+                         cursor:pointer; border:none; }
+    #timer-toggle{ background:var(--green); color:var(--green-ink); }
+    #timer-reset{ background:var(--card2); color:var(--ink); border:1px solid var(--line); }
+    .timer-today{ margin-top:18px; font-size:13px; color:var(--muted); text-align:center; }
+    .timer-done{ animation:pulse .6s ease 2; }
+    @keyframes pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.03); } }
+
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
     .profile .avatar{ width:56px; height:56px; border-radius:50%; background:var(--card2);
@@ -304,7 +323,9 @@
                color:var(--ink); font-size:15px; font-family:inherit;
                text-align:left; }
     .app-item .ai-badge{ display:flex; align-items:center; justify-content:center;
-               width:40px; height:40px; border-radius:11px; font-size:20px; line-height:1; }
+               width:40px; height:40px; border-radius:11px; overflow:hidden;
+               background:var(--card2); }
+    .app-item .ai-badge img{ width:32px; height:32px; object-fit:contain; display:block; }
     .app-item .ai-txt{ overflow:hidden; }
     .app-item .ai-txt b{ display:block; font-size:15px; font-weight:600;
                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -417,32 +438,32 @@
       <div class="card">
         <div class="apps-list" id="apps-list">
         <button type="button" class="app-item" data-app="todo">
-          <span class="ai-badge" style="background:var(--q2)">📋</span>
+          <span class="ai-badge"><img src="assets/icon-todo.png" alt="待办事项" /></span>
           <span class="ai-txt"><b>待办事项</b><span>查看和管理今天的安排</span></span>
           <span class="ai-arrow">›</span>
         </button>
-        <button type="button" class="app-item" data-app="timer" disabled>
-          <span class="ai-badge" style="background:var(--q3)">⏱️</span>
+        <button type="button" class="app-item" data-app="timer">
+          <span class="ai-badge"><img src="assets/icon-timer.png" alt="专注计时" /></span>
           <span class="ai-txt"><b>专注计时</b><span>番茄钟和正计时，帮你沉下心</span></span>
-          <span class="ai-soon">🔒</span>
+          <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="ledger" disabled>
-          <span class="ai-badge" style="background:var(--q1)">💰</span>
+          <span class="ai-badge"><img src="assets/icon-ledger.png" alt="记账" /></span>
           <span class="ai-txt"><b>记账</b><span>记一笔收支，看看本月结余</span></span>
           <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="memorial" disabled>
-          <span class="ai-badge" style="background:var(--q5)">📅</span>
+          <span class="ai-badge"><img src="assets/icon-memorial.png" alt="纪念与倒数日" /></span>
           <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
           <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="affirm" disabled>
-          <span class="ai-badge" style="background:var(--green)">🌱</span>
+          <span class="ai-badge"><img src="assets/icon-affirm.png" alt="肯定语" /></span>
           <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
           <span class="ai-soon">🔒</span>
         </button>
         <button type="button" class="app-item" data-app="widget" disabled>
-          <span class="ai-badge" style="background:var(--q4)">🪴</span>
+          <span class="ai-badge"><img src="assets/icon-widget.png" alt="小组件" /></span>
           <span class="ai-txt"><b>小组件</b><span>签到盆栽、完美日、喝水打卡</span></span>
           <span class="ai-soon">🔒</span>
         </button>
@@ -486,7 +507,7 @@
           <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
           <li><b>完成 / 删除 / 移动</b>：点圆圈打勾，再点恢复；点 ··· 可以删除（会先确认）或移动到其他日期</li>
           <li><b>思考</b>：切到「思考」页，点底部中间的 ＋ 随手写一条（Ctrl+Enter 可快捷保存）；长的自动折叠，点「展开全文」看全</li>
-          <li><b>应用</b>：切到「应用」页看小工具列表——待办事项可直达「今天」页；专注计时、记账等正在按天逐步开放</li>
+          <li><b>应用</b>：切到「应用」页看小工具列表——待办事项可直达「今天」页；专注计时已可用（番茄钟 25/短专注 15/休息 5），其余按天逐步开放</li>
           <li><b>AI 洞察</b>：「思考」页顶部的 ✨，五种视角（默认/价值澄清/MBTI/每日回顾/随机漫步）——本地规则拼装，数据不上传，MBTI 仅供自娱</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
@@ -583,6 +604,26 @@
   </div>
 </div>
 
+<!-- 弹窗 6：专注计时（Day 18，F6） -->
+<div class="overlay" id="timer-modal" hidden>
+  <div class="modal" style="max-width:340px">
+    <h3>专注计时</h3>
+    <div class="timer-status" id="timer-status">准备好就开始</div>
+    <div class="timer-display" id="timer-display">25:00</div>
+    <div class="timer-presets" id="timer-presets">
+      <button type="button" data-min="25" class="on">番茄钟 25</button>
+      <button type="button" data-min="15">短专注 15</button>
+      <button type="button" data-min="5">休息 5</button>
+    </div>
+    <div class="timer-ctrls">
+      <button id="timer-toggle" type="button">开始</button>
+      <button id="timer-reset" type="button">重置</button>
+    </div>
+    <div class="timer-today" id="timer-today">今天已专注 0 分钟</div>
+    <button class="close" id="timer-close" type="button">关闭</button>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -596,12 +637,13 @@
 <script>
   // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
   const KEY = 'habit-tracker-v1';
-  const defaults = () => ({ todos: {}, moods: {}, notes: [], profile: { name: '', theme: 'dark' }, meta: {} });
+  const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] }, profile: { name: '', theme: 'dark' }, meta: {} });
+  const fillDefaults = (d) => { const def = defaults(); for (const k in def) if (!(k in d)) d[k] = def[k]; return d; };
   const loadData = () => {
     const raw = localStorage.getItem(KEY);
     if (raw === null) return defaults();
     const parsed = JSON.parse(raw);               // 解析失败抛错 → 错误状态可见（Day 8）
-    if (parsed && typeof parsed === 'object') return parsed;
+    if (parsed && typeof parsed === 'object') return fillDefaults(parsed);
     throw new Error('stored data is not an object');
   };
   const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
@@ -1223,15 +1265,98 @@
     });
   });
 
-  // 应用页入口（Day 17 骨架）：待办事项 → 跳回"今天"；其余 Day 18-21 逐个开放
+  // 应用页入口（Day 17 骨架）：待办事项 → 跳回"今天"；专注计时（Day 18）→ 弹窗；其余逐步开放
   document.querySelectorAll('.app-item').forEach(item => {
     item.addEventListener('click', () => {
       if (item.disabled) return;                            // 未开放：按钮本身禁用，无副作用
       if (item.dataset.app === 'todo') {
         document.querySelector('nav button[data-view="today"]').click();   // 复用导航切换（含心情弹窗检查）
         showToast('已切到「今天」，安排都在这里');
+      } else if (item.dataset.app === 'timer') {
+        openTimer();
       }
     });
+  });
+
+  // ===== 专注计时（Day 18，F6）=====
+  let timerTotal = 25 * 60;   // 当前倒计时总秒数
+  let timerLeft = timerTotal;   // 剩余秒数
+  let timerRunning = false;
+  let timerInterval = null;
+  const FOCUS_PRESETS = { 25: '番茄钟 25', 15: '短专注 15', 5: '休息 5' };
+
+  const focusMinutesToday = () => {
+    if (!data || !data.focus) return 0;
+    const t = todayStr();
+    return Math.floor((data.focus.logs || []).filter(l => l.date === t)
+      .reduce((s, l) => s + (l.duration || 0), 0) / 60);
+  };
+  const formatTime = (sec) => {
+    const m = Math.floor(sec / 60);
+    const s = String(sec % 60).padStart(2, '0');
+    return m + ':' + s;
+  };
+  const renderTimer = () => {
+    el('timer-display').textContent = formatTime(timerLeft);
+    el('timer-toggle').textContent = timerRunning ? '暂停' : '开始';
+    el('timer-status').textContent = timerRunning ? '专注中…' : (timerLeft === timerTotal ? '准备好就开始' : '已暂停');
+    el('timer-today').textContent = '今天已专注 ' + focusMinutesToday() + ' 分钟';
+    if (timerLeft === 0) el('timer-status').textContent = '时间到！';
+  };
+  const beep = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = 880;
+      const g = ctx.createGain(); g.gain.value = 0.08;
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.4);
+      setTimeout(() => { try { ctx.close(); } catch (e) {} }, 500);
+    } catch (e) {}
+  };
+  const stopTimer = (completed) => {
+    if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    timerRunning = false;
+    const elapsed = timerTotal - timerLeft;
+    if (completed && elapsed > 0 && data && !demoMode) {
+      data.focus.logs.push({ date: todayStr(), duration: elapsed, end: Date.now() });
+      saveData(data);
+    }
+    renderTimer();
+  };
+  const tick = () => {
+    if (timerLeft <= 1) {
+      timerLeft = 0; renderTimer();
+      el('timer-display').classList.add('timer-done');
+      beep(); showToast('专注结束，真棒');
+      stopTimer(true);
+      return;
+    }
+    timerLeft--; renderTimer();
+  };
+  const startTimer = () => {
+    if (timerRunning) return;
+    if (timerLeft <= 0) timerLeft = timerTotal;
+    timerRunning = true; renderTimer();
+    timerInterval = setInterval(tick, 1000);
+  };
+  const pauseTimer = () => { if (timerRunning) stopTimer(false); };
+  const resetTimer = () => { stopTimer(false); timerLeft = timerTotal; renderTimer(); };
+  const setTimerPreset = (min) => {
+    stopTimer(false);
+    timerTotal = min * 60; timerLeft = timerTotal;
+    document.querySelectorAll('#timer-presets button').forEach(b => b.classList.toggle('on', Number(b.dataset.min) === min));
+    renderTimer();
+  };
+  const openTimer = () => {
+    el('timer-modal').hidden = false;
+    el('timer-display').classList.remove('timer-done');
+    setTimerPreset(25);
+  };
+  el('timer-toggle').addEventListener('click', () => { timerRunning ? pauseTimer() : startTimer(); });
+  el('timer-reset').addEventListener('click', resetTimer);
+  el('timer-close').addEventListener('click', () => { pauseTimer(); el('timer-modal').hidden = true; });
+  document.querySelectorAll('#timer-presets button').forEach(b => {
+    b.addEventListener('click', () => setTimerPreset(Number(b.dataset.min)));
   });
 
   // ===== 启动 =====
