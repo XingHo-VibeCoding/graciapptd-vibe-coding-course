@@ -120,7 +120,8 @@
                 background:var(--green); color:var(--green-ink); font-size:18px; cursor:pointer; }
     .group-label{ color:var(--muted); font-size:12px; margin:12px 0 8px; }
     .todo{ display:flex; align-items:center; gap:10px; background:var(--card2);
-           border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px; }
+           border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:8px;
+           position:relative; }   /* Day 13：…菜单以卡片为定位基准 */
     /* 四象限色标：卡片最左 4px 竖条，颜色由 QUADS 字典注入（C4）*/
     .todo .qbar{ width:4px; align-self:stretch; border-radius:2px; flex-shrink:0;
                  background:var(--q5); }
@@ -153,6 +154,15 @@
       .todo .check{ transition:none; }
     }
     .todo .check:disabled{ border-color:var(--muted); cursor:not-allowed; }
+    /* ===== 待办操作菜单（Day 13）：点 ··· 弹出，一次只开一个 ===== */
+    .todo .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
+                 border:1px solid var(--line); border-radius:12px; padding:6px; z-index:25;
+                 min-width:158px; box-shadow:0 8px 24px rgba(0,0,0,.55); }
+    .todo .menu button{ display:block; width:100%; text-align:left; padding:10px 12px;
+                        border:none; background:transparent; color:var(--ink); font-size:13px;
+                        border-radius:8px; cursor:pointer; }
+    .todo .menu button:hover{ background:var(--card2); }
+    .todo .menu button.danger{ color:var(--q1); }   /* 删除用警示红（与 Q1 同源）*/
     .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
     .mini-empty button{ display:block; margin:10px auto 0; padding:7px 16px;
         border:1px solid var(--line); border-radius:999px; background:transparent;
@@ -245,6 +255,11 @@
     .modal .row button{ flex:1; padding:10px 0; border-radius:10px; font-size:14px; cursor:pointer; }
     #tm-cancel{ border:1px solid var(--line); background:transparent; color:var(--muted); }
     #tm-ok{ border:none; background:var(--green); color:var(--green-ink); }
+    /* 移动待办弹窗（Day 13） */
+    #move-date{ width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
+                font-size:13px; color:var(--ink); margin-bottom:10px;
+                background:var(--card2); color-scheme:dark; }
+    #move-src{ font-size:13px; color:var(--muted); margin:0 0 10px; word-break:break-all; }
 
     /* ===== 底部导航（深色）===== */
     nav{ position:fixed; bottom:0; left:0; right:0; background:var(--card);
@@ -364,7 +379,7 @@
         <ul class="guide">
           <li><b>加待办</b>：在「今天」输入内容，可选时间点和象限，点 ＋ 或回车</li>
           <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
-          <li><b>完成 / 删除</b>：点圆圈打勾，再点恢复；点 ··· 删除（会先确认）</li>
+          <li><b>完成 / 删除 / 移动</b>：点圆圈打勾，再点恢复；点 ··· 可以删除（会先确认）或移动到其他日期</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
         </ul>
@@ -408,6 +423,19 @@
     <div class="row">
       <button id="tm-cancel" type="button">取消</button>
       <button id="tm-ok" type="button">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗 3：移动待办到其他日期（Day 13，F1 ··· 菜单） -->
+<div class="overlay" id="move-modal" hidden>
+  <div class="modal">
+    <h3>移动到其他日期</h3>
+    <p class="move-src" id="move-src"></p>
+    <input id="move-date" type="date" title="选一个目标日期" />
+    <div class="row">
+      <button id="move-cancel" type="button">取消</button>
+      <button id="move-ok" type="button">确认移动</button>
     </div>
   </div>
 </div>
@@ -488,6 +516,7 @@
   let filter = 'all';             // 'all' | 'timeline'
   let currentView = 'today';      // 'today' | 'thoughts' | 'me'（FAB 仅今天显示）
   let moodAskedDate = null;      // 最近一次询问心情的日期（跨天自动重置，A6）
+  let moveCtx = null;            // Day 13：正在移动的待办 { id, from }
   const el = (id) => document.getElementById(id);
 
   // ===== 数据读取层：模拟一次异步（第 3 周换真 API 时页面结构不动）=====
@@ -553,7 +582,48 @@
     if (!confirm('确定删除这条待办吗？')) return;          // A4：删除必须先弹确认
     data.todos[date] = getTodos(date).filter(t => t.id !== id);
     saveData(data); renderAll();
+    showToast('已删除');
   };
+
+  // ===== 移动待办（Day 13）：把一条待办挪到其他日期，完成后原地消失 + Toast =====
+  const moveTodoTo = (id, from, to) => {
+    if (demoMode || !data) return false;
+    const todo = getTodos(from).find(t => t.id === id);
+    if (!todo) return false;
+    if (to === from) { showToast('就是这一天，不用移动'); return false; }   // 同日拦截
+    data.todos[from] = getTodos(from).filter(t => t.id !== id);
+    (data.todos[to] = data.todos[to] || []).push(todo);
+    saveData(data); renderAll();
+    showToast('已移动到 ' + fmtDateLabel(to));
+    return true;
+  };
+
+  // ===== 待办"···"操作菜单（Day 13）：一次只开一个，点空白处关闭 =====
+  const closeTodoMenu = () => {
+    document.querySelectorAll('.todo .menu').forEach(m => m.remove());
+  };
+  const openTodoMenu = (btn, todo) => {
+    closeTodoMenu();                                        // 先关掉上一个
+    const menu = document.createElement('div');
+    menu.className = 'menu';
+    const mv = document.createElement('button');
+    mv.type = 'button'; mv.textContent = '移动到其他日期';
+    mv.addEventListener('click', () => {
+      closeTodoMenu();
+      moveCtx = { id: todo.id, from: currentDate };        // 记住要移动谁
+      el('move-src').textContent = '「' + todo.text + '」';
+      el('move-date').value = shiftDate(currentDate, 1);   // 默认目标：后一天
+      el('move-modal').hidden = false;
+    });
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'danger'; del.textContent = '删除';
+    del.addEventListener('click', () => { closeTodoMenu(); deleteTodoAt(currentDate, todo.id); });
+    menu.append(mv, del);
+    btn.closest('.todo').appendChild(menu);
+  };
+  document.addEventListener('click', (e) => {               // 点菜单和 ··· 以外的地方 = 关闭
+    if (!e.target.closest('.todo .menu') && !e.target.closest('.todo .del')) closeTodoMenu();
+  });
 
   // ===== 周历条：本周周一~周日，今天高亮，点击切换查看日 =====
   const renderWeek = () => {
@@ -604,8 +674,8 @@
     text.className = 'text'; text.textContent = todo.text;
     const del = document.createElement('button');
     del.className = 'del'; del.type = 'button'; del.textContent = '···';
-    del.title = '删除这条待办'; del.hidden = demoMode;
-    del.addEventListener('click', () => deleteTodoAt(currentDate, todo.id));
+    del.title = '删除或移动这条待办'; del.hidden = demoMode;
+    del.addEventListener('click', () => openTodoMenu(del, todo));   // Day 13：先出菜单再操作
     row.append(check, time, text, del);
     return row;
   };
@@ -776,6 +846,15 @@
   };
   el('tm-ok').addEventListener('click', submitToday);
   el('tm-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitToday(); } });
+
+  // 移动待办弹窗（Day 13）：空日期 / 同一天 → Toast 拦截，成功 → 落盘 + 关闭
+  el('move-cancel').addEventListener('click', () => { el('move-modal').hidden = true; });
+  el('move-ok').addEventListener('click', () => {
+    if (!moveCtx) { el('move-modal').hidden = true; return; }
+    const to = el('move-date').value;
+    if (!to) { showToast('先选一个日期'); return; }
+    if (moveTodoTo(moveCtx.id, moveCtx.from, to)) el('move-modal').hidden = true;
+  });
 
   // 我的：名字编辑（回车或失焦保存，空名回落默认）
   const startEditName = () => {
