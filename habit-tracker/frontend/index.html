@@ -220,7 +220,7 @@
     .profile .pdays{ font-size:12px; color:var(--muted); margin-top:4px; }
     .profile .pdays b{ color:var(--green-deep); font-size:14px; }
 
-    /* 情绪板块：最近 7 天 */
+    /* 情绪板块：本周周一~周日（Day 16）*/
     .mood-week{ display:flex; gap:4px; }
     .mday{ flex:1; background:var(--card2); border:1px solid var(--line); border-radius:10px;
            padding:8px 2px; text-align:center; display:flex; flex-direction:column;
@@ -412,7 +412,7 @@
       </div>
 
       <div class="card">
-        <h2>最近情绪</h2>
+        <h2>本周情绪 <span class="sub" id="mood-week-range"></span></h2>
         <div class="mood-week" id="mood-week"></div>
         <div class="mood-tip" id="mood-tip">点今天的格子可以重新选心情，历史日期只看不改</div>
       </div>
@@ -946,14 +946,20 @@
     if (!data.meta.firstUseDate) { data.meta.firstUseDate = todayStr(); saveData(data); }
     el('me-days').textContent = daysBetween(data.meta.firstUseDate, todayStr()) + 1;
 
-    // 情绪板块：最近 7 天（含今天）；今天可点重选，历史只读
+    // 情绪板块：本周周一~周日固定视图（用户 2026-09-26 指示，Day 16）；
+    // 周一自动换周；今天格子高亮可点重选；本周还没到的日子显示占位、不可点
     const wrap = el('mood-week');
     wrap.textContent = '';
-    for (let i = 6; i >= 0; i--) {
-      const ds = shiftDate(todayStr(), -i);
-      const mood = demoMode ? (i === 0 ? MOCK_MOOD : null) : (data.moods[ds] || null);
+    const monday = shiftDate(todayStr(), -((new Date().getDay() + 6) % 7));
+    const sunday = shiftDate(monday, 6);
+    const fmtShort = (ds) => { const [, m, d] = ds.split('-').map(Number); return m + '.' + d; };
+    el('mood-week-range').textContent = fmtShort(monday) + ' - ' + fmtShort(sunday);
+    for (let i = 0; i < 7; i++) {
+      const ds = shiftDate(monday, i);
+      const isToday = ds === todayStr();
+      const mood = demoMode ? (isToday ? MOCK_MOOD : null) : (data.moods[ds] || null);
       const cell = document.createElement('div');
-      cell.className = 'mday' + (i === 0 ? ' today-cell' : '');
+      cell.className = 'mday' + (isToday ? ' today-cell' : '');
       const dateSpan = document.createElement('span');
       dateSpan.className = 'md-date';
       const [, m, d] = ds.split('-');
@@ -963,9 +969,9 @@
       else      { emoji.className = 'md-emoji none'; emoji.textContent = '·'; }
       const wd = document.createElement('span');
       wd.className = 'md-wd';
-      wd.textContent = i === 0 ? '今天' : (i === 1 ? '昨天' : '周' + '日一二三四五六'[new Date(ds.split('-')[0], ds.split('-')[1]-1, ds.split('-')[2]).getDay()]);
+      wd.textContent = isToday ? '今天' : '周' + '一二三四五六日'[i];
       cell.append(dateSpan, emoji, wd);
-      if (i === 0) {
+      if (isToday) {
         cell.setAttribute('role', 'button');
         cell.title = '点一下，重新选今天的心情';
         cell.addEventListener('click', () => {
