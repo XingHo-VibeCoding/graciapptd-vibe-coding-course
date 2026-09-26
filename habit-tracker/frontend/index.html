@@ -296,6 +296,25 @@
                 background:var(--card2); color-scheme:dark; }
     #move-src{ font-size:13px; color:var(--muted); margin:0 0 10px; word-break:break-all; }
 
+    /* ===== 应用页入口列表（F6 骨架，Day 17）：仿九宫格应用中心的列表形态 ===== */
+    .apps-list{ display:flex; flex-direction:column; gap:10px; }
+    .app-item{ display:flex; align-items:center; gap:12px; width:100%;
+               background:var(--card2); border:1px solid var(--line);
+               border-radius:14px; padding:12px 14px; cursor:pointer;
+               color:var(--ink); font-size:15px; font-family:inherit;
+               text-align:left; }
+    .app-item .ai-badge{ flex:none; width:40px; height:40px; border-radius:11px;
+               display:flex; align-items:center; justify-content:center;
+               font-size:20px; line-height:1; }
+    .app-item .ai-txt{ flex:1; min-width:0; }
+    .app-item .ai-txt b{ display:block; font-size:15px; font-weight:600; }
+    .app-item .ai-txt span{ display:block; font-size:12px; color:var(--muted); margin-top:2px; }
+    .app-item .ai-arrow{ flex:none; color:var(--muted); font-size:16px; }
+    .app-item .ai-soon{ flex:none; font-size:11px; color:var(--muted);
+               border:1px solid var(--line); border-radius:99px; padding:2px 8px; }
+    .app-item:disabled{ cursor:not-allowed; }
+    .app-item:disabled .ai-txt b{ color:var(--muted); }
+
     /* ===== 底部导航（深色）===== */
     nav{ position:fixed; bottom:0; left:0; right:0; background:var(--card);
          border-top:1px solid var(--line); display:flex; z-index:20; }
@@ -394,6 +413,43 @@
       </div>
     </section>
 
+    <!-- 应用视图（F6 骨架，Day 17）：入口列表，子功能 Day 18-21 逐个开放 -->
+    <section id="view-apps">
+      <h2 class="vh">应用</h2>
+      <div class="apps-list" id="apps-list">
+        <button type="button" class="app-item" data-app="todo">
+          <span class="ai-badge" style="background:var(--q2)">📋</span>
+          <span class="ai-txt"><b>待办事项</b><span>查看和管理今天的安排</span></span>
+          <span class="ai-arrow">›</span>
+        </button>
+        <button type="button" class="app-item" data-app="timer" disabled>
+          <span class="ai-badge" style="background:var(--q3)">⏱️</span>
+          <span class="ai-txt"><b>专注计时</b><span>番茄钟和正计时，帮你沉下心</span></span>
+          <span class="ai-soon">Day 18</span>
+        </button>
+        <button type="button" class="app-item" data-app="ledger" disabled>
+          <span class="ai-badge" style="background:var(--q1)">💰</span>
+          <span class="ai-txt"><b>记账</b><span>记一笔收支，看看本月结余</span></span>
+          <span class="ai-soon">Day 19</span>
+        </button>
+        <button type="button" class="app-item" data-app="memorial" disabled>
+          <span class="ai-badge" style="background:var(--q5)">📅</span>
+          <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
+          <span class="ai-soon">Day 20</span>
+        </button>
+        <button type="button" class="app-item" data-app="affirm" disabled>
+          <span class="ai-badge" style="background:var(--green)">🌱</span>
+          <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
+          <span class="ai-soon">Day 21</span>
+        </button>
+        <button type="button" class="app-item" data-app="widget" disabled>
+          <span class="ai-badge" style="background:var(--q4)">🪴</span>
+          <span class="ai-txt"><b>小组件</b><span>签到盆栽、完美日、喝水打卡</span></span>
+          <span class="ai-soon">Day 22</span>
+        </button>
+      </div>
+    </section>
+
     <!-- 我的视图（F5 MVP）：头像/名字/使用天数/情绪板块/设置/指南 -->
     <section id="view-me">
       <h2 class="vh">我的</h2>
@@ -430,6 +486,7 @@
           <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
           <li><b>完成 / 删除 / 移动</b>：点圆圈打勾，再点恢复；点 ··· 可以删除（会先确认）或移动到其他日期</li>
           <li><b>思考</b>：切到「思考」页，点底部中间的 ＋ 随手写一条（Ctrl+Enter 可快捷保存）；长的自动折叠，点「展开全文」看全</li>
+          <li><b>应用</b>：切到「应用」页看小工具列表——待办事项可直达「今天」页；专注计时、记账等正在按天逐步开放</li>
           <li><b>AI 洞察</b>：「思考」页顶部的 ✨，五种视角（默认/价值澄清/MBTI/每日回顾/随机漫步）——本地规则拼装，数据不上传，MBTI 仅供自娱</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
@@ -529,6 +586,7 @@
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
+  <button data-view="apps">应用</button>
   <button data-view="me">我的</button>
 </div></nav>
 
@@ -614,7 +672,7 @@
   let currentDate = todayStr();   // 正在查看的日期（周历条切换）
   let demoMode = false;           // mock 演示模式：只看不存
   let filter = 'all';             // 'all' | 'timeline'
-  let currentView = 'today';      // 'today' | 'thoughts' | 'me'（FAB 仅今天显示）
+  let currentView = 'today';      // 'today' | 'thoughts' | 'apps' | 'me'（FAB 仅今天显示）
   let moodAskedDate = null;      // 最近一次询问心情的日期（跨天自动重置，A6）
   let moveCtx = null;            // Day 13：正在移动的待办 { id, from }
   const el = (id) => document.getElementById(id);
@@ -1162,6 +1220,17 @@
       currentView = btn.dataset.view;
       syncFab();
       if (currentView === 'today') maybeAskMood();
+    });
+  });
+
+  // 应用页入口（Day 17 骨架）：待办事项 → 跳回"今天"；其余 Day 18-21 逐个开放
+  document.querySelectorAll('.app-item').forEach(item => {
+    item.addEventListener('click', () => {
+      if (item.disabled) return;                            // 未开放：按钮本身禁用，无副作用
+      if (item.dataset.app === 'todo') {
+        document.querySelector('nav button[data-view="today"]').click();   // 复用导航切换（含心情弹窗检查）
+        showToast('已切到「今天」，安排都在这里');
+      }
     });
   });
 
