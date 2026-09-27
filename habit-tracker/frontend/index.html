@@ -336,6 +336,34 @@
         background:rgba(11,12,14,.45); color:var(--ink); border-radius:999px; font-size:13px;
         cursor:pointer; }
 
+    /* ===== 肯定语（Day 22，F6）===== */
+    #affirm-box{ position:fixed; inset:0; display:flex; flex-direction:column;
+                 justify-content:center; align-items:center; padding:16px; }
+    #affirm-box .affirm-card{ width:100%; max-width:420px; min-height:360px; border-radius:20px;
+                              overflow:hidden; position:relative; display:flex; flex-direction:column;
+                              justify-content:flex-end; padding:24px; box-sizing:border-box;
+                              background-size:cover; background-position:center;
+                              box-shadow:0 12px 40px rgba(0,0,0,.45); }
+    #affirm-box .affirm-card::before{ content:""; position:absolute; inset:0;
+        background:linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.05) 100%);
+        border-radius:20px; }
+    #affirm-box .affirm-quote{ position:relative; z-index:1; font-size:20px; line-height:1.7;
+                               font-weight:500; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,.55);
+                               margin:0 0 10px; white-space:pre-wrap; word-break:break-word; }
+    #affirm-box .affirm-author{ position:relative; z-index:1; font-size:13px; color:rgba(255,255,255,.78);
+                                text-align:right; margin:0; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+    #affirm-box .affirm-actions{ display:flex; gap:12px; margin-top:20px; width:100%; max-width:420px; }
+    #affirm-box .affirm-actions button{ border:1px solid var(--line); background:var(--card);
+                                        color:var(--ink); border-radius:999px; cursor:pointer; }
+    #affirm-box #affirm-next{ flex:1; padding:12px 0; font-size:14px; }
+    #affirm-box #affirm-like{ width:50px; height:46px; font-size:22px; display:flex; align-items:center;
+                              justify-content:center; color:var(--muted); }
+    #affirm-box #affirm-like.on{ color:var(--q1); border-color:var(--q1); background:rgba(231,90,73,.12); }
+    #affirm-box .md-close{ color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+    #affirm-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
+    #affirm-bg{ border:none; background:transparent; font-size:22px; cursor:pointer;
+                filter:drop-shadow(0 1px 4px rgba(0,0,0,.5)); }
+
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
     .profile .avatar{ width:56px; height:56px; border-radius:50%; background:var(--card2);
@@ -579,10 +607,10 @@
           <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
           <span class="ai-arrow">›</span>
         </button>
-        <button type="button" class="app-item" data-app="affirm" disabled>
+        <button type="button" class="app-item" data-app="affirm">
           <span class="ai-badge"><img src="assets/icon-affirm.png" alt="肯定语" /></span>
           <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
-          <span class="ai-soon">🔒</span>
+          <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="widget" disabled>
           <span class="ai-badge"><img src="assets/icon-widget.png" alt="小组件" /></span>
@@ -821,6 +849,22 @@
   </div>
 </div>
 
+<!-- 弹窗 10：肯定语（Day 22）：大图背景 + 随机语录 + 换一条 + 点赞 -->
+<div class="overlay" id="affirm-modal" hidden>
+  <div id="affirm-box">
+    <button id="affirm-close" class="md-close" type="button" title="关闭">✕</button>
+    <button id="affirm-bg" type="button" title="换背景" style="position:absolute;right:12px;top:12px;z-index:2;">🖼</button>
+    <div class="affirm-card" id="affirm-card">
+      <p class="affirm-quote" id="affirm-quote"></p>
+      <p class="affirm-author" id="affirm-author"></p>
+    </div>
+    <div class="affirm-actions">
+      <button id="affirm-next" type="button">换一条</button>
+      <button id="affirm-like" type="button">♡</button>
+    </div>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -846,12 +890,14 @@
   }];
   const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
+                            affirm: { likes: [], bgIndex: 0, seed: 0 },
                             profile: { name: '', theme: 'dark' }, meta: {} });
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
   const fillDefaults = (d) => {
     const def = defaults();
     for (const k in def) if (!(k in d)) d[k] = def[k];
     if (!Array.isArray(d.anniversaries)) d.anniversaries = def.anniversaries;
+    if (!d.affirm) d.affirm = def.affirm;
     return d;
   };
   const loadData = () => {
@@ -1583,6 +1629,8 @@
         memBookFilter = '';
         el('mem-modal').hidden = false;
         renderMemorials();
+      } else if (item.dataset.app === 'affirm') {                           // Day 22：肯定语
+        openAffirm();
       }
     });
   });
@@ -2086,6 +2134,100 @@
       + (due.length > 1 ? '（还有 ' + (due.length - 1) + ' 件在提醒中）' : '');
     el('mem-banner').hidden = false;
   };
+
+  // ===== 肯定语（Day 22，F6） =====
+  const AFFIRM_BG = ['assets/affirm-1.jpg','assets/affirm-2.jpg','assets/affirm-3.jpg','assets/affirm-4.jpg','assets/affirm-5.jpg'];
+  const AFFIRM_QUOTES = [
+    { text: '你不需要很厉害才能开始，但你需要开始，才能很厉害。', author: '' },
+    { text: '慢一点没关系，只要方向是对的。', author: '' },
+    { text: '今天的你，已经是最好的版本之一。', author: '' },
+    { text: '每一个微小的坚持，都在悄悄改变命运的轨迹。', author: '' },
+    { text: '别急着否定自己，先试着把这件事做完。', author: '' },
+    { text: '自律不是苦行，而是让未来的自己感谢今天。', author: '' },
+    { text: '你比你想象的更有力量。', author: '' },
+    { text: '害怕也没关系，带着害怕往前走就好。', author: '' },
+    { text: '今天的努力，是未来某一天 effortlessly 的资本。', author: '' },
+    { text: '你已经走了这么远，不要轻易回头。', author: '' },
+    { text: '不必和别人比进度，你只是在和自己比赛。', author: '' },
+    { text: '把「我不行」换成「我试试看」。', author: '' },
+    { text: '世界很忙，但你可以给自己留一片安静的角落。', author: '' },
+    { text: '完美不是目标，完成才是。', author: '' },
+    { text: '即使只做了 5 分钟，也比没开始好。', author: '' },
+    { text: '你不是懒，只是需要把任务切得再小一点。', author: '' },
+    { text: '停下来休息不是放弃，是为了走得更远。', author: '' },
+    { text: '愿你不慌不忙，却始终在路上。', author: '' },
+    { text: '你值得被好好对待，尤其是被自己。', author: '' },
+    { text: '星光不问赶路人，时光不负有心人。', author: '' },
+    { text: '种一棵树最好的时间是十年前，其次是现在。', author: '' },
+    { text: '生活明朗，万物可爱。', author: '' },
+    { text: '前路浩浩荡荡，万事尽可期待。', author: '' },
+    { text: '你现在的态度，决定你十年后是人物还是废物。', author: '' }
+  ];
+  let currentAffirmIndex = 0;
+  let currentAffirmBg = 0;
+  const getAffirmState = () => (data ? data.affirm : { likes: [], bgIndex: 0, seed: 0 });
+  const affirmLiked = () => getAffirmState().likes.includes(currentAffirmIndex);
+  const pickAffirm = (next = true) => {
+    const st = getAffirmState();
+    // 用 seed 保证「换一条」不重复； liked 过的优先不再出现，除非全部点过赞
+    const pool = AFFIRM_QUOTES.map((_, i) => i).filter(i => !st.likes.includes(i));
+    const usePool = pool.length ? pool : [0];
+    let idx;
+    if (next) {
+      const rng = (st.seed + 1) % usePool.length;
+      st.seed = rng;
+      idx = usePool[rng];
+    } else {
+      idx = currentAffirmIndex;
+    }
+    if (data) { data.affirm = st; saveData(data); }
+    currentAffirmIndex = idx;
+    renderAffirm();
+  };
+  const renderAffirm = () => {
+    const q = AFFIRM_QUOTES[currentAffirmIndex];
+    el('affirm-quote').textContent = q.text;
+    el('affirm-author').textContent = q.author ? '—— ' + q.author : '';
+    el('affirm-card').style.backgroundImage = 'url(' + AFFIRM_BG[currentAffirmBg] + ')';
+    el('affirm-like').classList.toggle('on', affirmLiked());
+    el('affirm-like').textContent = affirmLiked() ? '♥' : '♡';
+  };
+  const openAffirm = () => {
+    const st = getAffirmState();
+    currentAffirmBg = st.bgIndex || 0;
+    currentAffirmIndex = 0;
+    if (!demoMode && data) {
+      data.affirm = st;
+      saveData(data);
+    }
+    pickAffirm(false);
+    el('affirm-modal').hidden = false;
+  };
+  el('affirm-close').addEventListener('click', () => { el('affirm-modal').hidden = true; });
+  el('affirm-next').addEventListener('click', () => {
+    if (demoMode || !data) return;
+    pickAffirm(true);
+  });
+  el('affirm-like').addEventListener('click', () => {
+    if (demoMode || !data) return;
+    const st = getAffirmState();
+    const pos = st.likes.indexOf(currentAffirmIndex);
+    if (pos === -1) st.likes.push(currentAffirmIndex);
+    else st.likes.splice(pos, 1);
+    data.affirm = st;
+    saveData(data);
+    renderAffirm();
+    showToast(pos === -1 ? '已收藏这条肯定语' : '已取消收藏');
+  });
+  el('affirm-bg').addEventListener('click', () => {
+    if (demoMode || !data) return;
+    currentAffirmBg = (currentAffirmBg + 1) % AFFIRM_BG.length;
+    const st = getAffirmState();
+    st.bgIndex = currentAffirmBg;
+    data.affirm = st;
+    saveData(data);
+    renderAffirm();
+  });
 
 
   // ===== 启动 =====
