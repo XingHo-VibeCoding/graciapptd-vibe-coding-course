@@ -156,17 +156,17 @@
     }
     .todo .check:disabled{ border-color:var(--muted); cursor:not-allowed; }
     /* ===== 待办操作菜单（Day 13）：点 ··· 弹出，一次只开一个 =====
-       精进 2：菜单选择器同时作用于思考卡片（.note）与倒数日卡片（.mem-item），样式共用 */
-    .todo .menu, .note .menu, .mem-item .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
+       精进 2：菜单选择器同时作用于思考卡片（.note），样式共用 */
+    .todo .menu, .note .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
                  border:1px solid var(--line); border-radius:12px; padding:6px; z-index:25;
                  min-width:158px; box-shadow:0 8px 24px rgba(0,0,0,.55); }
-    .todo .menu button, .note .menu button, .mem-item .menu button{ display:block; width:100%; text-align:left; padding:10px 12px;
+    .todo .menu button, .note .menu button{ display:block; width:100%; text-align:left; padding:10px 12px;
                         border:none; background:transparent; color:var(--ink); font-size:13px;
                         border-radius:8px; cursor:pointer; }
-    .todo .menu button:hover, .note .menu button:hover, .mem-item .menu button:hover{ background:var(--card2); }
-    .todo .menu button.danger, .note .menu button.danger, .mem-item .menu button.danger{ color:var(--q1); }   /* 删除用警示红（与 Q1 同源）*/
+    .todo .menu button:hover, .note .menu button:hover{ background:var(--card2); }
+    .todo .menu button.danger, .note .menu button.danger{ color:var(--q1); }   /* 删除用警示红（与 Q1 同源）*/
     /* 精进 2：菜单打开时整卡浮到列表最上层，菜单不再被下方卡片压住 */
-    .todo.menu-open, .note.menu-open, .mem-item.menu-open{ z-index:40; }
+    .todo.menu-open, .note.menu-open{ z-index:40; }
     .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
     .mini-empty button{ display:block; margin:10px auto 0; padding:7px 16px;
         border:1px solid var(--line); border-radius:999px; background:transparent;
@@ -246,24 +246,50 @@
     .mem-books button{ border:1px solid var(--line); background:var(--card2); color:var(--muted);
                        border-radius:999px; padding:6px 12px; font-size:12px; cursor:pointer; }
     .mem-books button.on{ border-color:var(--green); color:var(--green-deep); }
+    /* ===== 纪念&倒数日（Day 21 UI 改版）：一张置顶大卡 + 小卡片列表（左滑置顶/删除） ===== */
+    .mem-pinned{ position:relative; text-align:center; padding:22px 14px 18px; margin-bottom:14px;
+                background:var(--card2); border:1px solid var(--line); border-radius:16px;
+                cursor:pointer; }
+    .mem-pinned .mp-pin{ position:absolute; right:12px; top:12px; font-size:10px; color:var(--green-deep);
+                        border:1px solid var(--green); border-radius:999px; padding:2px 10px; }
+    .mem-pinned .mp-pre{ font-size:13px; color:var(--muted); margin-bottom:6px; }
+    .mem-pinned .mp-num{ font-size:52px; font-weight:700; line-height:1.1; color:var(--ink);
+                        font-variant-numeric:tabular-nums; }
+    .mem-pinned .mp-num small{ font-size:16px; font-weight:400; color:var(--muted); margin-left:4px; }
+    .mem-pinned .mp-sub{ font-size:12px; color:var(--muted); margin-top:8px; }
+    .mem-pinned .mp-sub b{ color:var(--green-deep); font-weight:500; }
+    /* 小卡片：外层行（含左滑按钮）+ 内容 */
+    .mem-row{ position:relative; margin-bottom:8px; }
+    .mem-swipe{ position:absolute; right:0; top:0; bottom:0; display:flex; gap:6px;
+                align-items:stretch; z-index:1; }
+    .mem-swipe button{ border:none; border-radius:12px; width:56px; color:#fff; font-size:12px;
+                       cursor:pointer; display:flex; flex-direction:column; gap:2px;
+                       align-items:center; justify-content:center; }
+    .mem-swipe .ms-pin{ background:var(--green); color:var(--bg, #0b0c0e); }
+    .mem-swipe .ms-del{ background:var(--q1); }
     .mem-item{ position:relative; display:flex; align-items:center; gap:12px;
                background:var(--card2); border:1px solid var(--line); border-radius:12px;
-               padding:10px 12px; margin-bottom:8px; }
-    .mem-item .mi-days{ min-width:56px; text-align:center; color:var(--green-deep);
-                        font-weight:700; font-size:15px; font-variant-numeric:tabular-nums;
-                        flex-shrink:0; }
-    .mem-item .mi-days small{ display:block; font-size:10px; color:var(--muted);
-                              font-weight:400; margin-top:2px; }
+               padding:12px; margin-bottom:0; z-index:2; cursor:pointer;
+               transition:transform .18s ease; touch-action:pan-y; }
+    .mem-row.swiped .mem-item{ transform:translateX(-124px); }
     .mem-item .mi-txt{ flex:1; min-width:0; }
-    .mem-item .mi-txt b{ font-size:14px; display:block; margin-bottom:3px; }
+    .mem-item .mi-txt b{ font-size:14px; display:block; margin-bottom:2px; }
     .mem-item .mi-txt .mi-sub{ font-size:11px; color:var(--muted); display:flex;
                                flex-wrap:wrap; gap:4px 8px; }
     .mem-item .mi-sub .mi-tag{ border:1px solid var(--line); border-radius:999px;
                                padding:1px 8px; color:var(--green-deep); font-size:10px; }
-    .mem-item .mi-sub .mi-pin{ color:var(--amber, #e0a23a); font-size:10px; }
-    .mem-item .mi-dots{ border:none; background:transparent; color:var(--muted); font-size:16px;
-                        cursor:pointer; padding:4px 6px; position:relative; flex-shrink:0; }
-    .mem-item .mi-dots::after{ content:""; position:absolute; inset:-10px; }
+    .mem-item .mi-days{ font-weight:700; font-size:16px; color:var(--green-deep);
+                        font-variant-numeric:tabular-nums; flex-shrink:0; text-align:right; }
+    .mem-item .mi-days small{ font-size:10px; color:var(--muted); font-weight:400;
+                              display:block; margin-top:1px; }
+    .mem-item.past .mi-days{ color:var(--muted); }
+    /* 桌面端：hover 时露出半透明操作按钮（无 touch 的设备） */
+    @media (hover:hover) and (pointer:fine){
+      .mem-swipe{ opacity:0; transition:opacity .15s ease; z-index:3;
+                  right:4px; top:4px; bottom:4px; }
+      .mem-row:hover .mem-swipe{ opacity:.92; }
+      .mem-row.swiped:hover .mem-swipe{ opacity:1; }
+    }
     .mem-type{ display:flex; gap:8px; margin-bottom:10px; }
     .mem-type button{ flex:1; padding:8px 0; border:1px solid var(--line); background:var(--card2);
                       color:var(--muted); border-radius:10px; font-size:13px; cursor:pointer; }
@@ -278,6 +304,32 @@
     .mem-pin-row{ display:flex; align-items:center; gap:6px; font-size:13px;
                   color:var(--muted); margin-bottom:6px; }
     .mem-pin-row input{ accent-color:var(--green); width:16px; height:16px; }
+    #mem-edit-del{ width:100%; margin-bottom:10px; padding:9px 0; border:1px solid var(--q1);
+                   background:transparent; color:var(--q1); border-radius:10px;
+                   font-size:13px; cursor:pointer; }
+    /* 详情弹窗：hero 渐变虚化背景 + 居中大卡 */
+    #mem-detail-box{ background:var(--card); text-align:center; padding:26px 20px 20px;
+                     position:relative; border-radius:16px; border:1px solid var(--line);
+                     max-width:380px; width:100%; }
+    #mem-detail-box.bg-hero{ background:
+        linear-gradient(160deg, rgba(11,12,14,.42), rgba(11,12,14,.88)),
+        url('assets/hero.jpg') center/cover no-repeat, var(--card); }
+    #mem-detail-box .md-edit{ position:absolute; right:12px; top:12px; border:1px solid var(--line);
+        background:rgba(11,12,14,.45); color:var(--ink); border-radius:999px;
+        width:34px; height:34px; font-size:15px; cursor:pointer; z-index:2; }
+    #mem-detail-box .md-close{ position:absolute; left:12px; top:12px; border:1px solid var(--line);
+        background:rgba(11,12,14,.45); color:var(--muted); border-radius:999px;
+        width:34px; height:34px; font-size:14px; cursor:pointer; z-index:2; }
+    #mem-detail-box .md-pre{ font-size:13px; color:var(--muted); margin:18px 0 4px; }
+    #mem-detail-box .md-num{ font-size:56px; font-weight:700; line-height:1.15;
+                             font-variant-numeric:tabular-nums; }
+    #mem-detail-box .md-num small{ font-size:16px; font-weight:400; color:var(--muted); margin-left:4px; }
+    #mem-detail-box .md-sub{ font-size:12px; color:var(--muted); margin-top:6px; }
+    #mem-detail-box .md-sub b{ color:var(--green-deep); font-weight:500; }
+    #mem-detail-box .md-actions{ display:flex; gap:10px; margin-top:22px; }
+    #mem-detail-box .md-actions button{ flex:1; padding:9px 0; border:1px solid var(--line);
+        background:rgba(11,12,14,.45); color:var(--ink); border-radius:999px; font-size:13px;
+        cursor:pointer; }
 
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
@@ -707,7 +759,7 @@
   </div>
 </div>
 
-<!-- 弹窗 8：添加/编辑倒数日（Day 21，F6）：名称 + 公历/农历 + 月日 + 本子 + 提醒 + 置顶 -->
+<!-- 弹窗 8：添加/编辑倒数日（Day 21 UI 改版）：名称 + 公历/农历 + 周期 + 月日 + 本子 + 提醒 + 置顶 -->
 <div class="overlay" id="mem-edit-modal" hidden>
   <div class="modal" style="max-width:380px">
     <h3 id="mem-edit-title">添加倒数日</h3>
@@ -716,7 +768,12 @@
       <button type="button" data-type="solar" class="on">公历</button>
       <button type="button" data-type="lunar">农历</button>
     </div>
+    <select id="mem-repeat" title="重复周期">
+      <option value="yearly">每年一次（生日、节日）</option>
+      <option value="never">仅一次（倒计时到某天）</option>
+    </select>
     <div class="mem-md">
+      <select id="mem-year" title="年" hidden></select>
       <select id="mem-month" title="月"></select>
       <select id="mem-day" title="日"></select>
     </div>
@@ -734,11 +791,27 @@
       <option value="7">提前 7 天提醒</option>
     </select>
     <label class="mem-pin-row">
-      <input type="checkbox" id="mem-pin" /> 置顶显示
+      <input type="checkbox" id="mem-pin" /> 置顶显示（大卡片，同时只保留一个置顶）
     </label>
     <div class="row">
       <button id="mem-edit-cancel" type="button">取消</button>
       <button id="mem-edit-ok" type="button">保存</button>
+    </div>
+    <button id="mem-edit-del" type="button" hidden>删除这条倒数日</button>
+  </div>
+</div>
+
+<!-- 弹窗 9：倒数日详情（Day 21 UI 改版）：hero 虚化背景 + 大卡 + 编辑/分享/换背景 -->
+<div class="overlay" id="mem-detail-modal" hidden>
+  <div id="mem-detail-box">
+    <button id="mem-detail-close" type="button" title="关闭">✕</button>
+    <button id="mem-detail-edit" type="button" title="编辑">✏️</button>
+    <div class="md-pre" id="md-pre"></div>
+    <div class="md-num" id="md-num"></div>
+    <div class="md-sub" id="md-sub"></div>
+    <div class="md-actions">
+      <button id="md-share" type="button">分享</button>
+      <button id="md-bg" type="button">换背景</button>
     </div>
   </div>
 </div>
@@ -761,10 +834,10 @@
 <script>
   // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
   const KEY = 'habit-tracker-v1';
-  // Day 21：默认自带「春节」倒数日（农历正月初一，置顶，提前 7 天提醒）
+  // Day 21：默认自带「春节」倒数日（农历正月初一，置顶，提前 7 天提醒，每年一次）
   const DEFAULT_MEMORIALS = [{
     id: 'mem-spring', name: '春节', type: 'lunar', month: 1, day: 1,
-    book: '节日', advance: 7, isPinned: true, created: Date.now()
+    book: '节日', advance: 7, isPinned: true, repeat: 'yearly', bg: 'hero', created: Date.now()
   }];
   const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
@@ -1626,10 +1699,12 @@
   let memBookFilter = '';            // 当前纪念本筛选（'' = 全部）
   let editingMemId = null;           // null = 新增；有值 = 编辑该条
 
+  // 旧数据迁移：无 repeat 默认「每年一次」（Day 21 UI 改版前的行为），无 bg 默认 hero
+  const normMem = (a) => { if (!a.repeat) a.repeat = 'yearly'; if (!a.bg) a.bg = 'hero'; return a; };
   const memItems = () => (demoMode
-    ? [ { id:'demo-1', name:'春节', type:'lunar', month:1, day:1, book:'节日', advance:7, isPinned:true },
-        { id:'demo-2', name:'阿澄生日', type:'solar', month:5, day:20, book:'家庭', advance:3, isPinned:false } ]
-    : (data ? data.anniversaries : []));
+    ? [ { id:'demo-1', name:'春节', type:'lunar', month:1, day:1, book:'节日', advance:7, isPinned:true, repeat:'yearly', bg:'hero' },
+        { id:'demo-2', name:'阿澄生日', type:'solar', month:5, day:20, book:'家庭', advance:3, isPinned:false, repeat:'yearly', bg:'hero' } ]
+    : (data ? data.anniversaries : [])).map(normMem);
 
   // 今天 0 点的公历年月日
   const todayYmd = () => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }; };
@@ -1638,10 +1713,15 @@
     const try1 = window.solarlunar.lunar2solar(2026, month, day);   // 任意年即可，只为拿中文
     return try1 && try1 !== -1 ? (try1.monthCn + try1.dayCn) : (LUNAR_MONTH_CN[month-1] + day + '日');
   };
-  // 核心算法：算一条倒数日的「下一个公历日期」和「还剩几天」
+  // 核心算法：算一条倒数日的「目标公历日期」和「还剩几天」
+  // repeat: 'yearly' 每年一次（过了自动算下一次）；'never' 仅一次（固定年份，可落在过去 → 累计）
   const memNext = (item) => {
     const t = todayYmd();
     if (item.type === 'lunar') {
+      if (item.repeat === 'never' && item.year) {                    // 仅一次：固定农历年份
+        const s = window.solarlunar.lunar2solar(item.year, item.month, item.day);
+        return s === -1 ? null : new Date(s.cYear, s.cMonth - 1, s.cDay);
+      }
       const todayLunar = window.solarlunar.solar2lunar(t.y, t.m, t.d);      // 今天对应的农历年
       // 先按今年农历年算；若结果已过（早于今天 0 点），再顺延一个农历年
       let s = window.solarlunar.lunar2solar(todayLunar.lYear, item.month, item.day);
@@ -1654,7 +1734,9 @@
       }
       return date;
     }
-    // 公历：今年该日期，已过则取明年（2-29 特例：非闰年自动顺延到 3-1 不处理，按明年的 2-28 简化）
+    // 公历
+    if (item.repeat === 'never' && item.year) return new Date(item.year, item.month - 1, item.day);
+    // 每年：今年该日期，已过则取明年（2-29 特例：非闰年自动顺延到 3-1 不处理，按明年的 2-28 简化）
     let date = new Date(t.y, item.month - 1, item.day);
     if (date < new Date(t.y, t.m - 1, t.d)) date = new Date(t.y + 1, item.month - 1, item.day);
     return date;
@@ -1665,63 +1747,165 @@
     const t = todayYmd();
     return Math.round((date - new Date(t.y, t.m - 1, t.d)) / 86400000);
   };
+  // 目标公历日期 → 2027.02.06 周六
+  const fmtMemDate = (date) => {
+    const WD = ['周日','周一','周二','周三','周四','周五','周六'];
+    const p = n => String(n).padStart(2, '0');
+    return date.getFullYear() + '.' + p(date.getMonth() + 1) + '.' + p(date.getDate()) + ' ' + WD[date.getDay()];
+  };
 
-  // 倒数日列表卡片
-  const createMemCard = (item) => {
+  // 置顶大卡片：距离 春节 还有 / 132天 / 下一次 2027.02.06 周六
+  const createPinnedCard = (item) => {
+    const left = memDaysLeft(item);
+    const card = document.createElement('div');
+    card.className = 'mem-pinned'; card.dataset.id = item.id;
+    const pin = document.createElement('span');
+    pin.className = 'mp-pin'; pin.textContent = '置顶';
+    const pre = document.createElement('div'); pre.className = 'mp-pre';
+    const num = document.createElement('div'); num.className = 'mp-num';
+    const sub = document.createElement('div'); sub.className = 'mp-sub';
+    const date = memNext(item);
+    if (left === null) { pre.textContent = '无效日期'; num.textContent = '—'; sub.textContent = '请编辑修正'; }
+    else if (left === 0) { pre.textContent = '今天就是 ' + item.name; num.textContent = '🎉'; }
+    else if (left < 0) {
+      pre.textContent = item.name + ' 已过';
+      num.innerHTML = (-left) + '<small>天</small>';
+    } else {
+      pre.textContent = '距离 ' + item.name + ' 还有';
+      num.innerHTML = left + '<small>天</small>';
+    }
+    if (date) sub.innerHTML = (item.repeat === 'never' ? '' : '下一次 ') + '<b>' + fmtMemDate(date) + '</b>';
+    card.append(pin, pre, num, sub);
+    card.addEventListener('click', () => openMemDetail(item));
+    return card;
+  };
+
+  // 小卡片行：左滑（桌面 hover）露出 置顶/删除；点击进详情
+  const createMemRow = (item) => {
     const left = memDaysLeft(item);
     const row = document.createElement('div');
-    row.className = 'mem-item'; row.dataset.id = item.id;
-    const days = document.createElement('div');
-    days.className = 'mi-days';
-    if (left === null) { days.innerHTML = '无效日期<small>请编辑</small>'; }
-    else if (left === 0) days.innerHTML = '就是<small>今天</small>';
-    else days.innerHTML = left + '<small>天后</small>';
-    const txt = document.createElement('div');
-    txt.className = 'mi-txt';
+    row.className = 'mem-row'; row.dataset.id = item.id;
+
+    const swipe = document.createElement('div'); swipe.className = 'mem-swipe';
+    const pinBtn = document.createElement('button');
+    pinBtn.type = 'button'; pinBtn.className = 'ms-pin'; pinBtn.innerHTML = '📌<span>置顶</span>';
+    pinBtn.addEventListener('click', () => pinMem(item));
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button'; delBtn.className = 'ms-del'; delBtn.innerHTML = '🗑<span>删除</span>';
+    delBtn.addEventListener('click', () => delMem(item));
+    swipe.append(pinBtn, delBtn);
+
+    const it = document.createElement('div');
+    it.className = 'mem-item' + (left !== null && left < 0 ? ' past' : '');
+    const txt = document.createElement('div'); txt.className = 'mi-txt';
     const b = document.createElement('b'); b.textContent = item.name;
     const sub = document.createElement('div'); sub.className = 'mi-sub';
     const dateStr = document.createElement('span');
     dateStr.textContent = (item.type === 'lunar' ? '农历 ' + lunarCn(item.month, item.day)
-                                                 : '公历 ' + item.month + ' 月 ' + item.day + ' 日');
+                                                 : '公历 ' + item.month + ' 月 ' + item.day + ' 日')
+                        + (item.repeat === 'yearly' ? '' : ' · 仅一次');
     sub.appendChild(dateStr);
     if (item.book) { const tag = document.createElement('span'); tag.className = 'mi-tag'; tag.textContent = item.book; sub.appendChild(tag); }
-    if (item.isPinned) { const pin = document.createElement('span'); pin.className = 'mi-pin'; pin.textContent = '📌 置顶'; sub.appendChild(pin); }
-    if (item.advance > 0 && left !== null && left <= item.advance) {
+    if (item.advance > 0 && left !== null && left >= 0 && left <= item.advance) {
       const bell = document.createElement('span'); bell.textContent = '⏰ 提醒中'; sub.appendChild(bell);
     }
     txt.append(b, sub);
-    row.append(days, txt);
-    if (!demoMode) {
-      const dots = document.createElement('button');
-      dots.type = 'button'; dots.className = 'mi-dots'; dots.textContent = '···';
-      dots.title = '编辑或删除这条倒数日';
-      dots.addEventListener('click', () => {
-        closeTodoMenu(); closeNoteMenu(); closeMemMenu();
-        const menu = document.createElement('div'); menu.className = 'menu';
-        const edit = document.createElement('button');
-        edit.type = 'button'; edit.textContent = '编辑';
-        edit.addEventListener('click', () => { closeMemMenu(); openMemEdit(item); });
-        const del = document.createElement('button');
-        del.type = 'button'; del.className = 'danger'; del.textContent = '删除';
-        del.addEventListener('click', () => {
-          closeMemMenu();
-          if (!confirm('确定删除「' + item.name + '」吗？')) return;
-          data.anniversaries = data.anniversaries.filter(x => x.id !== item.id);
-          saveData(data); renderMemorials(); checkMemReminders();
-          showToast('已删除');
-        });
-        menu.append(edit, del);
-        row.classList.add('menu-open');
-        row.appendChild(menu);
-      });
-      row.appendChild(dots);
-    }
+    const days = document.createElement('div'); days.className = 'mi-days';
+    if (left === null) days.innerHTML = '无效<small>请编辑</small>';
+    else if (left === 0) days.innerHTML = '就是<small>今天</small>';
+    else if (left < 0) days.innerHTML = '已过<small>' + (-left) + ' 天</small>';
+    else days.innerHTML = left + '<small>天后</small>';
+    it.append(txt, days);
+
+    // 左滑手势（touch 设备）：露出右侧操作按钮；滑动过就不算点击
+    let sx = 0, moved = false;
+    it.addEventListener('touchstart', e => { sx = e.touches[0].clientX; moved = false; it.style.transition = 'none'; }, { passive: true });
+    it.addEventListener('touchmove', e => {
+      const dx = e.touches[0].clientX - sx;
+      if (dx < -8) { moved = true; it.style.transform = 'translateX(' + Math.max(dx, -124) + 'px)'; }
+    }, { passive: true });
+    it.addEventListener('touchend', () => {
+      it.style.transition = '';
+      const m = (it.style.transform || '').match(/translateX\((-?\d+(?:\.\d+)?)px\)/);
+      const open = moved && m && parseFloat(m[1]) < -50;       // 滑出过半（>50px）就保持展开
+      it.style.transform = '';
+      row.classList.toggle('swiped', open);
+    });
+    it.addEventListener('click', () => {
+      if (moved) { moved = false; return; }          // 刚滑过，这次不算点击
+      openMemDetail(item);
+    });
+    row.append(swipe, it);
     return row;
   };
-  const closeMemMenu = () => {
-    document.querySelectorAll('.mem-item .menu').forEach(m => m.remove());
-    document.querySelectorAll('.mem-item.menu-open').forEach(t => t.classList.remove('menu-open'));
+
+  // 置顶（唯一）/ 删除
+  const pinMem = (item) => {
+    if (demoMode || !data) { showToast('示例模式不能修改'); return; }
+    data.anniversaries.forEach(x => { if (x.id !== item.id) x.isPinned = false; });
+    item.isPinned = true;
+    saveData(data); renderMemorials(); checkMemReminders();
+    showToast('已置顶「' + item.name + '」');
   };
+  const delMem = (item) => {
+    if (demoMode || !data) { showToast('示例模式不能修改'); return; }
+    if (!confirm('确定删除「' + item.name + '」吗？')) return;
+    data.anniversaries = data.anniversaries.filter(x => x.id !== item.id);
+    saveData(data); renderMemorials(); checkMemReminders();
+    showToast('已删除');
+  };
+
+  // 详情弹窗：hero 虚化背景 + 大卡 + 编辑/分享/换背景
+  let detailMemId = null;
+  const memById = (id) => memItems().find(x => x.id === id);
+  const openMemDetail = (item) => {
+    detailMemId = item.id;
+    const left = memDaysLeft(item);
+    const date = memNext(item);
+    const pre = el('md-pre'), num = el('md-num'), sub = el('md-sub');
+    if (left === null) { pre.textContent = '无效日期'; num.textContent = '—'; sub.textContent = '请编辑修正'; }
+    else if (left === 0) { pre.textContent = '今天就是 ' + item.name; num.textContent = '🎉'; }
+    else if (left < 0) { pre.textContent = item.name + ' 已过'; num.innerHTML = (-left) + '<small>天</small>'; }
+    else { pre.textContent = '距离 ' + item.name + ' 还有'; num.innerHTML = left + '<small>天</small>'; }
+    if (date) {
+      sub.innerHTML = (item.repeat === 'never' ? '' : '下一次 ') + '<b>' + fmtMemDate(date) + '</b>'
+        + ' · ' + (item.type === 'lunar' ? '农历' : '公历')
+        + (item.repeat === 'yearly' ? ' · 每年一次' : ' · 仅一次');
+    }
+    el('mem-detail-box').classList.toggle('bg-hero', item.bg !== 'default');
+    el('mem-detail-edit').hidden = demoMode;
+    el('md-bg').hidden = demoMode;
+    el('mem-detail-modal').hidden = false;
+  };
+  el('mem-detail-close').addEventListener('click', () => { el('mem-detail-modal').hidden = true; });
+  el('mem-detail-edit').addEventListener('click', () => {
+    const item = detailMemId && memById(detailMemId);
+    if (!item || demoMode) return;
+    el('mem-detail-modal').hidden = true;
+    openMemEdit(item);
+  });
+  el('md-share').addEventListener('click', async () => {
+    const item = detailMemId && memById(detailMemId);
+    if (!item) return;
+    const left = memDaysLeft(item);
+    const date = memNext(item);
+    const text = (left === null || left < 0 ? '「' + item.name + '」'
+        : left === 0 ? '今天就是「' + item.name + '」！'
+        : '距离「' + item.name + '」还有 ' + left + ' 天')
+      + (date ? '（' + fmtMemDate(date).split(' ')[0] + '）' : '') + ' —— 来自自律计划';
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else { await navigator.clipboard.writeText(text); showToast('已复制到剪贴板'); }
+    } catch (e) { /* 用户取消分享 */ }
+  });
+  el('md-bg').addEventListener('click', () => {
+    const item = detailMemId && memById(detailMemId);
+    if (!item || demoMode || !data) return;
+    item.bg = (item.bg === 'default') ? 'hero' : 'default';
+    saveData(data);
+    el('mem-detail-box').classList.toggle('bg-hero', item.bg === 'hero');
+    showToast(item.bg === 'hero' ? '已换成落日背景' : '已换成纯色背景');
+  });
 
   // 纪念本筛选 chips + 列表
   const renderMemorials = () => {
@@ -1739,14 +1923,16 @@
     books.appendChild(mkChip('全部', ''));
     allBooks.forEach(bk => books.appendChild(mkChip(bk, bk)));
     if (memBookFilter) items = items.filter(i => i.book === memBookFilter);
-    // 排序：置顶优先，其余按剩余天数升序（无效日期排最后）
+    // 排序：置顶唯一（大卡片）；其余未来按剩余天数升序，过期「仅一次」排最后（无效日期更后）
     items = items.slice().sort((a, b) => {
       if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? 1 : -1;
       const la = memDaysLeft(a), lb = memDaysLeft(b);
       if (la === null) return 1; if (lb === null) return -1;
+      const pa = la < 0, pb = lb < 0;
+      if (pa !== pb) return pa ? 1 : -1;
       return la - lb;
     });
-    items.forEach(i => list.appendChild(createMemCard(i)));
+    items.forEach(i => list.appendChild(i.isPinned ? createPinnedCard(i) : createMemRow(i)));
     el('mem-empty').hidden = items.length > 0;
     el('mem-add').hidden = demoMode;
   };
@@ -1763,12 +1949,26 @@
       daySel.appendChild(o);
     }
   };
+  const fillMemYearOptions = (sel) => {
+    sel.textContent = '';
+    const y0 = todayYmd().y;
+    for (let y = y0 - 10; y <= y0 + 10; y++) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y + ' 年';
+      sel.appendChild(o);
+    }
+  };
   const openMemEdit = (item) => {
     editingMemId = item ? item.id : null;
     el('mem-edit-title').textContent = item ? '编辑倒数日' : '添加倒数日';
     el('mem-name').value = item ? item.name : '';
     const type = item ? item.type : 'solar';
     document.querySelectorAll('#mem-type button').forEach(b => b.classList.toggle('on', b.dataset.type === type));
+    // 周期：默认每年一次
+    el('mem-repeat').value = item ? (item.repeat || 'yearly') : 'yearly';
+    fillMemYearOptions(el('mem-year'));
+    el('mem-year').value = item && item.year ? item.year : todayYmd().y;
+    el('mem-year').hidden = el('mem-repeat').value !== 'never';
     // 月份选项：公历 1-12 月；农历正月至腊月
     const monthSel = el('mem-month'); monthSel.textContent = '';
     for (let m = 1; m <= 12; m++) {
@@ -1783,9 +1983,13 @@
     el('mem-book').value = item ? (item.book || '') : '';
     el('mem-advance').value = item ? (item.advance || 0) : 0;
     el('mem-pin').checked = item ? !!item.isPinned : false;
+    el('mem-edit-del').hidden = !item;                       // 删除按钮只在编辑模式出现
     el('mem-edit-modal').hidden = false;
     el('mem-name').focus();
   };
+  el('mem-repeat').addEventListener('change', () => {
+    el('mem-year').hidden = el('mem-repeat').value !== 'never';
+  });
   document.querySelectorAll('#mem-type button').forEach(b => {
     b.addEventListener('click', () => {
       document.querySelectorAll('#mem-type button').forEach(x => x.classList.remove('on'));
@@ -1821,7 +2025,10 @@
     if (type === 'solar' && day > new Date(todayYmd().y, month, 0).getDate()) {
       showToast('这个公历日期不存在，换一个'); return;
     }
+    const repeat = el('mem-repeat').value;
     const fields = { name, type, month, day,
+                    repeat,
+                    year: repeat === 'never' ? Number(el('mem-year').value) : null,
                     book: el('mem-book').value.trim(),
                     advance: Number(el('mem-advance').value) || 0,
                     isPinned: el('mem-pin').checked };
@@ -1832,21 +2039,32 @@
     } else {
       fields.id = Date.now() + '-' + Math.floor(Math.random()*1000);
       fields.created = Date.now();
+      fields.bg = 'hero';
       data.anniversaries.push(fields);
       showToast('已添加「' + name + '」');
     }
+    // 置顶唯一：勾了置顶就取消其他条目的置顶
+    if (fields.isPinned) data.anniversaries.forEach(x => { if (x.id !== editingMemId) x.isPinned = false; });
     saveData(data);
     el('mem-edit-modal').hidden = true;
     renderMemorials(); checkMemReminders();
+  });
+  el('mem-edit-del').addEventListener('click', () => {
+    if (!editingMemId) return;
+    const t = data && data.anniversaries.find(x => x.id === editingMemId);
+    if (!t) return;
+    if (!confirm('确定删除「' + t.name + '」吗？')) return;
+    data.anniversaries = data.anniversaries.filter(x => x.id !== editingMemId);
+    saveData(data);
+    el('mem-edit-modal').hidden = true;
+    renderMemorials(); checkMemReminders();
+    showToast('已删除');
   });
   el('mem-close').addEventListener('click', () => { el('mem-modal').hidden = true; });
   el('mem-banner-open').addEventListener('click', () => {
     document.querySelector('nav button[data-view="apps"]').click();
     el('mem-modal').hidden = false;
     renderMemorials();
-  });
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('.mem-item .menu') && !e.target.closest('.mem-item .mi-dots')) closeMemMenu();
   });
 
   // 提醒条：有事件进入提醒窗口（advance > 0 且 0 <= 剩余 <= advance）时出现
