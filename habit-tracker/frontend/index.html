@@ -339,30 +339,35 @@
     /* ===== 肯定语（Day 22，F6）===== */
     #affirm-box{ position:fixed; inset:0; display:flex; flex-direction:column;
                  justify-content:center; align-items:center; padding:16px; }
-    #affirm-box .affirm-card{ width:100%; max-width:420px; min-height:360px; border-radius:20px;
-                              overflow:hidden; position:relative; display:flex; flex-direction:column;
-                              justify-content:flex-end; padding:24px; box-sizing:border-box;
+    /* 竖长方形卡片：按 9/16 原图比例，高度不超视口（精进 4） */
+    #affirm-box .affirm-card{ width:min(100%, calc((100vh - 190px) * 0.5625)); aspect-ratio:9/16;
+                              border-radius:20px; overflow:hidden; position:relative;
+                              display:flex; flex-direction:column; justify-content:flex-end;
+                              padding:24px; box-sizing:border-box;
                               background-size:cover; background-position:center;
                               box-shadow:0 12px 40px rgba(0,0,0,.45); }
     #affirm-box .affirm-card::before{ content:""; position:absolute; inset:0;
         background:linear-gradient(to top, rgba(0,0,0,.78) 0%, rgba(0,0,0,.18) 55%, rgba(0,0,0,.05) 100%);
         border-radius:20px; }
-    #affirm-box .affirm-quote{ position:relative; z-index:1; font-size:20px; line-height:1.7;
+    #affirm-box .affirm-quote{ position:relative; z-index:1; font-size:19px; line-height:1.7;
                                font-weight:500; color:#fff; text-shadow:0 2px 10px rgba(0,0,0,.55);
                                margin:0 0 10px; white-space:pre-wrap; word-break:break-word; }
     #affirm-box .affirm-author{ position:relative; z-index:1; font-size:13px; color:rgba(255,255,255,.78);
                                 text-align:right; margin:0; text-shadow:0 1px 6px rgba(0,0,0,.5); }
-    #affirm-box .affirm-actions{ display:flex; gap:12px; margin-top:20px; width:100%; max-width:420px; }
+    #affirm-box .affirm-actions{ display:flex; gap:12px; margin-top:18px; width:100%;
+                                 max-width:min(420px, calc((100vh - 190px) * 0.5625)); }
     #affirm-box .affirm-actions button{ border:1px solid var(--line); background:var(--card);
                                         color:var(--ink); border-radius:999px; cursor:pointer; }
     #affirm-box #affirm-next{ flex:1; padding:12px 0; font-size:14px; }
+    #affirm-box #affirm-bg{ flex:1; padding:12px 0; font-size:13px; color:var(--muted); }
     #affirm-box #affirm-like{ width:50px; height:46px; font-size:22px; display:flex; align-items:center;
-                              justify-content:center; color:var(--muted); }
+                              justify-content:center; color:var(--muted); flex-shrink:0; }
     #affirm-box #affirm-like.on{ color:var(--q1); border-color:var(--q1); background:rgba(231,90,73,.12); }
-    #affirm-box .md-close{ color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.5); }
+    /* 关闭键：左上角透明图标，悬停变红（同详情页风格） */
+    #affirm-box .md-close{ position:absolute; left:12px; top:12px; z-index:2; border:none;
+        background:transparent; color:#fff; font-size:15px; width:34px; height:34px;
+        cursor:pointer; text-shadow:0 1px 6px rgba(0,0,0,.5); }
     #affirm-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
-    #affirm-bg{ border:none; background:transparent; font-size:22px; cursor:pointer;
-                filter:drop-shadow(0 1px 4px rgba(0,0,0,.5)); }
 
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
@@ -849,17 +854,17 @@
   </div>
 </div>
 
-<!-- 弹窗 10：肯定语（Day 22）：大图背景 + 随机语录 + 换一条 + 点赞 -->
+<!-- 弹窗 10：肯定语（Day 22）：竖长方形大图 + 随机语录 + 换一条/换背景/点赞 -->
 <div class="overlay" id="affirm-modal" hidden>
   <div id="affirm-box">
     <button id="affirm-close" class="md-close" type="button" title="关闭">✕</button>
-    <button id="affirm-bg" type="button" title="换背景" style="position:absolute;right:12px;top:12px;z-index:2;">🖼</button>
     <div class="affirm-card" id="affirm-card">
       <p class="affirm-quote" id="affirm-quote"></p>
       <p class="affirm-author" id="affirm-author"></p>
     </div>
     <div class="affirm-actions">
       <button id="affirm-next" type="button">换一条</button>
+      <button id="affirm-bg" type="button" title="切换背景图">换背景 1/5</button>
       <button id="affirm-like" type="button">♡</button>
     </div>
   </div>
@@ -2191,6 +2196,7 @@
     el('affirm-card').style.backgroundImage = 'url(' + AFFIRM_BG[currentAffirmBg] + ')';
     el('affirm-like').classList.toggle('on', affirmLiked());
     el('affirm-like').textContent = affirmLiked() ? '♥' : '♡';
+    el('affirm-bg').textContent = '换背景 ' + (currentAffirmBg + 1) + '/' + AFFIRM_BG.length;
   };
   const openAffirm = () => {
     const st = getAffirmState();
