@@ -2235,6 +2235,7 @@
   const renderAffirm = () => {
     const q = AFFIRM_QUOTES[currentAffirmIndex];
     el('affirm-quote').textContent = q.text;
+    el('affirm-quote').dataset.idx = currentAffirmIndex;   // 精进 6：当前语录索引（测试断言用）
     el('affirm-author').textContent = q.author ? '—— ' + q.author : '';
     el('affirm-card').style.backgroundImage = 'url(' + AFFIRM_BG[currentAffirmBg] + ')';
     el('affirm-like').classList.toggle('on', affirmLiked());
@@ -2244,12 +2245,18 @@
   const openAffirm = () => {
     const st = getAffirmState();
     currentAffirmBg = st.bgIndex || 0;
-    currentAffirmIndex = 0;
+    // 精进 6：每次打开随机一条（liked 过的不再出现），且不与上一条重复
+    const pool = AFFIRM_QUOTES.map((_, i) => i).filter(i => !st.likes.includes(i));
+    const usePool = pool.length ? pool : AFFIRM_QUOTES.map((_, i) => i);  // 全点过赞 → 回到全池
+    let idx = usePool[Math.floor(Math.random() * usePool.length)];
+    if (usePool.length > 1 && idx === currentAffirmIndex)
+      idx = usePool[(usePool.indexOf(idx) + 1) % usePool.length];
+    currentAffirmIndex = idx;
     if (!demoMode && data) {
       data.affirm = st;
       saveData(data);
     }
-    pickAffirm(false);
+    renderAffirm();
     el('affirm-modal').hidden = false;
   };
   el('affirm-close').addEventListener('click', () => { el('affirm-modal').hidden = true; });
