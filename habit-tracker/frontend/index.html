@@ -314,12 +314,17 @@
     #mem-detail-box.bg-hero{ background:
         linear-gradient(160deg, rgba(11,12,14,.42), rgba(11,12,14,.88)),
         url('assets/hero.jpg') center/cover no-repeat, var(--card); }
-    #mem-detail-box .md-edit{ position:absolute; right:12px; top:12px; border:1px solid var(--line);
-        background:rgba(11,12,14,.45); color:var(--ink); border-radius:999px;
-        width:34px; height:34px; font-size:15px; cursor:pointer; z-index:2; }
-    #mem-detail-box .md-close{ position:absolute; left:12px; top:12px; border:1px solid var(--line);
-        background:rgba(11,12,14,.45); color:var(--muted); border-radius:999px;
-        width:34px; height:34px; font-size:14px; cursor:pointer; z-index:2; }
+    #mem-detail-box .md-edit, #mem-detail-box .md-close{ position:absolute; top:12px;
+        border:none; background:transparent; color:var(--muted); border-radius:999px;
+        width:34px; height:34px; font-size:15px; line-height:1; cursor:pointer; z-index:2;
+        display:flex; align-items:center; justify-content:center;
+        transition:color .15s ease, background .15s ease; }
+    #mem-detail-box .md-close{ left:12px; }
+    #mem-detail-box .md-edit{ right:12px; color:var(--ink); }
+    #mem-detail-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
+    #mem-detail-box .md-edit:hover{ color:var(--green-deep); background:rgba(122,178,120,.16); }
+    #mem-detail-box.bg-hero .md-edit, #mem-detail-box.bg-hero .md-close{
+        text-shadow:0 1px 8px rgba(0,0,0,.65); }               /* hero 背景上保证图标可读 */
     #mem-detail-box .md-pre{ font-size:13px; color:var(--muted); margin:18px 0 4px; }
     #mem-detail-box .md-num{ font-size:56px; font-weight:700; line-height:1.15;
                              font-variant-numeric:tabular-nums; }
