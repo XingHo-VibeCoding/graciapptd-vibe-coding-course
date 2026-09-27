@@ -156,17 +156,17 @@
     }
     .todo .check:disabled{ border-color:var(--muted); cursor:not-allowed; }
     /* ===== 待办操作菜单（Day 13）：点 ··· 弹出，一次只开一个 =====
-       精进 2：菜单选择器同时作用于思考卡片（.note），样式共用 */
-    .todo .menu, .note .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
+       精进 2：菜单选择器同时作用于思考卡片（.note）与倒数日卡片（.mem-item），样式共用 */
+    .todo .menu, .note .menu, .mem-item .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
                  border:1px solid var(--line); border-radius:12px; padding:6px; z-index:25;
                  min-width:158px; box-shadow:0 8px 24px rgba(0,0,0,.55); }
-    .todo .menu button, .note .menu button{ display:block; width:100%; text-align:left; padding:10px 12px;
+    .todo .menu button, .note .menu button, .mem-item .menu button{ display:block; width:100%; text-align:left; padding:10px 12px;
                         border:none; background:transparent; color:var(--ink); font-size:13px;
                         border-radius:8px; cursor:pointer; }
-    .todo .menu button:hover, .note .menu button:hover{ background:var(--card2); }
-    .todo .menu button.danger, .note .menu button.danger{ color:var(--q1); }   /* 删除用警示红（与 Q1 同源）*/
+    .todo .menu button:hover, .note .menu button:hover, .mem-item .menu button:hover{ background:var(--card2); }
+    .todo .menu button.danger, .note .menu button.danger, .mem-item .menu button.danger{ color:var(--q1); }   /* 删除用警示红（与 Q1 同源）*/
     /* 精进 2：菜单打开时整卡浮到列表最上层，菜单不再被下方卡片压住 */
-    .todo.menu-open, .note.menu-open{ z-index:40; }
+    .todo.menu-open, .note.menu-open, .mem-item.menu-open{ z-index:40; }
     .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
     .mini-empty button{ display:block; margin:10px auto 0; padding:7px 16px;
         border:1px solid var(--line); border-radius:999px; background:transparent;
@@ -234,6 +234,50 @@
     .timer-today{ margin-top:18px; font-size:13px; color:var(--muted); text-align:center; }
     .timer-done{ animation:pulse .6s ease 2; }
     @keyframes pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.03); } }
+
+    /* ===== 纪念 & 倒数日（Day 21，F6）===== */
+    #mem-banner{ display:flex; justify-content:space-between; align-items:center;
+                 background:var(--card2); border:1px solid var(--green); color:var(--ink);
+                 font-size:13px; padding:8px 12px; border-radius:10px; margin-bottom:12px; }
+    #mem-banner[hidden]{ display:none !important; }
+    #mem-banner button{ border:none; background:transparent; color:var(--green-deep);
+                        font-size:13px; cursor:pointer; }
+    .mem-books{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+    .mem-books button{ border:1px solid var(--line); background:var(--card2); color:var(--muted);
+                       border-radius:999px; padding:6px 12px; font-size:12px; cursor:pointer; }
+    .mem-books button.on{ border-color:var(--green); color:var(--green-deep); }
+    .mem-item{ position:relative; display:flex; align-items:center; gap:12px;
+               background:var(--card2); border:1px solid var(--line); border-radius:12px;
+               padding:10px 12px; margin-bottom:8px; }
+    .mem-item .mi-days{ min-width:56px; text-align:center; color:var(--green-deep);
+                        font-weight:700; font-size:15px; font-variant-numeric:tabular-nums;
+                        flex-shrink:0; }
+    .mem-item .mi-days small{ display:block; font-size:10px; color:var(--muted);
+                              font-weight:400; margin-top:2px; }
+    .mem-item .mi-txt{ flex:1; min-width:0; }
+    .mem-item .mi-txt b{ font-size:14px; display:block; margin-bottom:3px; }
+    .mem-item .mi-txt .mi-sub{ font-size:11px; color:var(--muted); display:flex;
+                               flex-wrap:wrap; gap:4px 8px; }
+    .mem-item .mi-sub .mi-tag{ border:1px solid var(--line); border-radius:999px;
+                               padding:1px 8px; color:var(--green-deep); font-size:10px; }
+    .mem-item .mi-sub .mi-pin{ color:var(--amber, #e0a23a); font-size:10px; }
+    .mem-item .mi-dots{ border:none; background:transparent; color:var(--muted); font-size:16px;
+                        cursor:pointer; padding:4px 6px; position:relative; flex-shrink:0; }
+    .mem-item .mi-dots::after{ content:""; position:absolute; inset:-10px; }
+    .mem-type{ display:flex; gap:8px; margin-bottom:10px; }
+    .mem-type button{ flex:1; padding:8px 0; border:1px solid var(--line); background:var(--card2);
+                      color:var(--muted); border-radius:10px; font-size:13px; cursor:pointer; }
+    .mem-type button.on{ border-color:var(--green); color:var(--green-deep); }
+    .mem-md{ display:flex; gap:8px; margin-bottom:10px; }
+    .mem-md select{ flex:1; padding:9px 6px; border:1px solid var(--line); border-radius:10px;
+                    font-size:13px; background:var(--card2); color:var(--ink); color-scheme:dark; }
+    #mem-edit-modal select{ width:100%; margin-bottom:10px; padding:9px 6px;
+                            border:1px solid var(--line); border-radius:10px; font-size:13px;
+                            background:var(--card2); color:var(--ink); color-scheme:dark;
+                            box-sizing:border-box; }
+    .mem-pin-row{ display:flex; align-items:center; gap:6px; font-size:13px;
+                  color:var(--muted); margin-bottom:6px; }
+    .mem-pin-row input{ accent-color:var(--green); width:16px; height:16px; }
 
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
@@ -399,6 +443,12 @@
         <button id="exit-demo" type="button">退出示例</button>
       </div>
 
+      <!-- Day 21：倒数日提醒条（有事件进入提醒窗口时出现，点击直达列表） -->
+      <div id="mem-banner" hidden>
+        <span id="mem-banner-text"></span>
+        <button id="mem-banner-open" type="button">查看</button>
+      </div>
+
       <!-- 状态③空 / 状态④数据：content 内部切换 -->
       <div id="content">
         <div class="card" id="today-card">
@@ -447,7 +497,7 @@
       </div>
     </section>
 
-    <!-- 应用视图（F6 骨架，Day 17）：入口列表，子功能 Day 18-21 逐个开放 -->
+    <!-- 应用视图（F6 骨架，Day 17）：入口列表，子功能按天逐个开放（Day 21 已开倒数日） -->
     <section id="view-apps">
       <h2 class="vh">应用</h2>
       <div class="card">
@@ -467,10 +517,10 @@
           <span class="ai-txt"><b>记账</b><span>记一笔收支，看看本月结余</span></span>
           <span class="ai-soon">🔒</span>
         </button>
-        <button type="button" class="app-item" data-app="memorial" disabled>
+        <button type="button" class="app-item" data-app="memorial">
           <span class="ai-badge"><img src="assets/icon-memorial.png" alt="纪念与倒数日" /></span>
           <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
-          <span class="ai-soon">🔒</span>
+          <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="affirm" disabled>
           <span class="ai-badge"><img src="assets/icon-affirm.png" alt="肯定语" /></span>
@@ -641,6 +691,58 @@
   </div>
 </div>
 
+<!-- 弹窗 7：纪念 & 倒数日列表（Day 21，F6） -->
+<div class="overlay" id="mem-modal" hidden>
+  <div class="modal" style="max-width:380px">
+    <h3>纪念 &amp; 倒数日</h3>
+    <div class="mem-books" id="mem-books"></div>
+    <div id="mem-list"></div>
+    <div id="mem-empty" class="mini-empty" hidden>
+      <span>还没有倒数日，点下面的 ＋ 加一个</span>
+    </div>
+    <div class="row">
+      <button id="mem-add" type="button">＋ 添加</button>
+      <button id="mem-close" type="button">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗 8：添加/编辑倒数日（Day 21，F6）：名称 + 公历/农历 + 月日 + 本子 + 提醒 + 置顶 -->
+<div class="overlay" id="mem-edit-modal" hidden>
+  <div class="modal" style="max-width:380px">
+    <h3 id="mem-edit-title">添加倒数日</h3>
+    <input id="mem-name" placeholder="事件名称，如：妈妈生日" maxlength="20" />
+    <div class="mem-type" id="mem-type">
+      <button type="button" data-type="solar" class="on">公历</button>
+      <button type="button" data-type="lunar">农历</button>
+    </div>
+    <div class="mem-md">
+      <select id="mem-month" title="月"></select>
+      <select id="mem-day" title="日"></select>
+    </div>
+    <input id="mem-book" placeholder="纪念本（选填），如：节日 / 家庭" maxlength="8" list="mem-book-opts" />
+    <datalist id="mem-book-opts">
+      <option value="节日"></option>
+      <option value="家庭"></option>
+      <option value="生日"></option>
+      <option value="目标"></option>
+    </datalist>
+    <select id="mem-advance" title="提醒">
+      <option value="0">不提醒</option>
+      <option value="1">提前 1 天提醒</option>
+      <option value="3">提前 3 天提醒</option>
+      <option value="7">提前 7 天提醒</option>
+    </select>
+    <label class="mem-pin-row">
+      <input type="checkbox" id="mem-pin" /> 置顶显示
+    </label>
+    <div class="row">
+      <button id="mem-edit-cancel" type="button">取消</button>
+      <button id="mem-edit-ok" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -651,11 +753,29 @@
 <!-- Toast 轻提示（Day 11 交互反馈） -->
 <div id="toast" role="status" aria-live="polite"></div>
 
+<!-- 农历/公历互转（Day 21）：solarlunar v2.0.7（MIT License, github.com/waterbeside/solarlunar），内联以支持离线 -->
+<script>
+!function(b,f){"object"==typeof exports&&"object"==typeof module?module.exports=f():"function"==typeof define&&define.amd?define("solarlunar",[],f):"object"==typeof exports?exports.solarlunar=f():b.solarlunar=f()}(this,function(){return function(b){function f(c){if(e[c])return e[c].exports;var t=e[c]={i:c,l:!1,exports:{}};return b[c].call(t.exports,t,t.exports,f),t.l=!0,t.exports}var e={};return f.m=b,f.c=e,f.d=function(b,e,c){f.o(b,e)||Object.defineProperty(b,e,{configurable:!1,enumerable:!0,get:c})},f.n=function(b){var e=b&&b.__esModule?function(){return b.default}:function(){return b};return f.d(e,"a",e),e},f.o=function(b,f){return Object.prototype.hasOwnProperty.call(b,f)},f.p="",f(f.s=0)}([function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0});var c=e(1),t=function(b){return b&&b.__esModule?b:{default:b}}(c);f.default=t.default,b.exports=f.default},function(b,f,e){"use strict";function c(b){return b&&b.__esModule?b:{default:b}}Object.defineProperty(f,"__esModule",{value:!0});var t=e(2),a=c(t),r=e(3),n=c(r),d=e(4),u=c(d),s=e(5),o=c(s),l=e(6),i=c(l),p=e(7),y=c(p),h=e(8),v=c(h),g=e(9),D=c(g),M=e(10),_=c(M),m=e(11),x=c(m),T=e(12),j=c(T),I={lunarInfo:a.default,solarMonth:n.default,gan:u.default,zhi:o.default,animals:i.default,lunarTerm:y.default,lTermInfo:v.default,nStr1:D.default,nStr2:_.default,nStr3:x.default,nStr4:j.default,lYearDays:function(b){var f,e=348;for(f=32768;f>8;f>>=1)e+=I.lunarInfo[b-1900]&f?1:0;return e+I.leapDays(b)},leapMonth:function(b){return 15&I.lunarInfo[b-1900]},leapDays:function(b){return I.leapMonth(b)?65536&I.lunarInfo[b-1900]?30:29:0},monthDays:function(b,f){return f>12||f<1?-1:I.lunarInfo[b-1900]&65536>>f?30:29},solarDays:function(b,f){if(f>12||f<1)return-1;var e=f-1;return 1==e?b%4==0&&b%100!=0||b%400==0?29:28:I.solarMonth[e]},toGanZhi:function(b){return I.gan[b%10]+I.zhi[b%12]},getTerm:function(b,f){if(b<1900||b>2100)return-1;if(f<1||f>24)return-1;var e=I.lTermInfo[b-1900],c=[parseInt("0x"+e.substr(0,5)).toString(),parseInt("0x"+e.substr(5,5)).toString(),parseInt("0x"+e.substr(10,5)).toString(),parseInt("0x"+e.substr(15,5)).toString(),parseInt("0x"+e.substr(20,5)).toString(),parseInt("0x"+e.substr(25,5)).toString()],t=[c[0].substr(0,1),c[0].substr(1,2),c[0].substr(3,1),c[0].substr(4,2),c[1].substr(0,1),c[1].substr(1,2),c[1].substr(3,1),c[1].substr(4,2),c[2].substr(0,1),c[2].substr(1,2),c[2].substr(3,1),c[2].substr(4,2),c[3].substr(0,1),c[3].substr(1,2),c[3].substr(3,1),c[3].substr(4,2),c[4].substr(0,1),c[4].substr(1,2),c[4].substr(3,1),c[4].substr(4,2),c[5].substr(0,1),c[5].substr(1,2),c[5].substr(3,1),c[5].substr(4,2)];return parseInt(t[f-1])},toChinaYear:function(b){var f=parseInt(b/1e3),e=parseInt(b%1e3/100),c=parseInt(b%100/10),t=b%10;return I.nStr4[f]+I.nStr4[e]+I.nStr4[c]+I.nStr4[t]+"年"},toChinaMonth:function(b){if(b>12||b<1)return-1;var f=I.nStr3[b-1];return f+="月"},toChinaDay:function(b){var f;switch(b){case 10:f="初十";break;case 20:f="二十";break;case 30:f="三十";break;default:f=I.nStr2[Math.floor(b/10)],f+=I.nStr1[b%10]}return f},getAnimal:function(b){return I.animals[(b-4)%12]},solar2lunar:function(b,f,e){if(b<1900||b>2100)return-1;if(1900==b&&1==f&&e<31)return-1;if(b)var c=new Date(b,parseInt(f)-1,e);else var c=new Date;var t,a=0,r=0,b=c.getFullYear(),f=c.getMonth()+1,e=c.getDate(),n=(Date.UTC(c.getFullYear(),c.getMonth(),c.getDate())-Date.UTC(1900,0,31))/864e5;for(t=1900;t<2101&&n>0;t++)r=I.lYearDays(t),n-=r;n<0&&(n+=r,t--);var d=new Date,u=!1;d.getFullYear()==b&&d.getMonth()+1==f&&d.getDate()==e&&(u=!0);var s=c.getDay(),o=I.nStr1[s];0==s&&(s=7);var l=t,a=I.leapMonth(t),i=!1;for(t=1;t<13&&n>0;t++)a>0&&t==a+1&&0==i?(--t,i=!0,r=I.leapDays(l)):r=I.monthDays(l,t),1==i&&t==a+1&&(i=!1),n-=r;0==n&&a>0&&t==a+1&&(i?i=!1:(i=!0,--t)),n<0&&(n+=r,--t);var p=t,y=n+1,h=f-1,v=I.getTerm(b,3),g=I.toGanZhi(b-4),D=new Date(b,1,v).getTime();new Date(b,h,e).getTime()<D&&(g=I.toGanZhi(b-5));var M=I.getTerm(b,2*f-1),_=I.getTerm(b,2*f),m=I.toGanZhi(12*(b-1900)+f+11);e>=M&&(m=I.toGanZhi(12*(b-1900)+f+12));var x=!1,T="";M==e&&(x=!0,T=I.lunarTerm[2*f-2]),_==e&&(x=!0,T=I.lunarTerm[2*f-1]);var j=Date.UTC(b,h,1,0,0,0,0)/864e5+25567+10,S=I.toGanZhi(j+e-1);return{lYear:l,lMonth:p,lDay:y,animal:I.getAnimal(l),yearCn:I.toChinaYear(l),monthCn:(i&&a===p?"闰":"")+I.toChinaMonth(p),dayCn:I.toChinaDay(y),cYear:b,cMonth:f,cDay:e,gzYear:g,gzMonth:m,gzDay:S,isToday:u,isLeap:i,nWeek:s,ncWeek:"星期"+o,isTerm:x,term:T}},lunar2solar:function(b,f,e,c){var t=I.leapMonth(b);I.leapDays(b);if(c&&t!=f)return-1;if(2100==b&&12==f&&e>1||1900==b&&1==f&&e<31)return-1;var a=I.monthDays(b,f);if(b<1900||b>2100||e>a)return-1;for(var r=0,n=1900;n<b;n++)r+=I.lYearDays(n);for(var d=0,u=!1,n=1;n<f;n++)d=I.leapMonth(b),u||d<=n&&d>0&&(r+=I.leapDays(b),u=!0),r+=I.monthDays(b,n);c&&(r+=a);var s=Date.UTC(1900,1,30,0,0,0),o=new Date(864e5*(r+e-31)+s),l=o.getUTCFullYear(),i=o.getUTCMonth()+1,p=o.getUTCDate();return I.solar2lunar(l,i,p)}};f.default=I,b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=[19416,19168,42352,21717,53856,55632,91476,22176,39632,21970,19168,42422,42192,53840,119381,46400,54944,44450,38320,84343,18800,42160,46261,27216,27968,109396,11104,38256,21234,18800,25958,54432,59984,28309,23248,11104,100067,37600,116951,51536,54432,120998,46416,22176,107956,9680,37584,53938,43344,46423,27808,46416,86869,19872,42416,83315,21168,43432,59728,27296,44710,43856,19296,43748,42352,21088,62051,55632,23383,22176,38608,19925,19152,42192,54484,53840,54616,46400,46752,103846,38320,18864,43380,42160,45690,27216,27968,44870,43872,38256,19189,18800,25776,29859,59984,27480,23232,43872,38613,37600,51552,55636,54432,55888,30034,22176,43959,9680,37584,51893,43344,46240,47780,44368,21977,19360,42416,86390,21168,43312,31060,27296,44368,23378,19296,42726,42208,53856,60005,54576,23200,30371,38608,19195,19152,42192,118966,53840,54560,56645,46496,22224,21938,18864,42359,42160,43600,111189,27936,44448,84835,37744,18936,18800,25776,92326,59984,27424,108228,43744,37600,53987,51552,54615,54432,55888,23893,22176,42704,21972,21200,43448,43344,46240,46758,44368,21920,43940,42416,21168,45683,26928,29495,27296,44368,84821,19296,42352,21732,53600,59752,54560,55968,92838,22224,19168,43476,42192,53584,62034,54560],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=[31,28,31,30,31,30,31,31,30,31,30,31],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["甲","乙","丙","丁","戊","己","庚","辛","壬","癸"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["子","丑","寅","卯","辰","巳","午","未","申","酉","戌","亥"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["鼠","牛","虎","兔","龙","蛇","马","羊","猴","鸡","狗","猪"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["小寒","大寒","立春","雨水","惊蛰","春分","清明","谷雨","立夏","小满","芒种","夏至","小暑","大暑","立秋","处暑","白露","秋分","寒露","霜降","立冬","小雪","大雪","冬至"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c3598082c95f8c965cc920f","97bd0b06bdb0722c965ce1cfcc920f","b027097bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c359801ec95f8c965cc920f","97bd0b06bdb0722c965ce1cfcc920f","b027097bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c359801ec95f8c965cc920f","97bd0b06bdb0722c965ce1cfcc920f","b027097bd097c36b0b6fc9274c91aa","9778397bd19801ec9210c965cc920e","97b6b97bd19801ec95f8c965cc920f","97bd09801d98082c95f8e1cfcc920f","97bd097bd097c36b0b6fc9210c8dc2","9778397bd197c36c9210c9274c91aa","97b6b97bd19801ec95f8c965cc920e","97bd09801d98082c95f8e1cfcc920f","97bd097bd097c36b0b6fc9210c8dc2","9778397bd097c36c9210c9274c91aa","97b6b97bd19801ec95f8c965cc920e","97bcf97c3598082c95f8e1cfcc920f","97bd097bd097c36b0b6fc9210c8dc2","9778397bd097c36c9210c9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c3598082c95f8c965cc920f","97bd097bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c3598082c95f8c965cc920f","97bd097bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c359801ec95f8c965cc920f","97bd097bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c359801ec95f8c965cc920f","97bd097bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf97c359801ec95f8c965cc920f","97bd097bd07f595b0b6fc920fb0722","9778397bd097c36b0b6fc9210c8dc2","9778397bd19801ec9210c9274c920e","97b6b97bd19801ec95f8c965cc920f","97bd07f5307f595b0b0bc920fb0722","7f0e397bd097c36b0b6fc9210c8dc2","9778397bd097c36c9210c9274c920e","97b6b97bd19801ec95f8c965cc920f","97bd07f5307f595b0b0bc920fb0722","7f0e397bd097c36b0b6fc9210c8dc2","9778397bd097c36c9210c9274c91aa","97b6b97bd19801ec9210c965cc920e","97bd07f1487f595b0b0bc920fb0722","7f0e397bd097c36b0b6fc9210c8dc2","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf7f1487f595b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf7f1487f595b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf7f1487f531b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c965cc920e","97bcf7f1487f531b0b0bb0b6fb0722","7f0e397bd07f595b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b97bd19801ec9210c9274c920e","97bcf7f0e47f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","9778397bd097c36b0b6fc9210c91aa","97b6b97bd197c36c9210c9274c920e","97bcf7f0e47f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","9778397bd097c36b0b6fc9210c8dc2","9778397bd097c36c9210c9274c920e","97b6b7f0e47f531b0723b0b6fb0722","7f0e37f5307f595b0b0bc920fb0722","7f0e397bd097c36b0b6fc9210c8dc2","9778397bd097c36b0b70c9274c91aa","97b6b7f0e47f531b0723b0b6fb0721","7f0e37f1487f595b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc9210c8dc2","9778397bd097c36b0b6fc9274c91aa","97b6b7f0e47f531b0723b0b6fb0721","7f0e27f1487f595b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","9778397bd097c36b0b6fc9274c91aa","97b6b7f0e47f531b0723b0787b0721","7f0e27f0e47f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","9778397bd097c36b0b6fc9210c91aa","97b6b7f0e47f149b0723b0787b0721","7f0e27f0e47f531b0723b0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","9778397bd097c36b0b6fc9210c8dc2","977837f0e37f149b0723b0787b0721","7f07e7f0e47f531b0723b0b6fb0722","7f0e37f5307f595b0b0bc920fb0722","7f0e397bd097c35b0b6fc9210c8dc2","977837f0e37f14998082b0787b0721","7f07e7f0e47f531b0723b0b6fb0721","7f0e37f1487f595b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc9210c8dc2","977837f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","977837f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd097c35b0b6fc920fb0722","977837f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","977837f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","977837f0e37f14998082b0787b06bd","7f07e7f0e47f149b0723b0787b0721","7f0e27f0e47f531b0b0bb0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","977837f0e37f14998082b0723b06bd","7f07e7f0e37f149b0723b0787b0721","7f0e27f0e47f531b0723b0b6fb0722","7f0e397bd07f595b0b0bc920fb0722","977837f0e37f14898082b0723b02d5","7ec967f0e37f14998082b0787b0721","7f07e7f0e47f531b0723b0b6fb0722","7f0e37f1487f595b0b0bb0b6fb0722","7f0e37f0e37f14898082b0723b02d5","7ec967f0e37f14998082b0787b0721","7f07e7f0e47f531b0723b0b6fb0722","7f0e37f1487f531b0b0bb0b6fb0722","7f0e37f0e37f14898082b0723b02d5","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e37f1487f531b0b0bb0b6fb0722","7f0e37f0e37f14898082b072297c35","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e37f0e37f14898082b072297c35","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e37f0e366aa89801eb072297c35","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f149b0723b0787b0721","7f0e27f1487f531b0b0bb0b6fb0722","7f0e37f0e366aa89801eb072297c35","7ec967f0e37f14998082b0723b06bd","7f07e7f0e47f149b0723b0787b0721","7f0e27f0e47f531b0723b0b6fb0722","7f0e37f0e366aa89801eb072297c35","7ec967f0e37f14998082b0723b06bd","7f07e7f0e37f14998083b0787b0721","7f0e27f0e47f531b0723b0b6fb0722","7f0e37f0e366aa89801eb072297c35","7ec967f0e37f14898082b0723b02d5","7f07e7f0e37f14998082b0787b0721","7f07e7f0e47f531b0723b0b6fb0722","7f0e36665b66aa89801e9808297c35","665f67f0e37f14898082b0723b02d5","7ec967f0e37f14998082b0787b0721","7f07e7f0e47f531b0723b0b6fb0722","7f0e36665b66a449801e9808297c35","665f67f0e37f14898082b0723b02d5","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e36665b66a449801e9808297c35","665f67f0e37f14898082b072297c35","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e26665b66a449801e9808297c35","665f67f0e37f1489801eb072297c35","7ec967f0e37f14998082b0787b06bd","7f07e7f0e47f531b0723b0b6fb0721","7f0e27f1487f531b0b0bb0b6fb0722"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["日","一","二","三","四","五","六","七","八","九","十"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["初","十","廿","卅"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["正","二","三","四","五","六","七","八","九","十","冬","腊"],b.exports=f.default},function(b,f,e){"use strict";Object.defineProperty(f,"__esModule",{value:!0}),f.default=["零","一","二","三","四","五","六","七","八","九","十"],b.exports=f.default}])});
+</script>
+
 <script>
   // ===== 铁律：所有 localStorage 读写只走 loadData / saveData =====
   const KEY = 'habit-tracker-v1';
-  const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] }, profile: { name: '', theme: 'dark' }, meta: {} });
-  const fillDefaults = (d) => { const def = defaults(); for (const k in def) if (!(k in d)) d[k] = def[k]; return d; };
+  // Day 21：默认自带「春节」倒数日（农历正月初一，置顶，提前 7 天提醒）
+  const DEFAULT_MEMORIALS = [{
+    id: 'mem-spring', name: '春节', type: 'lunar', month: 1, day: 1,
+    book: '节日', advance: 7, isPinned: true, created: Date.now()
+  }];
+  const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
+                            anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
+                            profile: { name: '', theme: 'dark' }, meta: {} });
+  // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
+  const fillDefaults = (d) => {
+    const def = defaults();
+    for (const k in def) if (!(k in d)) d[k] = def[k];
+    if (!Array.isArray(d.anniversaries)) d.anniversaries = def.anniversaries;
+    return d;
+  };
   const loadData = () => {
     const raw = localStorage.getItem(KEY);
     if (raw === null) return defaults();
@@ -1199,6 +1319,7 @@
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
     renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
+    checkMemReminders();                                    // Day 21：提醒条随渲染刷新
   };
 
   // ===== 统一取数入口（打开 / 重试）=====
@@ -1380,6 +1501,10 @@
         showToast('已切到「今天」，安排都在这里');
       } else if (item.dataset.app === 'timer') {
         openTimer();
+      } else if (item.dataset.app === 'memorial') {                         // Day 21：倒数日列表
+        memBookFilter = '';
+        el('mem-modal').hidden = false;
+        renderMemorials();
       }
     });
   });
@@ -1495,6 +1620,250 @@
     if (input.value && Number.isFinite(v) && v >= 1 && v <= 180) setTimerCustom();
     else input.hidden = true;
   });
+
+  // ===== 纪念 & 倒数日（Day 21，F6）：公历/农历双历 + 纪念本 + 提醒 =====
+  const LUNAR_MONTH_CN = ['正月','二月','三月','四月','五月','六月','七月','八月','九月','十月','冬月','腊月'];
+  let memBookFilter = '';            // 当前纪念本筛选（'' = 全部）
+  let editingMemId = null;           // null = 新增；有值 = 编辑该条
+
+  const memItems = () => (demoMode
+    ? [ { id:'demo-1', name:'春节', type:'lunar', month:1, day:1, book:'节日', advance:7, isPinned:true },
+        { id:'demo-2', name:'阿澄生日', type:'solar', month:5, day:20, book:'家庭', advance:3, isPinned:false } ]
+    : (data ? data.anniversaries : []));
+
+  // 今天 0 点的公历年月日
+  const todayYmd = () => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() }; };
+  // 农历显示：正月初一（用 solarlunar 的中文），闰月不单独支持（MVP）
+  const lunarCn = (month, day) => {
+    const try1 = window.solarlunar.lunar2solar(2026, month, day);   // 任意年即可，只为拿中文
+    return try1 && try1 !== -1 ? (try1.monthCn + try1.dayCn) : (LUNAR_MONTH_CN[month-1] + day + '日');
+  };
+  // 核心算法：算一条倒数日的「下一个公历日期」和「还剩几天」
+  const memNext = (item) => {
+    const t = todayYmd();
+    if (item.type === 'lunar') {
+      const todayLunar = window.solarlunar.solar2lunar(t.y, t.m, t.d);      // 今天对应的农历年
+      // 先按今年农历年算；若结果已过（早于今天 0 点），再顺延一个农历年
+      let s = window.solarlunar.lunar2solar(todayLunar.lYear, item.month, item.day);
+      if (s === -1) return null;                                            // 非法农历日期
+      let date = new Date(s.cYear, s.cMonth - 1, s.cDay);
+      if (date < new Date(t.y, t.m - 1, t.d)) {
+        s = window.solarlunar.lunar2solar(todayLunar.lYear + 1, item.month, item.day);
+        if (s === -1) return null;
+        date = new Date(s.cYear, s.cMonth - 1, s.cDay);
+      }
+      return date;
+    }
+    // 公历：今年该日期，已过则取明年（2-29 特例：非闰年自动顺延到 3-1 不处理，按明年的 2-28 简化）
+    let date = new Date(t.y, item.month - 1, item.day);
+    if (date < new Date(t.y, t.m - 1, t.d)) date = new Date(t.y + 1, item.month - 1, item.day);
+    return date;
+  };
+  const memDaysLeft = (item) => {
+    const date = memNext(item);
+    if (!date) return null;
+    const t = todayYmd();
+    return Math.round((date - new Date(t.y, t.m - 1, t.d)) / 86400000);
+  };
+
+  // 倒数日列表卡片
+  const createMemCard = (item) => {
+    const left = memDaysLeft(item);
+    const row = document.createElement('div');
+    row.className = 'mem-item'; row.dataset.id = item.id;
+    const days = document.createElement('div');
+    days.className = 'mi-days';
+    if (left === null) { days.innerHTML = '无效日期<small>请编辑</small>'; }
+    else if (left === 0) days.innerHTML = '就是<small>今天</small>';
+    else days.innerHTML = left + '<small>天后</small>';
+    const txt = document.createElement('div');
+    txt.className = 'mi-txt';
+    const b = document.createElement('b'); b.textContent = item.name;
+    const sub = document.createElement('div'); sub.className = 'mi-sub';
+    const dateStr = document.createElement('span');
+    dateStr.textContent = (item.type === 'lunar' ? '农历 ' + lunarCn(item.month, item.day)
+                                                 : '公历 ' + item.month + ' 月 ' + item.day + ' 日');
+    sub.appendChild(dateStr);
+    if (item.book) { const tag = document.createElement('span'); tag.className = 'mi-tag'; tag.textContent = item.book; sub.appendChild(tag); }
+    if (item.isPinned) { const pin = document.createElement('span'); pin.className = 'mi-pin'; pin.textContent = '📌 置顶'; sub.appendChild(pin); }
+    if (item.advance > 0 && left !== null && left <= item.advance) {
+      const bell = document.createElement('span'); bell.textContent = '⏰ 提醒中'; sub.appendChild(bell);
+    }
+    txt.append(b, sub);
+    row.append(days, txt);
+    if (!demoMode) {
+      const dots = document.createElement('button');
+      dots.type = 'button'; dots.className = 'mi-dots'; dots.textContent = '···';
+      dots.title = '编辑或删除这条倒数日';
+      dots.addEventListener('click', () => {
+        closeTodoMenu(); closeNoteMenu(); closeMemMenu();
+        const menu = document.createElement('div'); menu.className = 'menu';
+        const edit = document.createElement('button');
+        edit.type = 'button'; edit.textContent = '编辑';
+        edit.addEventListener('click', () => { closeMemMenu(); openMemEdit(item); });
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'danger'; del.textContent = '删除';
+        del.addEventListener('click', () => {
+          closeMemMenu();
+          if (!confirm('确定删除「' + item.name + '」吗？')) return;
+          data.anniversaries = data.anniversaries.filter(x => x.id !== item.id);
+          saveData(data); renderMemorials(); checkMemReminders();
+          showToast('已删除');
+        });
+        menu.append(edit, del);
+        row.classList.add('menu-open');
+        row.appendChild(menu);
+      });
+      row.appendChild(dots);
+    }
+    return row;
+  };
+  const closeMemMenu = () => {
+    document.querySelectorAll('.mem-item .menu').forEach(m => m.remove());
+    document.querySelectorAll('.mem-item.menu-open').forEach(t => t.classList.remove('menu-open'));
+  };
+
+  // 纪念本筛选 chips + 列表
+  const renderMemorials = () => {
+    const books = el('mem-books'); books.textContent = '';
+    const list = el('mem-list'); list.textContent = '';
+    let items = memItems();
+    const allBooks = [...new Set(items.filter(i => i.book).map(i => i.book))];
+    const mkChip = (label, val) => {
+      const c = document.createElement('button');
+      c.type = 'button'; c.textContent = label;
+      c.classList.toggle('on', memBookFilter === val);
+      c.addEventListener('click', () => { memBookFilter = (memBookFilter === val) ? '' : val; renderMemorials(); });
+      return c;
+    };
+    books.appendChild(mkChip('全部', ''));
+    allBooks.forEach(bk => books.appendChild(mkChip(bk, bk)));
+    if (memBookFilter) items = items.filter(i => i.book === memBookFilter);
+    // 排序：置顶优先，其余按剩余天数升序（无效日期排最后）
+    items = items.slice().sort((a, b) => {
+      if (!!b.isPinned !== !!a.isPinned) return b.isPinned ? 1 : -1;
+      const la = memDaysLeft(a), lb = memDaysLeft(b);
+      if (la === null) return 1; if (lb === null) return -1;
+      return la - lb;
+    });
+    items.forEach(i => list.appendChild(createMemCard(i)));
+    el('mem-empty').hidden = items.length > 0;
+    el('mem-add').hidden = demoMode;
+  };
+
+  // 添加 / 编辑弹窗
+  const fillMemDayOptions = (month, type) => {
+    const daySel = el('mem-day');
+    daySel.textContent = '';
+    const maxDay = type === 'lunar' ? 30 : new Date(todayYmd().y, month, 0).getDate();
+    for (let d = 1; d <= maxDay; d++) {
+      const o = document.createElement('option');
+      o.value = d;
+      o.textContent = type === 'lunar' ? (window.solarlunar.lunar2solar(2026, month, d) !== -1 ? window.solarlunar.lunar2solar(2026, month, d).dayCn : (d + '日')) : (d + '日');
+      daySel.appendChild(o);
+    }
+  };
+  const openMemEdit = (item) => {
+    editingMemId = item ? item.id : null;
+    el('mem-edit-title').textContent = item ? '编辑倒数日' : '添加倒数日';
+    el('mem-name').value = item ? item.name : '';
+    const type = item ? item.type : 'solar';
+    document.querySelectorAll('#mem-type button').forEach(b => b.classList.toggle('on', b.dataset.type === type));
+    // 月份选项：公历 1-12 月；农历正月至腊月
+    const monthSel = el('mem-month'); monthSel.textContent = '';
+    for (let m = 1; m <= 12; m++) {
+      const o = document.createElement('option');
+      o.value = m;
+      o.textContent = type === 'lunar' ? LUNAR_MONTH_CN[m-1] : (m + ' 月');
+      monthSel.appendChild(o);
+    }
+    monthSel.value = item ? item.month : 1;
+    fillMemDayOptions(Number(monthSel.value), type);
+    el('mem-day').value = item ? item.day : 1;
+    el('mem-book').value = item ? (item.book || '') : '';
+    el('mem-advance').value = item ? (item.advance || 0) : 0;
+    el('mem-pin').checked = item ? !!item.isPinned : false;
+    el('mem-edit-modal').hidden = false;
+    el('mem-name').focus();
+  };
+  document.querySelectorAll('#mem-type button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#mem-type button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      const type = b.dataset.type;
+      const monthSel = el('mem-month'); monthSel.textContent = '';
+      for (let m = 1; m <= 12; m++) {
+        const o = document.createElement('option');
+        o.value = m;
+        o.textContent = type === 'lunar' ? LUNAR_MONTH_CN[m-1] : (m + ' 月');
+        monthSel.appendChild(o);
+      }
+      monthSel.value = 1;
+      fillMemDayOptions(1, type);
+      el('mem-day').value = 1;
+    });
+  });
+  el('mem-month').addEventListener('change', () => {
+    const type = document.querySelector('#mem-type button.on').dataset.type;
+    fillMemDayOptions(Number(el('mem-month').value), type);
+  });
+  el('mem-add').addEventListener('click', () => openMemEdit(null));
+  el('mem-edit-cancel').addEventListener('click', () => { el('mem-edit-modal').hidden = true; });
+  el('mem-edit-ok').addEventListener('click', () => {
+    if (demoMode || !data) { el('mem-edit-modal').hidden = true; return; }
+    const name = el('mem-name').value.trim();
+    if (!name) { showToast('先给这件事起个名字'); return; }
+    const type = document.querySelector('#mem-type button.on').dataset.type;
+    const month = Number(el('mem-month').value), day = Number(el('mem-day').value);
+    if (type === 'lunar' && window.solarlunar.lunar2solar(2026, month, day) === -1) {
+      showToast('这个农历日期不存在，换一个'); return;
+    }
+    if (type === 'solar' && day > new Date(todayYmd().y, month, 0).getDate()) {
+      showToast('这个公历日期不存在，换一个'); return;
+    }
+    const fields = { name, type, month, day,
+                    book: el('mem-book').value.trim(),
+                    advance: Number(el('mem-advance').value) || 0,
+                    isPinned: el('mem-pin').checked };
+    if (editingMemId) {
+      const t = data.anniversaries.find(x => x.id === editingMemId);
+      if (t) Object.assign(t, fields);
+      showToast('已保存修改');
+    } else {
+      fields.id = Date.now() + '-' + Math.floor(Math.random()*1000);
+      fields.created = Date.now();
+      data.anniversaries.push(fields);
+      showToast('已添加「' + name + '」');
+    }
+    saveData(data);
+    el('mem-edit-modal').hidden = true;
+    renderMemorials(); checkMemReminders();
+  });
+  el('mem-close').addEventListener('click', () => { el('mem-modal').hidden = true; });
+  el('mem-banner-open').addEventListener('click', () => {
+    document.querySelector('nav button[data-view="apps"]').click();
+    el('mem-modal').hidden = false;
+    renderMemorials();
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.mem-item .menu') && !e.target.closest('.mem-item .mi-dots')) closeMemMenu();
+  });
+
+  // 提醒条：有事件进入提醒窗口（advance > 0 且 0 <= 剩余 <= advance）时出现
+  const checkMemReminders = () => {
+    if (demoMode || !data) { el('mem-banner').hidden = true; return; }
+    const due = (data.anniversaries || [])
+      .filter(a => a.advance > 0)
+      .map(a => ({ a, left: memDaysLeft(a) }))
+      .filter(x => x.left !== null && x.left >= 0 && x.left <= x.a.advance)
+      .sort((x, y) => x.left - y.left);
+    if (!due.length) { el('mem-banner').hidden = true; return; }
+    const { a, left } = due[0];
+    el('mem-banner-text').textContent = '⏰ 「' + a.name + '」' + (left === 0 ? '就是今天！' : '还有 ' + left + ' 天')
+      + (due.length > 1 ? '（还有 ' + (due.length - 1) + ' 件在提醒中）' : '');
+    el('mem-banner').hidden = false;
+  };
+
 
   // ===== 启动 =====
   refreshDay();
