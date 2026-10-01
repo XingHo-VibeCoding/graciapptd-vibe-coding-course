@@ -650,7 +650,7 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 | 项 | 值 | 更新时间 |
 |---|---|---|
 | 云函数名 | `api`（内部路由 `/api/health`） | 2026-10-01 |
-| 环境 ID | **待填**（按附录 M 开通后补） | — |
+| 环境 ID | `habit-tracker-d3ghf0mjer76ffo02`（2026-10-01 21:55 开通，免费体验版·上海） | 2026-10-01 |
 | 云函数公网地址 | **待填**（部署成功后补，形如 `https://<环境ID>.service.tcloudbase.com/api/health`） | — |
 | 前端 mock 版公网地址 | **待填**（静态托管部署成功后补） | — |
 
