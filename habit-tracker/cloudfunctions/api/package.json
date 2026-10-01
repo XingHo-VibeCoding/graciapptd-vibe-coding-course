@@ -1,0 +1,10 @@
+{
+  "name": "habit-tracker-api",
+  "version": "0.1.0",
+  "description": "自律计划云函数：统一承载 REST 接口（Day 15 起，首个接口 GET /api/health）",
+  "main": "index.js",
+  "private": true,
+  "engines": {
+    "node": ">=16"
+  }
+}
