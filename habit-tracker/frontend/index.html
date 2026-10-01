@@ -50,16 +50,25 @@
     body{ font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
           margin:0; color:var(--ink); min-height:100vh;
           background:var(--bg); }
-    .app{ max-width:480px; margin:0 auto; padding:0 16px 108px; }
+    .app{ width:100%; max-width:480px; margin:0 auto; padding:0 16px 108px; }
+    /* 精进 8：手机软件形态——宽屏（≥520px，桌面预览）时页面呈"手机窗"：
+       内容列收窄到 430px、通高、边框阴影模拟机身，外围深色桌面背景；
+       手机上（<520px）不受影响，仍全屏。 */
+    @media (min-width:520px){
+      body{ background:#07080c; }
+      .app{ max-width:430px; min-height:100dvh; box-sizing:border-box; background:var(--bg);
+            box-shadow:0 0 0 1px var(--line), 0 24px 80px rgba(0,0,0,.5); }
+      nav div{ max-width:430px; }
+    }
 
-    /* ===== hero：主题图置顶，约占页面 1/4，向下渐隐入底色（仅"今天"视图）=====
-       精进 7：从 55vh 压到 25vh，图露出更少；渐变重心下移让底部过渡更柔 */
-    .hero{ position:relative; height:clamp(150px, 25vh, 230px);
+    /* ===== hero：主题图置顶大图，向下渐变入底色（仅"今天"视图）=====
+       精进 8：按用户要求恢复大图（1/4 露出太丑），渐变同原版 */
+    .hero{ position:relative; height:clamp(220px, 55vh, 460px);
            margin:0 -16px 14px; background:var(--bg) var(--hero-img)
            center 30%/cover no-repeat; }
     .hero::after{ content:""; position:absolute; inset:0;
-           background:linear-gradient(180deg, rgba(var(--veil-rgb),.38) 0%, rgba(var(--veil-rgb),0) 30%,
-                       rgba(var(--veil-rgb),.45) 62%, rgba(var(--veil-rgb),.88) 88%, var(--bg) 100%); }
+           background:linear-gradient(180deg, rgba(var(--veil-rgb),.42) 0%, rgba(var(--veil-rgb),0) 26%,
+                       rgba(var(--veil-rgb),.55) 72%, rgba(var(--veil-rgb),.92) 94%, var(--bg) 100%); }
     .hero header{ position:absolute; top:0; left:0; right:0; z-index:1;
            display:flex; justify-content:space-between; align-items:center;
            flex-wrap:wrap; gap:8px 10px; padding:16px 18px 0; }
@@ -396,7 +405,7 @@
         cursor:pointer; text-shadow:0 1px 6px rgba(0,0,0,.5); }
     #affirm-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
 
-    /* ===== 随即话题（精进 7）===== */
+    /* ===== 随即话题 · 表达练习（精进 8 改版）===== */
     #topic-box{ position:relative; max-width:340px; }
     #topic-box h3{ margin:0 0 14px; font-size:16px; }
     #topic-box .md-close{ position:absolute; left:10px; top:10px; z-index:2; border:none;
@@ -405,14 +414,40 @@
     #topic-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
     .topic-cat{ display:inline-block; font-size:11px; color:var(--accent-deep);
                 border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin-bottom:12px; }
-    #topic-box .topic-text{ font-size:18px; line-height:1.75; margin:0; min-height:96px;
-                display:flex; align-items:center; justify-content:center; color:var(--ink); }
+    #topic-box .topic-word{ font-size:24px; font-weight:700; margin:6px 0 10px; line-height:1.4;
+                color:var(--ink); }
+    #topic-box .topic-phase{ font-size:15px; font-weight:600; margin:0 0 6px; color:var(--ink); }
+    #topic-box .topic-hint{ font-size:12px; color:var(--muted); margin:4px 0 0; line-height:1.6; }
+    #topic-box .topic-timer{ font-size:44px; font-weight:700; margin:14px 0 6px;
+                font-variant-numeric:tabular-nums; color:var(--accent-deep); }
+    #topic-box .topic-rec-dot{ }                                 /* 录音红点随父级 span 上色 */
+    #topic-rec-dot{ color:var(--q1); animation:topicPulse 1.2s ease-in-out infinite; }
+    @keyframes topicPulse{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+    #topic-box .topic-dur{ display:flex; gap:8px; margin:14px 0 10px; }
+    #topic-box .topic-dur button{ flex:1; border:1px solid var(--line); background:var(--card);
+                color:var(--muted); border-radius:999px; padding:8px 0; font-size:13px;
+                cursor:pointer; font-family:inherit; }
+    #topic-box .topic-dur button.on{ background:var(--accent); border-color:var(--accent);
+                color:var(--accent-ink); font-weight:600; }
+    #topic-box .topic-rec{ display:flex; align-items:center; gap:8px; font-size:13px;
+                color:var(--ink); margin:4px 0 2px; cursor:pointer; }
+    #topic-box .topic-rec input{ accent-color:var(--accent); width:16px; height:16px; }
     .topic-actions{ display:flex; gap:10px; margin-top:16px; }
     .topic-actions button{ flex:1; padding:10px 0; border:1px solid var(--line);
                 background:transparent; color:var(--ink); border-radius:999px;
                 font-size:14px; cursor:pointer; font-family:inherit; }
-    .topic-actions #topic-next{ background:var(--accent); border-color:var(--accent);
+    .topic-actions #topic-start, .topic-actions #topic-speak, .topic-actions #topic-save{
+                background:var(--accent); border-color:var(--accent);
                 color:var(--accent-ink); font-weight:600; }
+    #topic-box .topic-dl{ flex:1; padding:10px 0; border:1px solid var(--line); border-radius:999px;
+                font-size:14px; color:var(--ink); text-align:center; text-decoration:none; }
+    #topic-audio{ width:100%; margin-top:12px; }
+    .topic-history{ margin-top:16px; border-top:1px solid var(--line); padding-top:10px;
+                text-align:left; }
+    .topic-history .th-sum{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+    .topic-history .th-row{ font-size:12px; color:var(--ink); padding:4px 0;
+                display:flex; justify-content:space-between; gap:8px; }
+    .topic-history .th-row .th-d{ color:var(--muted); flex-shrink:0; }
 
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
@@ -671,32 +706,32 @@
       <div class="card">
         <div class="apps-list" id="apps-list">
         <button type="button" class="app-item" data-app="todo">
-          <span class="ai-badge"><img src="assets/icon-todo.png" alt="待办事项" /></span>
+          <span class="ai-badge"><img src="assets/icon-todo.png?v=2" alt="待办事项" /></span>
           <span class="ai-txt"><b>待办事项</b><span>查看和管理今天的安排</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="timer">
-          <span class="ai-badge"><img src="assets/icon-timer.png" alt="专注计时" /></span>
+          <span class="ai-badge"><img src="assets/icon-timer.png?v=2" alt="专注计时" /></span>
           <span class="ai-txt"><b>专注计时</b><span>番茄钟和正计时，帮你沉下心</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="memorial">
-          <span class="ai-badge"><img src="assets/icon-memorial.png" alt="纪念与倒数日" /></span>
+          <span class="ai-badge"><img src="assets/icon-memorial.png?v=2" alt="纪念与倒数日" /></span>
           <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="affirm">
-          <span class="ai-badge"><img src="assets/icon-affirm.png" alt="肯定语" /></span>
+          <span class="ai-badge"><img src="assets/icon-affirm.png?v=2" alt="肯定语" /></span>
           <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="topic">
-          <span class="ai-badge"><img src="assets/icon-topic.png" alt="随即话题" /></span>
+          <span class="ai-badge"><img src="assets/icon-topic.png?v=2" alt="随即话题" /></span>
           <span class="ai-txt"><b>随即话题</b><span>随机一个话题，聊天不冷场</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="widget" disabled>
-          <span class="ai-badge"><img src="assets/icon-widget.png" alt="小组件" /></span>
+          <span class="ai-badge"><img src="assets/icon-widget.png?v=2" alt="小组件" /></span>
           <span class="ai-txt"><b>小组件</b><span>签到盆栽、完美日、喝水打卡</span></span>
           <span class="ai-soon">🔒</span>
         </button>
@@ -958,16 +993,60 @@
   </div>
 </div>
 
-<!-- 精进 7：随即话题——随机话题卡，换一个 / 复制 -->
+<!-- 精进 8：随即话题改造成表达能力训练——抽概念词 → 了解 5 分钟 → 演讲 10/15 分钟（可录音）→ 攒下来 -->
 <div class="overlay" id="topic-modal" hidden>
   <div class="modal" id="topic-box">
     <button id="topic-close" class="md-close" type="button" title="关闭" aria-label="关闭随即话题">✕</button>
-    <h3>随即话题</h3>
-    <span class="topic-cat" id="topic-cat" role="status"></span>
-    <p class="topic-text" id="topic-text"></p>
-    <div class="topic-actions">
-      <button id="topic-next" type="button">换一个</button>
-      <button id="topic-copy" type="button">复制</button>
+    <h3>随即话题 · 表达练习</h3>
+
+    <!-- 步骤 1：抽词 -->
+    <div id="topic-step-draw">
+      <span class="topic-cat" id="topic-cat" role="status"></span>
+      <p class="topic-word" id="topic-word"></p>
+      <p class="topic-hint">用你自己的话把这个概念讲明白——能讲清楚，才是真的懂</p>
+      <div class="topic-actions">
+        <button id="topic-redraw" type="button">再抽一次</button>
+        <button id="topic-start" type="button">开始</button>
+      </div>
+    </div>
+
+    <!-- 步骤 2：了解 5 分钟 -->
+    <div id="topic-step-learn" hidden>
+      <p class="topic-phase">快速了解「<span id="topic-learn-word"></span>」</p>
+      <p class="topic-timer" id="topic-learn-timer">5:00</p>
+      <p class="topic-hint">查资料、记要点，时间到就开始讲</p>
+      <div class="topic-actions"><button id="topic-learn-skip" type="button">跳过，直接讲</button></div>
+    </div>
+
+    <!-- 步骤 3：选演讲时长与是否录音 -->
+    <div id="topic-step-prep" hidden>
+      <p class="topic-phase">准备讲「<span id="topic-prep-word"></span>」</p>
+      <div class="topic-dur" role="group" aria-label="演讲时长">
+        <button type="button" data-dur="10" class="on" aria-pressed="true">10 分钟</button>
+        <button type="button" data-dur="15" aria-pressed="false">15 分钟</button>
+      </div>
+      <label class="topic-rec"><input type="checkbox" id="topic-rec-cb" /> 同时录音（会请求麦克风权限）</label>
+      <div class="topic-actions"><button id="topic-speak" type="button">开始演讲</button></div>
+    </div>
+
+    <!-- 步骤 4：演讲中 -->
+    <div id="topic-step-speak" hidden>
+      <p class="topic-phase">演讲中<span id="topic-rec-dot" hidden> ●</span></p>
+      <p class="topic-timer" id="topic-speak-timer">10:00</p>
+      <p class="topic-hint" id="topic-rec-hint">讲给想象中的听众，别停</p>
+      <div class="topic-actions"><button id="topic-stop" type="button">提前结束</button></div>
+    </div>
+
+    <!-- 步骤 5：完成 → 攒下来 -->
+    <div id="topic-step-done" hidden>
+      <p class="topic-phase">完成！</p>
+      <p class="topic-hint" id="topic-done-summary"></p>
+      <audio id="topic-audio" controls hidden></audio>
+      <div class="topic-actions">
+        <a id="topic-dl" class="topic-dl" download hidden>下载录音</a>
+        <button id="topic-save" type="button">攒下来</button>
+      </div>
+      <div class="topic-history" id="topic-history"></div>
     </div>
   </div>
 </div>
@@ -1004,6 +1083,7 @@
   const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
+                            speeches: [],
                             theme: Object.assign({}, DEFAULT_THEME),
                             profile: { name: '' }, meta: {} });
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
@@ -1012,6 +1092,7 @@
     for (const k in def) if (!(k in d)) d[k] = def[k];
     if (!Array.isArray(d.anniversaries)) d.anniversaries = def.anniversaries;
     if (!d.affirm) d.affirm = def.affirm;
+    if (!Array.isArray(d.speeches)) d.speeches = [];     // 精进 8：表达练习记录
     if (!d.theme || !d.theme.img) d.theme = def.theme;   // v3.5：旧数据补默认主题
     if (d.theme && !d.theme.pref) d.theme.pref = 'auto'; // 精进 7：旧数据补深浅偏好
     return d;
@@ -2379,64 +2460,158 @@
     renderAffirm();
   });
 
-  // ===== 随即话题（精进 7，F6）：随机话题卡，换一个 / 复制 =====
-  const TOPICS = [
-    { c: '破冰', t: '如果明天不用上班/上学，你最想去做什么？' },
-    { c: '破冰', t: '最近有没有吃到什么惊艳的东西？' },
-    { c: '破冰', t: '你手机里用得最多的 App 是哪个？为什么？' },
-    { c: '破冰', t: '说一部你看了不止一遍的电影。' },
-    { c: '破冰', t: '小时候最喜欢的一门课是什么？' },
-    { c: '破冰', t: '你最近一次大笑是因为什么？' },
-    { c: '破冰', t: '如果只能带三样东西去旅行，你带什么？' },
-    { c: '破冰', t: '你有什么坚持了很久的小习惯？' },
-    { c: '走心', t: '这一年你最骄傲的一件事是什么？' },
-    { c: '走心', t: '有没有一句话，在你低谷时拉过你一把？' },
-    { c: '走心', t: '你最想感谢谁？上次谢谢TA是什么时候？' },
-    { c: '走心', t: '如果能对十年前的自己说一句话，你说什么？' },
-    { c: '走心', t: '你觉得自己身上哪一点最容易被低估？' },
-    { c: '走心', t: '最近有什么让你觉得"值得"的瞬间？' },
-    { c: '走心', t: '你理想中一天是怎么度过的？' },
-    { c: '走心', t: '什么样的表扬最让你开心？' },
-    { c: '脑洞', t: '如果动物会说话，哪种最吵？' },
-    { c: '脑洞', t: '如果能瞬间掌握一项技能，你选什么？' },
-    { c: '脑洞', t: '给你一台时光机，只能去过去 24 小时，你去干嘛？' },
-    { c: '脑洞', t: '如果世界上所有菜单都只剩一道菜，你希望是什么？' },
-    { c: '脑洞', t: '你的城市突然下起了糖果雨，第一个反应是什么？' },
-    { c: '脑洞', t: '如果可以和任何一个历史人物吃晚饭，你请谁？' },
-    { c: '脑洞', t: '假如一觉醒来你会一门外语，你最想是哪国话？' },
-    { c: '脑洞', t: '如果冰箱里藏着一个缩小的人，你觉得TA在干嘛？' },
-    { c: '深夜', t: '今天有没有什么没说出口的话？' },
-    { c: '深夜', t: '你最近为什么事失眠过？' },
-    { c: '深夜', t: '有没有一件小事，想起来就觉得温暖？' },
-    { c: '深夜', t: '你害怕变老吗？为什么？' },
-    { c: '深夜', t: '如果明天是世界末日，今晚你做什么？' },
-    { c: '深夜', t: '你上一次哭是因为什么？（不想说可以跳过）' },
-    { c: '深夜', t: '你觉得自己被谁真正理解过吗？' },
-    { c: '深夜', t: '有什么遗憾，是你打算放下的？' }
+  // ===== 随即话题 · 表达练习（精进 8 改版，F6）=====
+  // 流程：抽概念词 →（再抽一次）→ 开始 → 了解 5 分钟 → 选 10/15 分钟 + 可录音 → 演讲 → 攒下来
+  const CONCEPTS = [
+    { c: '技术', t: '模型蒸馏' }, { c: '技术', t: '机器学习' }, { c: '技术', t: '区块链' },
+    { c: '技术', t: '量子计算' }, { c: '技术', t: '算法偏见' }, { c: '技术', t: '开源软件' },
+    { c: '技术', t: '增强现实' }, { c: '技术', t: '云计算' },
+    { c: '经济', t: '复利' }, { c: '经济', t: '机会成本' }, { c: '经济', t: '通货膨胀' },
+    { c: '经济', t: '护城河' }, { c: '经济', t: '边际成本' }, { c: '经济', t: '供需关系' },
+    { c: '经济', t: '股票熔断' }, { c: '经济', t: '规模效应' },
+    { c: '心理', t: '心流' }, { c: '心理', t: '锚定效应' }, { c: '心理', t: '幸存者偏差' },
+    { c: '心理', t: '认知负荷' }, { c: '心理', t: '达克效应' }, { c: '心理', t: '延迟满足' },
+    { c: '心理', t: '从众心理' }, { c: '心理', t: '刻意练习' },
+    { c: '思维', t: '第一性原理' }, { c: '思维', t: '二八定律' }, { c: '思维', t: '黑天鹅' },
+    { c: '思维', t: '灰犀牛' }, { c: '思维', t: '飞轮效应' }, { c: '思维', t: '路径依赖' },
+    { c: '思维', t: '奥卡姆剃刀' }, { c: '思维', t: '系统性思维' }
   ];
-  let topicLast = -1;                                       // 上一条索引：连续"换一个"不重复（精进 6 同款）
-  const nextTopic = () => {
+  let topicLast = -1, topicWord = null;                     // 当前抽中的词
+  let topicDur = 10, topicInterval = null, topicLeft = 0;   // 演讲时长/计时器
+  let topicUsedSec = 0, recActive = false;                  // 实际演讲秒数 / 是否在录音
+  let mediaRecorder = null, recChunks = [], recBlobUrl = '';
+  const fmtSec = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const stopTopicTimer = () => { if (topicInterval) { clearInterval(topicInterval); topicInterval = null; } };
+  const topicStep = (id) => ['topic-step-draw', 'topic-step-learn', 'topic-step-prep', 'topic-step-speak', 'topic-step-done']
+    .forEach(s => { el(s).hidden = s !== id; });
+  const drawWord = () => {
     let i;
-    do { i = Math.floor(Math.random() * TOPICS.length); } while (TOPICS.length > 1 && i === topicLast);
-    topicLast = i;
-    el('topic-text').textContent = TOPICS[i].t;
-    el('topic-cat').textContent = TOPICS[i].c;
-    el('topic-text').dataset.idx = i;                       // 测试断言用
+    do { i = Math.floor(Math.random() * CONCEPTS.length); } while (CONCEPTS.length > 1 && i === topicLast);
+    topicLast = i; topicWord = CONCEPTS[i];
+    el('topic-word').textContent = topicWord.t;
+    el('topic-cat').textContent = topicWord.c;
+    el('topic-word').dataset.idx = i;                       // 测试断言用
+  };
+  const tickTopic = (onZero) => {                           // 统一节拍：测试注入 __topicFast 提速（60s/拍）
+    const fast = !!window.__topicFast;
+    topicLeft -= fast ? 60 : 1;
+    if (topicLeft <= 0) { topicLeft = 0; stopTopicTimer(); onZero(); return; }
+    el('topic-step-learn').hidden === false
+      ? el('topic-learn-timer').textContent = fmtSec(topicLeft)
+      : el('topic-speak-timer').textContent = fmtSec(topicLeft);
+  };
+  const startLearn = () => {
+    topicStep('topic-step-learn');
+    el('topic-learn-word').textContent = topicWord.t;
+    topicLeft = 5 * 60;
+    el('topic-learn-timer').textContent = fmtSec(topicLeft);
+    stopTopicTimer();
+    topicInterval = setInterval(() => tickTopic(toPrep), window.__topicFast ? 20 : 1000);
+  };
+  const toPrep = () => {
+    stopTopicTimer();
+    topicStep('topic-step-prep');
+    el('topic-prep-word').textContent = topicWord.t;
+  };
+  const startSpeak = async () => {
+    topicStep('topic-step-speak');
+    topicLeft = topicDur * 60;
+    el('topic-speak-timer').textContent = fmtSec(topicLeft);
+    const wantRec = el('topic-rec-cb').checked;
+    const canRec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    recActive = false;
+    if (wantRec && canRec) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        recChunks = [];
+        mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+        mediaRecorder.start();
+        recActive = true;
+        el('topic-rec-hint').textContent = '正在录音 · 结束后可回放 / 下载（录音不落盘，离开页面即丢，想留就下载）';
+      } catch (e) { showToast('拿不到麦克风，改为纯计时'); }
+    } else if (wantRec && !canRec) {
+      showToast('当前环境不支持录音，改为纯计时');
+    }
+    if (recActive) { el('topic-rec-dot').hidden = false; }
+    else { el('topic-rec-dot').hidden = true; el('topic-rec-hint').textContent = '纯计时模式 · 讲给想象中的听众，别停'; }
+    stopTopicTimer();
+    topicInterval = setInterval(() => tickTopic(finishSpeak), window.__topicFast ? 20 : 1000);
+  };
+  const finishSpeak = () => {
+    stopTopicTimer();
+    topicUsedSec = topicDur * 60 - topicLeft;               // 实际演讲秒数
+    const wrapUp = (recorded) => {
+      topicStep('topic-step-done');
+      el('topic-done-summary').textContent = '「' + topicWord.t + '」讲了 '
+        + Math.max(1, Math.round(topicUsedSec / 60)) + ' 分钟' + (recorded ? '，已录下' : '');
+      const audio = el('topic-audio'), dl = el('topic-dl');
+      if (recorded && recChunks.length && window.URL && URL.createObjectURL) {
+        const blob = new Blob(recChunks, { type: recChunks[0].type || 'audio/webm' });
+        if (recBlobUrl) URL.revokeObjectURL(recBlobUrl);
+        recBlobUrl = URL.createObjectURL(blob);
+        audio.src = recBlobUrl; audio.hidden = false;
+        dl.href = recBlobUrl; dl.download = '演讲-' + topicWord.t + '.webm'; dl.hidden = false;
+      } else { audio.hidden = true; dl.hidden = true; }
+      renderTopicHistory();
+    };
+    if (recActive && mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.onstop = () => wrapUp(true);
+      try { mediaRecorder.stop(); } catch (e) { wrapUp(false); }
+      if (mediaRecorder.stream) mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    } else wrapUp(false);
+    recActive = false;
+    el('topic-rec-dot').hidden = true;
+  };
+  const renderTopicHistory = () => {
+    const box = el('topic-history');
+    const list = (data && Array.isArray(data.speeches)) ? data.speeches : [];
+    const rows = list.slice(-5).reverse().map(s =>
+      '<div class="th-row"><span>' + s.word + ' · ' + s.minutes + ' 分钟' + (s.recorded ? ' · 🎙' : '')
+      + '</span><span class="th-d">' + s.date + '</span></div>').join('');
+    box.innerHTML = list.length
+      ? '<div class="th-sum">已积累 ' + list.length + ' 次表达练习</div>' + rows
+      : '<div class="th-sum">还没有记录，完成一次演讲点「攒下来」</div>';
+  };
+  const saveSpeech = () => {
+    if (demoMode || !data) return;
+    if (!Array.isArray(data.speeches)) data.speeches = [];
+    data.speeches.push({ date: todayStr(), word: topicWord.t, cat: topicWord.c,
+                         minutes: Math.max(1, Math.round(topicUsedSec / 60)), recorded: false });
+    saveData(data);
+    renderTopicHistory();
+    showToast('已攒下，第 ' + data.speeches.length + ' 次表达练习');
   };
   const openTopic = () => {
+    stopTopicTimer();
+    topicStep('topic-step-draw');
+    drawWord();
     el('topic-modal').hidden = false;
-    nextTopic();
   };
-  el('topic-close').addEventListener('click', () => { el('topic-modal').hidden = true; });
-  el('topic-next').addEventListener('click', nextTopic);
-  el('topic-copy').addEventListener('click', async () => {
-    const text = el('topic-text').textContent;
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
-      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
-             ta.select(); document.execCommand('copy'); ta.remove(); }
-      showToast('已复制，发给身边的人吧');
-    } catch (e) { showToast('复制失败，请长按手动复制'); }
+  el('topic-close').addEventListener('click', () => {
+    stopTopicTimer();
+    if (recActive && mediaRecorder && mediaRecorder.state !== 'inactive') {
+      try { mediaRecorder.stop(); } catch (e) {}
+      if (mediaRecorder.stream) mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      recActive = false;
+    }
+    el('topic-modal').hidden = true;
+  });
+  el('topic-redraw').addEventListener('click', drawWord);
+  el('topic-start').addEventListener('click', startLearn);
+  el('topic-learn-skip').addEventListener('click', toPrep);
+  el('topic-speak').addEventListener('click', startSpeak);
+  el('topic-stop').addEventListener('click', finishSpeak);
+  el('topic-save').addEventListener('click', saveSpeech);
+  el('topic-box').querySelectorAll('.topic-dur button').forEach(b => {
+    b.addEventListener('click', () => {
+      topicDur = +b.dataset.dur;
+      el('topic-box').querySelectorAll('.topic-dur button').forEach(x => {
+        const on = x === b;
+        x.classList.toggle('on', on);
+        x.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    });
   });
 
   // ===== 主题换肤引擎（v3.5）：全部本地 canvas 像素分析，零网络请求（R6 隐私红线）=====
