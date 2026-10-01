@@ -89,11 +89,20 @@
     .week button.today .wd{ color:var(--accent-ink); }
     .week button.today .dn{ color:var(--accent-ink); }
 
-    /* ===== 筛选标签 ===== */
+    /* ===== 筛选标签（Day 12：选中态除颜色外，另加字重做非颜色线索，C6）===== */
     .tags{ display:flex; gap:8px; margin-bottom:14px; }
     .tags button{ border:1px solid var(--line); background:var(--card); color:var(--muted);
                   border-radius:999px; padding:5px 18px; font-size:13px; cursor:pointer; }
-    .tags button.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+    .tags button.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink);
+                     font-weight:600; }
+    /* 筛选状态行（Day 12）：筛了谁 + 命中几条 + 就地清空 */
+    .filter-status{ display:flex; align-items:center; justify-content:space-between; gap:10px;
+                    margin:-4px 0 12px; padding:8px 12px; background:var(--card2);
+                    border:1px dashed var(--line); border-radius:10px;
+                    color:var(--muted); font-size:13px; }
+    .filter-status[hidden]{ display:none; }   /* 防止 display:flex 盖掉 hidden */
+    .filter-status button{ border:none; background:transparent; color:var(--accent-deep);
+                           font-size:13px; cursor:pointer; padding:2px 4px; }
 
     /* ===== Day 8 四状态：加载 / 错误（空与数据在 content 内部切换）===== */
     .state{ text-align:center; padding:44px 0; color:var(--muted); font-size:14px; }
@@ -546,9 +555,14 @@
 
       <div class="week" id="week-strip"></div>
 
-      <div class="tags">
-        <button type="button" id="tag-all" class="on">全部</button>
-        <button type="button" id="tag-timeline">时间轴</button>
+      <!-- Day 12：筛选标签 + 状态行（role=group / aria-pressed / role=status 供读屏识别） -->
+      <div class="tags" id="filter-tags" role="group" aria-label="今日待做筛选">
+        <button type="button" id="tag-all" class="on" aria-pressed="true">全部</button>
+        <button type="button" id="tag-timeline" aria-pressed="false">时间轴</button>
+      </div>
+      <div id="filter-status" class="filter-status" role="status" aria-live="polite" hidden>
+        <span id="filter-status-text"></span>
+        <button type="button" id="filter-clear">清空筛选</button>
       </div>
 
       <div id="readonly-hint">这一天只能查看，添加和勾选仅限今天</div>
@@ -593,6 +607,11 @@
           <div id="unassigned-wrap" hidden>
             <div class="group-label">未安排</div>
             <div id="unassigned-list"></div>
+          </div>
+          <!-- Day 12：态②无结果——有数据但被筛没了，说明原因并给就地恢复入口 -->
+          <div id="filter-empty" class="mini-empty" role="status" aria-live="polite" hidden>
+            <span id="filter-empty-text"></span>
+            <button id="filter-empty-clear" type="button">清空筛选，看全部 →</button>
           </div>
           <div id="today-empty" class="mini-empty" hidden>
             <span id="empty-text">今天还没有安排，写一条试试</span>
@@ -1192,11 +1211,14 @@
     return row;
   };
 
-  // ===== 今日待做（F1 + 四象限标注）=====
+  // ===== 今日待做（F1 + 四象限标注 + Day 12 筛选三态）=====
+  const FILTER_LABEL = { all: '全部', timeline: '时间轴' };
+  const FILTER_EMPTY_REASON = { timeline: '都没设时间' };   // 无结果时解释"为什么空"
   const renderToday = () => {
     const isToday = currentDate === todayStr();
-    let list = demoMode ? mockToday() : getTodos(currentDate);
-    if (filter === 'timeline') list = list.filter(t => t.time);   // 筛选：时间轴=只看带时间的
+    const all = demoMode ? mockToday() : getTodos(currentDate);
+    const filtering = filter !== 'all';
+    const list = filtering ? all.filter(t => t.time) : all;   // 筛选：时间轴=只看带时间的
     const interactive = isToday && !demoMode;
     const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
     const untimed = list.filter(t => !t.time);
@@ -1208,11 +1230,24 @@
     const unList = el('unassigned-list'); unList.textContent = '';
     untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
 
-    const total = (demoMode ? mockToday() : getTodos(currentDate)).length;
-    const done  = (demoMode ? mockToday() : getTodos(currentDate)).filter(t => t.done).length;
-    el('today-count').textContent = total ? (done + '/' + total + ' 已完成') : '';
+    const done = all.filter(t => t.done).length;
+    el('today-count').textContent = all.length ? (done + '/' + all.length + ' 已完成') : '';
 
-    el('today-empty').hidden = total > 0;
+    // 态①有结果：常显"筛了谁 + 命中几条"（A5）
+    el('filter-status').hidden = !filtering;
+    if (filtering) {
+      el('filter-status-text').textContent =
+        '筛选：' + FILTER_LABEL[filter] + ' · ' + list.length + '/' + all.length + ' 条';
+    }
+    // 态②无结果：与"本来就没数据"区分开，给原因（A2/A6）
+    const noMatch = filtering && list.length === 0 && all.length > 0;
+    el('filter-empty').hidden = !noMatch;
+    if (noMatch) {
+      el('filter-empty-text').textContent = '「' + FILTER_LABEL[filter] + '」下没有待办：'
+        + '现有 ' + all.length + ' 条' + (FILTER_EMPTY_REASON[filter] || '');
+    }
+    // 态③数据本身为空（清空筛选后一并回落到这里）
+    el('today-empty').hidden = all.length > 0;
     el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
     el('load-demo').hidden = !isToday;
   };
@@ -1536,14 +1571,20 @@
   el('load-demo').addEventListener('click', enterDemo);
   el('exit-demo').addEventListener('click', () => { demoMode = false; renderAll(); });
 
-  // 筛选标签
-  el('tag-all').addEventListener('click', () => { filter = 'all'; syncTags(); });
-  el('tag-timeline').addEventListener('click', () => { filter = 'timeline'; syncTags(); });
+  // 筛选标签（Day 12：三种情况齐全——有结果 / 无结果 / 清空恢复；选中态同步 aria-pressed）
+  const setFilter = (f) => { filter = f; syncTags(); };
   const syncTags = () => {
-    el('tag-all').classList.toggle('on', filter === 'all');
-    el('tag-timeline').classList.toggle('on', filter === 'timeline');
+    [['tag-all', 'all'], ['tag-timeline', 'timeline']].forEach(([id, f]) => {
+      const on = filter === f;
+      el(id).classList.toggle('on', on);
+      el(id).setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
     renderToday();
   };
+  el('tag-all').addEventListener('click', () => setFilter('all'));
+  el('tag-timeline').addEventListener('click', () => setFilter('timeline'));
+  el('filter-clear').addEventListener('click', () => setFilter('all'));         // 状态行上的清空
+  el('filter-empty-clear').addEventListener('click', () => setFilter('all'));   // 空状态里的恢复
 
   // 心情弹窗（F2）：覆盖更新，以最后一次为准（A9）
   // 修复：弹窗问的永远是"今天"，与当前查看的日期无关，去掉 currentDate 守卫
