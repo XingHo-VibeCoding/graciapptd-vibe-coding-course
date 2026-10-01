@@ -52,14 +52,14 @@
           background:var(--bg); }
     .app{ max-width:480px; margin:0 auto; padding:0 16px 108px; }
 
-    /* ===== hero：落日图置顶，向下渐变入黑（仅"今天"视图）=====
-       竖版 1125×1920 用 cover 裁切；55vh 优先，窄屏回落 220px */
-    .hero{ position:relative; height:clamp(220px, 55vh, 460px);
+    /* ===== hero：主题图置顶，约占页面 1/4，向下渐隐入底色（仅"今天"视图）=====
+       精进 7：从 55vh 压到 25vh，图露出更少；渐变重心下移让底部过渡更柔 */
+    .hero{ position:relative; height:clamp(150px, 25vh, 230px);
            margin:0 -16px 14px; background:var(--bg) var(--hero-img)
            center 30%/cover no-repeat; }
     .hero::after{ content:""; position:absolute; inset:0;
-           background:linear-gradient(180deg, rgba(var(--veil-rgb),.42) 0%, rgba(var(--veil-rgb),0) 26%,
-                       rgba(var(--veil-rgb),.55) 72%, rgba(var(--veil-rgb),.92) 94%, var(--bg) 100%); }
+           background:linear-gradient(180deg, rgba(var(--veil-rgb),.38) 0%, rgba(var(--veil-rgb),0) 30%,
+                       rgba(var(--veil-rgb),.45) 62%, rgba(var(--veil-rgb),.88) 88%, var(--bg) 100%); }
     .hero header{ position:absolute; top:0; left:0; right:0; z-index:1;
            display:flex; justify-content:space-between; align-items:center;
            flex-wrap:wrap; gap:8px 10px; padding:16px 18px 0; }
@@ -396,6 +396,24 @@
         cursor:pointer; text-shadow:0 1px 6px rgba(0,0,0,.5); }
     #affirm-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
 
+    /* ===== 随即话题（精进 7）===== */
+    #topic-box{ position:relative; max-width:340px; }
+    #topic-box h3{ margin:0 0 14px; font-size:16px; }
+    #topic-box .md-close{ position:absolute; left:10px; top:10px; z-index:2; border:none;
+        background:transparent; color:var(--muted); font-size:15px; width:34px; height:34px;
+        border-radius:999px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    #topic-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
+    .topic-cat{ display:inline-block; font-size:11px; color:var(--accent-deep);
+                border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin-bottom:12px; }
+    #topic-box .topic-text{ font-size:18px; line-height:1.75; margin:0; min-height:96px;
+                display:flex; align-items:center; justify-content:center; color:var(--ink); }
+    .topic-actions{ display:flex; gap:10px; margin-top:16px; }
+    .topic-actions button{ flex:1; padding:10px 0; border:1px solid var(--line);
+                background:transparent; color:var(--ink); border-radius:999px;
+                font-size:14px; cursor:pointer; font-family:inherit; }
+    .topic-actions #topic-next{ background:var(--accent); border-color:var(--accent);
+                color:var(--accent-ink); font-weight:600; }
+
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
     .profile .avatar{ width:56px; height:56px; border-radius:50%; background:var(--card2);
@@ -435,6 +453,13 @@
     /* ===== 主题换肤（v3.5）：背景图缩略图选择器 ===== */
     .theme-block{ padding:10px 0; border-bottom:1px solid var(--line); }
     .theme-block .tb-label{ font-size:14px; margin-bottom:10px; }
+    /* 精进 7：深浅偏好三档切换（跟随图片 / 深色 / 浅色） */
+    .theme-mode{ display:flex; gap:6px; margin-bottom:12px; }
+    .theme-mode button{ flex:1; border:1px solid var(--line); background:var(--card);
+                        color:var(--muted); border-radius:999px; padding:6px 0;
+                        font-size:12px; cursor:pointer; font-family:inherit; }
+    .theme-mode button.on{ background:var(--accent); border-color:var(--accent);
+                           color:var(--accent-ink); font-weight:600; }
     .theme-picks{ display:flex; gap:8px; flex-wrap:wrap; }
     .theme-picks button{ width:52px; height:52px; border-radius:10px;
                          border:2px solid var(--line); background-size:cover;
@@ -665,6 +690,11 @@
           <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
           <span class="ai-arrow">›</span>
         </button>
+        <button type="button" class="app-item" data-app="topic">
+          <span class="ai-badge"><img src="assets/icon-topic.png" alt="随即话题" /></span>
+          <span class="ai-txt"><b>随即话题</b><span>随机一个话题，聊天不冷场</span></span>
+          <span class="ai-arrow">›</span>
+        </button>
         <button type="button" class="app-item" data-app="widget" disabled>
           <span class="ai-badge"><img src="assets/icon-widget.png" alt="小组件" /></span>
           <span class="ai-txt"><b>小组件</b><span>签到盆栽、完美日、喝水打卡</span></span>
@@ -702,6 +732,11 @@
         <div class="set-row"><span>数据存储</span><span class="sv">仅本机浏览器，不上传</span></div>
         <div class="theme-block">
           <div class="tb-label">主题（换背景自动配深浅与强调色）</div>
+          <div class="theme-mode" id="theme-mode" role="group" aria-label="深浅主题偏好">
+            <button type="button" data-pref="auto">跟随图片</button>
+            <button type="button" data-pref="dark">深色</button>
+            <button type="button" data-pref="light">浅色</button>
+          </div>
           <div class="theme-picks" id="theme-picks"></div>
           <div class="theme-info" id="theme-info"></div>
         </div>
@@ -923,6 +958,20 @@
   </div>
 </div>
 
+<!-- 精进 7：随即话题——随机话题卡，换一个 / 复制 -->
+<div class="overlay" id="topic-modal" hidden>
+  <div class="modal" id="topic-box">
+    <button id="topic-close" class="md-close" type="button" title="关闭" aria-label="关闭随即话题">✕</button>
+    <h3>随即话题</h3>
+    <span class="topic-cat" id="topic-cat" role="status"></span>
+    <p class="topic-text" id="topic-text"></p>
+    <div class="topic-actions">
+      <button id="topic-next" type="button">换一个</button>
+      <button id="topic-copy" type="button">复制</button>
+    </div>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -949,8 +998,9 @@
   // ===== v3.5 主题换肤：内置背景候选（落日 + 5 张肯定语图）与默认主题 =====
   const THEME_BGS = ['assets/hero.jpg', 'assets/affirm-1.jpg', 'assets/affirm-2.jpg',
                      'assets/affirm-3.jpg', 'assets/affirm-4.jpg', 'assets/affirm-5.jpg'];
-  const DEFAULT_THEME = { img: 'assets/hero.jpg', mode: 'dark',
+  const DEFAULT_THEME = { img: 'assets/hero.jpg', mode: 'dark', pref: 'auto',
                           accent: '#3ecf8e', ink: '#06281a', deep: '#7ddcb0' };
+  // pref：深浅偏好——'auto' 跟随图片分析结果；'dark'/'light' 用户手动指定（精进 7）
   const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
@@ -963,6 +1013,7 @@
     if (!Array.isArray(d.anniversaries)) d.anniversaries = def.anniversaries;
     if (!d.affirm) d.affirm = def.affirm;
     if (!d.theme || !d.theme.img) d.theme = def.theme;   // v3.5：旧数据补默认主题
+    if (d.theme && !d.theme.pref) d.theme.pref = 'auto'; // 精进 7：旧数据补深浅偏好
     return d;
   };
   const loadData = () => {
@@ -1720,6 +1771,8 @@
         renderMemorials();
       } else if (item.dataset.app === 'affirm') {                           // Day 22：肯定语
         openAffirm();
+      } else if (item.dataset.app === 'topic') {                            // 精进 7：随即话题
+        openTopic();
       }
     });
   });
@@ -2326,6 +2379,66 @@
     renderAffirm();
   });
 
+  // ===== 随即话题（精进 7，F6）：随机话题卡，换一个 / 复制 =====
+  const TOPICS = [
+    { c: '破冰', t: '如果明天不用上班/上学，你最想去做什么？' },
+    { c: '破冰', t: '最近有没有吃到什么惊艳的东西？' },
+    { c: '破冰', t: '你手机里用得最多的 App 是哪个？为什么？' },
+    { c: '破冰', t: '说一部你看了不止一遍的电影。' },
+    { c: '破冰', t: '小时候最喜欢的一门课是什么？' },
+    { c: '破冰', t: '你最近一次大笑是因为什么？' },
+    { c: '破冰', t: '如果只能带三样东西去旅行，你带什么？' },
+    { c: '破冰', t: '你有什么坚持了很久的小习惯？' },
+    { c: '走心', t: '这一年你最骄傲的一件事是什么？' },
+    { c: '走心', t: '有没有一句话，在你低谷时拉过你一把？' },
+    { c: '走心', t: '你最想感谢谁？上次谢谢TA是什么时候？' },
+    { c: '走心', t: '如果能对十年前的自己说一句话，你说什么？' },
+    { c: '走心', t: '你觉得自己身上哪一点最容易被低估？' },
+    { c: '走心', t: '最近有什么让你觉得"值得"的瞬间？' },
+    { c: '走心', t: '你理想中一天是怎么度过的？' },
+    { c: '走心', t: '什么样的表扬最让你开心？' },
+    { c: '脑洞', t: '如果动物会说话，哪种最吵？' },
+    { c: '脑洞', t: '如果能瞬间掌握一项技能，你选什么？' },
+    { c: '脑洞', t: '给你一台时光机，只能去过去 24 小时，你去干嘛？' },
+    { c: '脑洞', t: '如果世界上所有菜单都只剩一道菜，你希望是什么？' },
+    { c: '脑洞', t: '你的城市突然下起了糖果雨，第一个反应是什么？' },
+    { c: '脑洞', t: '如果可以和任何一个历史人物吃晚饭，你请谁？' },
+    { c: '脑洞', t: '假如一觉醒来你会一门外语，你最想是哪国话？' },
+    { c: '脑洞', t: '如果冰箱里藏着一个缩小的人，你觉得TA在干嘛？' },
+    { c: '深夜', t: '今天有没有什么没说出口的话？' },
+    { c: '深夜', t: '你最近为什么事失眠过？' },
+    { c: '深夜', t: '有没有一件小事，想起来就觉得温暖？' },
+    { c: '深夜', t: '你害怕变老吗？为什么？' },
+    { c: '深夜', t: '如果明天是世界末日，今晚你做什么？' },
+    { c: '深夜', t: '你上一次哭是因为什么？（不想说可以跳过）' },
+    { c: '深夜', t: '你觉得自己被谁真正理解过吗？' },
+    { c: '深夜', t: '有什么遗憾，是你打算放下的？' }
+  ];
+  let topicLast = -1;                                       // 上一条索引：连续"换一个"不重复（精进 6 同款）
+  const nextTopic = () => {
+    let i;
+    do { i = Math.floor(Math.random() * TOPICS.length); } while (TOPICS.length > 1 && i === topicLast);
+    topicLast = i;
+    el('topic-text').textContent = TOPICS[i].t;
+    el('topic-cat').textContent = TOPICS[i].c;
+    el('topic-text').dataset.idx = i;                       // 测试断言用
+  };
+  const openTopic = () => {
+    el('topic-modal').hidden = false;
+    nextTopic();
+  };
+  el('topic-close').addEventListener('click', () => { el('topic-modal').hidden = true; });
+  el('topic-next').addEventListener('click', nextTopic);
+  el('topic-copy').addEventListener('click', async () => {
+    const text = el('topic-text').textContent;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+      else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+             ta.select(); document.execCommand('copy'); ta.remove(); }
+      showToast('已复制，发给身边的人吧');
+    } catch (e) { showToast('复制失败，请长按手动复制'); }
+  });
+
   // ===== 主题换肤引擎（v3.5）：全部本地 canvas 像素分析，零网络请求（R6 隐私红线）=====
   // -- 颜色数学（纯函数，供分析与测试复用）--
   const hex2rgb = (h) => { const n = parseInt(h.slice(1), 16);
@@ -2415,13 +2528,24 @@
     img.src = src;
   });
   // -- 应用主题：深浅 + 强调色三件套 + hero 图，全部走 CSS 变量 --
+  // 精进 7：pref 手动指定时覆盖图片分析出的 mode（'auto' 才跟随图片）
+  const effMode = (t) => (t.pref === 'dark' || t.pref === 'light') ? t.pref
+                     : (t.mode === 'light' ? 'light' : 'dark');
   const applyTheme = (t) => {
     if (!t) return;
     const root = document.documentElement;
-    root.dataset.theme = t.mode === 'light' ? 'light' : 'dark';
+    root.dataset.theme = effMode(t) === 'light' ? 'light' : 'dark';
     root.style.setProperty('--accent', t.accent);
     root.style.setProperty('--accent-ink', t.ink);
-    root.style.setProperty('--accent-deep', t.deep);
+    let deep = t.deep;
+    if ((effMode(t) === 'light') !== (t.mode === 'light')) {
+      // 手动偏好与图片分析模式相反：deep 按实际底色重算，保证文字 ≥4.5:1
+      const [h, s] = rgb2hsl(...hex2rgb(t.accent));
+      deep = effMode(t) === 'light'
+        ? rgb2hex(...hsl2rgb(h, s * .75, fitLight(h, s * .75, '#f2f4f7', 4.5, .46, .2)))
+        : rgb2hex(...hsl2rgb(h, s * .6, fitLight(h, s * .6, '#0b0c0e', 4.5, .6, .9)));
+    }
+    root.style.setProperty('--accent-deep', deep);
     root.style.setProperty('--hero-img', 'url("' + t.img + '")');
   };
   const accentName = (hex) => {                              // 分析结果展示用色名（仅文案）
@@ -2451,10 +2575,28 @@
     up.title = '从本地上传一张背景图'; up.innerHTML = '<b>＋</b>上传';
     up.addEventListener('click', () => el('theme-file').click());
     wrap.appendChild(up);
+    // 精进 7：深浅偏好三档按钮选中态
+    const pref = t.pref || 'auto';
+    el('theme-mode').querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.pref === pref);
+      b.setAttribute('aria-pressed', b.dataset.pref === pref ? 'true' : 'false');
+    });
     const info = el('theme-info');
-    if (info) info.innerHTML = (t.mode === 'light' ? '浅色' : '深色') + ' ·<span class="tdot"></span>'
-      + accentName(t.accent) + '（随图片自动适配）';
+    const eff = effMode(t);
+    info.innerHTML = (eff === 'light' ? '浅色' : '深色') + ' ·<span class="tdot"></span>'
+      + accentName(t.accent) + (pref === 'auto' ? '（随图片自动适配）' : '（手动指定）');
   };
+  // 精进 7：手动切换深浅偏好（跟随图片 / 深色 / 浅色）
+  el('theme-mode').querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      if (demoMode || !data) return;
+      data.theme.pref = b.dataset.pref;
+      applyTheme(data.theme);
+      saveData(data);
+      renderThemePicks();
+      showToast(b.dataset.pref === 'auto' ? '深浅跟随图片' : (b.dataset.pref === 'light' ? '已切浅色主题' : '已切深色主题'));
+    });
+  });
   const pickTheme = async (src) => {
     if (demoMode || !data) return;
     showToast('正在分析图片…');
