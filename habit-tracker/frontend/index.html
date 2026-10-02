@@ -11,9 +11,9 @@
           禁止新造更深的灰字；浅色文字在彩色底上必须 ≥4.5:1
        C2 实心按钮：亮底（--accent）上配深字 var(--accent-ink)（≥4.5:1），
           深底上的强调文字用 var(--accent-deep)
-          精进 11 补充：浅色主题的强调色一律走"嫩色块"——底色 var(--accent-chip)
-          （明度锁定 0.80）配深字 var(--accent-chip-ink)（≥4.5:1）；色相随图片，
-          观感统一为粉嫩色块，避免出现需要压暗才达标的土色
+          精进 12 补充：浅色主题配色锁定为「奶油暖阳」——主色 var(--accent) 琥珀金
+          （按钮/选中态填充，配深棕字 ≥4.5:1）；强调文字 var(--accent-deep) 单一颜色
+          + 加粗；嫩黄 var(--accent-chip) 仅作点缀色变量备用，不加大面积高光底
        C3 间距节奏：模块间距 14px，卡片内元素间距只用 8/10/12/16
           （周历/心情区等原子组件内部允许 2/4px 微间距），不引入新数值
        C4 象限色板：四象限 + 未分类共五色，只从 QUADS 字典取，
@@ -21,11 +21,14 @@
     :root{
       /* 精进 11：默认基调改为浅色（白色底）——用户要求"默认不要黑色"。
          深色主题改由 html[data-theme="dark"] 显式覆盖，深浅与背景图解耦。 */
-      --bg:#f2f4f7; --card:#ffffff; --card2:#e9edf2;
-      --ink:#212832; --muted:#5c6774; --line:#d9dfe7;
-      /* 默认强调色：嫩黄系（hue 45）。运行时由 applyTheme 按所选背景图覆写 */
-      --accent:#eac73e; --accent-ink:#3a2a06; --accent-deep:#212832;
-      --accent-chip:#f2dc8f; --accent-chip-ink:#212832;
+      --bg:#FEFDF9; --card:#FFFFFF; --card2:#FBF6EA;
+      --ink:#5C4A3D; --muted:#82705F; --line:#EFE6D6;
+      /* 精进 12：浅色配色锁定为「奶油暖阳」——主色琥珀金 #E6A23C（按钮/选中态），
+         强调文字 #9C6812（同色系深一档，白底 4.77:1），嫩黄 #FFE566 仅作点缀色备用；
+         换背景图不再影响配色（图只当背景用）*/
+      --accent:#E6A23C; --accent-ink:#4A3418; --accent-deep:#9C6812;
+      --accent-line:#C5831E;              /* 细描边/焦点环：比主色深一档才看得见 */
+      --accent-chip:#FFE566; --accent-chip-ink:#5C4A3D;
       /* 四象限 + 未分类五色（C4）：与 PRD v2.2 一一对应 */
       --q1:#e8604c; --q2:#f5b04b; --q3:#5aa2f0; --q4:#8a94a3; --q5:#7f8ea3;
       /* ===== 主题换肤（v3.5）：hero 图、遮罩、基调 =====
@@ -33,10 +36,11 @@
          保证深色图上配白字、浅色图上配深字（精进 11）*/
       --scheme:light;                       /* 表单控件跟随系统色 */
       --hero-img:url('assets/hero.jpg');    /* 主页顶部背景图 */
-      --veil-rgb:11,12,14;                 /* hero 遮罩基色（深图=黑，浅图=白）*/
-      --hero-ink:#fff;                     /* hero 上文字色 */
-      --hero-shadow:0 1px 8px rgba(0,0,0,.55);
-      --overlay:rgba(30,36,46,.42);        /* 弹窗遮罩 */
+      --veil-rgb:254,253,249;              /* hero 遮罩基色：跟随界面深浅（浅色=暖白）*/
+      --veil-top:.78;                      /* 浅色主题顶部遮罩更厚：深棕标题才读得清 */
+      --hero-ink:#5C4A3D;                  /* hero 上文字色：跟随界面深浅 */
+      --hero-shadow:0 1px 8px rgba(255,255,255,.85);
+      --overlay:rgba(92,74,61,.38);        /* 弹窗遮罩：暖棕半透，不用黑 */
     }
     /* 深色主题：由「我的-主题」的深浅开关独立控制，与背景图无关 */
     html[data-theme="dark"]{
@@ -44,58 +48,25 @@
       --ink:#e9ecef; --muted:#a3adb8; --line:#272e37;
       --accent:#f0d878; --accent-ink:#3a2a06; --accent-deep:#f0d878;
       --accent-chip:transparent; --accent-chip-ink:#f0d878;
+      --accent-line:var(--accent);
+      --veil-top:.42;
       --scheme:dark;
       --veil-rgb:11,12,14;
       --hero-ink:#fff;
       --hero-shadow:0 1px 8px rgba(0,0,0,.55);
       --overlay:rgba(0,0,0,.6);
     }
-    /* ===== 精进 11：浅色主题的强调色改为「嫩色块 + 深色字」 =====
-       色块底 --accent-chip 与块上文字 --accent-chip-ink 由 applyTheme 运行时按图片
-       色相算出，配方固定为「明度 0.80 + 中等偏上饱和」——橙图得嫩橙黄、蓝图得嫩天蓝，
-       统一是粉嫩观感，不再出现 #9f7c4b 这类土色。
-       下列规则只作用于浅色主题，深色主题原规则一行未动（仍是亮色文字、无色块底）。 */
-    html[data-theme="light"] .week button.sel,
-    html[data-theme="light"] .mday.today-cell,
-    html[data-theme="light"] nav button.active,
-    html[data-theme="light"] .imodes button.on,
-    html[data-theme="light"] .timer-presets button.on,
-    html[data-theme="light"] .mem-books button.on,
-    html[data-theme="light"] .mem-type button.on,
-    html[data-theme="light"] .filter-status button,
-    html[data-theme="light"] #state-error button,
-    html[data-theme="light"] #demo-banner button,
-    html[data-theme="light"] #mem-banner button,
-    html[data-theme="light"] .note .note-more,
-    html[data-theme="light"] .mini-empty button,
-    html[data-theme="light"] .profile .pname button,
-    html[data-theme="light"] .mem-pinned .mp-pin,
-    html[data-theme="light"] .mem-item .mi-sub .mi-tag,
-    html[data-theme="light"] .topic-cat,
-    html[data-theme="light"] #mem-detail-box .md-edit:hover{
-      background:var(--accent-chip); color:var(--accent-chip-ink);
-      border-color:var(--accent-chip); }
-    html[data-theme="light"] nav button.active{ font-weight:600; }
-    html[data-theme="light"] .week button.sel .wd,
-    html[data-theme="light"] .week button.sel .dn,
-    html[data-theme="light"] .mday.today-cell .md-wd{ color:var(--accent-chip-ink); }
-    /* 行内强调文本：补出块状留白，做"荧光笔划重点"的观感 */
-    html[data-theme="light"] .todo .time,
-    html[data-theme="light"] .mem-pinned .mp-sub b,
-    html[data-theme="light"] .mem-item .mi-days,
-    html[data-theme="light"] #mem-detail-box .md-sub b,
-    html[data-theme="light"] .profile .pdays b,
-    html[data-theme="light"] .guide li b{
-      background:var(--accent-chip); color:var(--accent-chip-ink);
-      padding:1px 6px; border-radius:6px; }
-    /* 倒计时数字块：给更大留白 */
-    html[data-theme="light"] #topic-box .topic-timer{
-      display:inline-block; background:var(--accent-chip); color:var(--accent-chip-ink);
-      padding:2px 18px; border-radius:12px; }
+    /* ===== 精进 12：强调文字恢复为「纯文字色」，不再加背景色块 =====
+       用户反馈嫩黄高光底越改越丑，已全部回滚；浅底上靠「色 + 字重」表达重点，
+       强调文字统一用 var(--accent-deep)（白卡上 4.77:1），不够醒目就加粗。 */
+    .week button.sel .wd, .week button.sel .dn, .todo .time,
+    .filter-status button, .note .note-more,
+    .imodes button.on, .timer-presets button.on,
+    .mem-books button.on, .mem-type button.on{ font-weight:600; }
     *{ box-sizing:border-box; }
     /* 键盘焦点态：Tab 能看清当前在哪（Day 9 R-容错）*/
     button:focus-visible, input:focus-visible, select:focus-visible{
-      outline:2px solid var(--accent); outline-offset:2px; }
+      outline:2px solid var(--accent-line); outline-offset:2px; }
     /* 鼠标态：悬停提亮、按下微沉（深色下用提亮而非压暗）*/
     button:not(:disabled):hover{ filter:brightness(1.12); }
     button:not(:disabled):active{ filter:brightness(.94); transform:translateY(1px); }
@@ -107,7 +78,8 @@
        内容列收窄到 430px、通高、边框阴影模拟机身，外围深色桌面背景；
        手机上（<520px）不受影响，仍全屏。 */
     @media (min-width:520px){
-      body{ background:#07080c; }
+      body{ background:#EFE9DF; }                    /* 桌面预览外底色：暖灰，不用黑 */
+      html[data-theme="dark"] body{ background:#07080c; }  /* 深色主题维持原样 */
       .app{ max-width:430px; min-height:100dvh; box-sizing:border-box; background:var(--bg);
             box-shadow:0 0 0 1px var(--line), 0 24px 80px rgba(0,0,0,.5); }
       nav div{ max-width:430px; }
@@ -119,7 +91,7 @@
            margin:0 -16px 14px; background:var(--bg) var(--hero-img)
            center 30%/cover no-repeat; }
     .hero::after{ content:""; position:absolute; inset:0;
-           background:linear-gradient(180deg, rgba(var(--veil-rgb),.42) 0%, rgba(var(--veil-rgb),0) 26%,
+           background:linear-gradient(180deg, rgba(var(--veil-rgb),var(--veil-top)) 0%, rgba(var(--veil-rgb),0) 26%,
                        rgba(var(--veil-rgb),.55) 72%, rgba(var(--veil-rgb),.92) 94%, var(--bg) 100%); }
     .hero header{ position:absolute; top:0; left:0; right:0; z-index:1;
            display:flex; justify-content:space-between; align-items:center;
@@ -560,7 +532,6 @@
     .theme-info{ font-size:12px; color:var(--muted); margin-top:8px; }
     .theme-info .tdot{ display:inline-block; width:10px; height:10px; border-radius:50%;
                         background:var(--accent); margin:0 4px 0 2px; vertical-align:-1px; }
-    html[data-theme="light"] .theme-info .tdot{ background:var(--accent-chip); }
     .guide li{ font-size:13px; color:var(--ink); margin:0 0 8px; line-height:1.6; }
     .guide{ margin:0; padding-left:18px; }
     .guide li b{ color:var(--accent-deep); }
@@ -1135,7 +1106,6 @@
                           accent: '#eac73e', ink: '#3a2a06', deep: '#f0d878' };
   // pref：深浅偏好——'light' / 'dark'，与背景图完全解耦（换图不再改深浅）。
   // mode 字段保留为"图片亮度分析结果"留档，不再参与深浅判定。
-  const CHIP_INK = '#212832';   // 嫩色块上的文字色（浅色主题正文深色，对 0.80 明度色块 ≥8:1）
   const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
@@ -2741,10 +2711,8 @@
     // 精进 11：浅色主题不再用"压暗到刚好可读"的文字色（那必然算成土色），改走嫩色块。
     // deep 现在只表示"深色主题下的亮色强调文字"（与 applyTheme 同参）。
     const deep = rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95)));
-    // 嫩色块：明度锁定 .80、饱和略提（上限 .92），色相仍随图片 ——
-    // 橙图 → 嫩橙黄、蓝图 → 嫩天蓝，统一粉嫩；块上配深字，对比度 ≥8:1。
-    const chip = rgb2hex(...hsl2rgb(h, Math.min(.92, s * 1.12), .80));
-    return { mode, accent, ink, deep, chip, chipInk: CHIP_INK };
+    // 精进 12：嫩色块（chip）已随回滚移除——浅色主题改用锁定配色，深色主题不需要色块底
+    return { mode, accent, ink, deep };
   };
   // -- 图片 → 缩略到 48px 宽再取像素（jsdom 无 canvas 时返回 null，走兜底）--
   const analyzeImageSrc = (src) => new Promise((resolve) => {
@@ -2762,31 +2730,35 @@
     img.onerror = () => resolve(null);
     img.src = src;
   });
-  // -- 应用主题：深浅 + 强调色三件套 + hero 图，全部走 CSS 变量 --
-  // 精进 11：深浅只由 pref 决定，与背景图完全解耦（'auto' 已废弃，一律按浅色兜底）
+  // -- 应用主题：深浅 + 强调色 + hero 图，全部走 CSS 变量 --
+  // 精进 12：浅色配色「锁定」——不再按背景图算强调色；深色主题逻辑保持原样。
   const effMode = (t) => (t && t.pref === 'dark') ? 'dark' : 'light';
+  const LOCKED = ['--accent', '--accent-ink', '--accent-deep', '--accent-line',
+                  '--accent-chip', '--accent-chip-ink'];
   const applyTheme = (t) => {
     if (!t) return;
+    t = Object.assign({}, DEFAULT_THEME, t);   // 兜底：主题对象缺 accent 等字段时不至于加载卡死
     const root = document.documentElement;
     const isLight = effMode(t) === 'light';
     root.dataset.theme = isLight ? 'light' : 'dark';
-    root.style.setProperty('--accent', t.accent);
-    root.style.setProperty('--accent-ink', t.ink);
-    const [h, s] = rgb2hsl(...hex2rgb(t.accent));
-    // 深色主题：亮色强调文字（与 analyzePixels 同参）
-    const deepDark = rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95)));
-    // 浅色主题：嫩色块底 + 块上深字（明度锁定 .80，色相随图片）
-    const chip = rgb2hex(...hsl2rgb(h, Math.min(.92, s * 1.12), .80));
-    root.style.setProperty('--accent-deep', isLight ? CHIP_INK : deepDark);
-    root.style.setProperty('--accent-chip', isLight ? chip : 'transparent');
-    root.style.setProperty('--accent-chip-ink', CHIP_INK);
-    // 精进 11：hero 区文字/遮罩跟着「图片亮度」走而非界面深浅 ——
-    // 这样默认深色落日图不会被要求配深字，换浅色图时又自动转深字。
-    const imgLight = t.mode === 'light';
-    root.style.setProperty('--hero-ink', imgLight ? '#1c2530' : '#fff');
-    root.style.setProperty('--hero-shadow', imgLight ? '0 1px 8px rgba(255,255,255,.72)'
-                                                     : '0 1px 8px rgba(0,0,0,.55)');
-    root.style.setProperty('--veil-rgb', imgLight ? '247,249,251' : '11,12,14');
+    if (isLight) {
+      // 清掉运行时内联值，回落到 :root 的「奶油暖阳」锁定配色——
+      // 换任何背景图，主色/强调色都保持不变
+      LOCKED.forEach(p => root.style.removeProperty(p));
+    } else {
+      root.style.setProperty('--accent', t.accent);
+      root.style.setProperty('--accent-ink', t.ink);
+      const [h, s] = rgb2hsl(...hex2rgb(t.accent));
+      // 深色主题：亮色强调文字（与 analyzePixels 同参）
+      root.style.setProperty('--accent-deep',
+        rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95))));
+      root.style.setProperty('--accent-chip', 'transparent');
+    }
+    // 精进 12：hero 遮罩与文字跟着「界面深浅」走（不再按图片亮度单独判断）
+    root.style.setProperty('--hero-ink', isLight ? '#5C4A3D' : '#fff');
+    root.style.setProperty('--hero-shadow', isLight ? '0 1px 8px rgba(255,255,255,.85)'
+                                                    : '0 1px 8px rgba(0,0,0,.55)');
+    root.style.setProperty('--veil-rgb', isLight ? '254,253,249' : '11,12,14');
     root.style.setProperty('--hero-img', 'url("' + t.img + '")');
   };
   const accentName = (hex) => {                              // 分析结果展示用色名（仅文案）
@@ -2824,7 +2796,8 @@
     });
     const info = el('theme-info');
     info.innerHTML = (pref === 'light' ? '浅色' : '深色') + ' ·<span class="tdot"></span>'
-      + accentName(t.accent) + '（深浅与背景图各自独立）';
+      + (pref === 'light' ? '琥珀金（配色锁定）'
+                          : accentName(t.accent) + '（深浅与背景图各自独立）');
   };
   // 精进 11：手动切换深浅（浅色 / 深色），与背景图互不影响
   el('theme-mode').querySelectorAll('button').forEach(b => {
@@ -2847,9 +2820,9 @@
     const keepPref = prev.pref === 'dark' ? 'dark' : 'light';
     // 分析失败（无 canvas / 图片跨域受限）→ 保留原配色，仅换图
     const t = res ? { img: src, mode: res.mode, accent: res.accent, ink: res.ink,
-                      deep: res.deep, chip: res.chip, pref: keepPref }
+                      deep: res.deep, pref: keepPref }
                   : { img: src, mode: prev.mode, accent: prev.accent, ink: prev.ink,
-                      deep: prev.deep, chip: prev.chip, pref: keepPref };
+                      deep: prev.deep, pref: keepPref };
     data.theme = t;
     applyTheme(t);
     saveData(data);
