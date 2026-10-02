@@ -11,9 +11,10 @@
           禁止新造更深的灰字；浅色文字在彩色底上必须 ≥4.5:1
        C2 实心按钮：亮底（--accent）上配深字 var(--accent-ink)（≥4.5:1），
           深底上的强调文字用 var(--accent-deep)
-          精进 12 补充：浅色主题配色锁定为「奶油暖阳」——主色 var(--accent) 琥珀金
-          （按钮/选中态填充，配深棕字 ≥4.5:1）；强调文字 var(--accent-deep) 单一颜色
-          + 加粗；嫩黄 var(--accent-chip) 仅作点缀色变量备用，不加大面积高光底
+          精进 12 补充：浅色主题基调锁定「奶油暖阳」——奶白底、深棕字，不出现黑灰；
+          精进 13 补充：浅色主题的 accent 系列恢复「跟随背景图」——色相取自图片，
+          但明度/饱和度走固定「嫩感配方」（见 lightPalette），保证永远算出柔和浅色，
+          不会退化成早期那种又暗又艳的土色；强调文字仍是「纯色 + 加粗」，不铺色块底
        C3 间距节奏：模块间距 14px，卡片内元素间距只用 8/10/12/16
           （周历/心情区等原子组件内部允许 2/4px 微间距），不引入新数值
        C4 象限色板：四象限 + 未分类共五色，只从 QUADS 字典取，
@@ -23,17 +24,16 @@
          深色主题改由 html[data-theme="dark"] 显式覆盖，深浅与背景图解耦。 */
       --bg:#FEFDF9; --card:#FFFFFF; --card2:#FBF6EA;
       --ink:#5C4A3D; --muted:#82705F; --line:#EFE6D6;
-      /* 精进 12：浅色配色锁定为「奶油暖阳」——主色琥珀金 #E6A23C（按钮/选中态），
-         强调文字 #9C6812（同色系深一档，白底 4.77:1），嫩黄 #FFE566 仅作点缀色备用；
-         换背景图不再影响配色（图只当背景用）*/
+      /* 精进 12：浅色基调锁定「奶油暖阳」，下面这组是兜底值（无图 / 灰调图时用）；
+         精进 13：换成有色相的图时，accent 系列由 lightPalette 按图色相运行时覆写 */
       --accent:#E6A23C; --accent-ink:#4A3418; --accent-deep:#9C6812;
       --accent-line:#C5831E;              /* 细描边/焦点环：比主色深一档才看得见 */
       --accent-chip:#FFE566; --accent-chip-ink:#5C4A3D;
       /* 四象限 + 未分类五色（C4）：与 PRD v2.2 一一对应 */
       --q1:#e8604c; --q2:#f5b04b; --q3:#5aa2f0; --q4:#8a94a3; --q5:#7f8ea3;
       /* ===== 主题换肤（v3.5）：hero 图、遮罩、基调 =====
-         accent 系列由 applyTheme 运行时覆写；hero 三项按"图片亮度"而非界面深浅走，
-         保证深色图上配白字、浅色图上配深字（精进 11）*/
+         accent 系列由 applyTheme 运行时覆写（浅色走 lightPalette 嫩感配方）；
+         hero 遮罩与文字跟随界面深浅走（精进 12）*/
       --scheme:light;                       /* 表单控件跟随系统色 */
       --hero-img:url('assets/hero.jpg');    /* 主页顶部背景图 */
       --veil-rgb:254,253,249;              /* hero 遮罩基色：跟随界面深浅（浅色=暖白）*/
@@ -2708,8 +2708,8 @@
     const accent = rgb2hex(...hsl2rgb(h, s, .52));           // 实心按钮底色
     const is = Math.min(.7, s * .8);                         // 深字色：同色相压暗到对比达标
     const ink = rgb2hex(...hsl2rgb(h, is, fitLight(h, is, accent, 4.5, .2, .04)));
-    // 精进 11：浅色主题不再用"压暗到刚好可读"的文字色（那必然算成土色），改走嫩色块。
-    // deep 现在只表示"深色主题下的亮色强调文字"（与 applyTheme 同参）。
+    // 精进 13：浅色主题的 accent 系列由 lightPalette 按图片色相另算（嫩感配方）；
+    // 这里返回的 deep 只服务深色主题（亮色强调文字，与 applyTheme 同参）。
     const deep = rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95)));
     // 精进 12：嫩色块（chip）已随回滚移除——浅色主题改用锁定配色，深色主题不需要色块底
     return { mode, accent, ink, deep };
@@ -2733,26 +2733,47 @@
   // -- 应用主题：深浅 + 强调色 + hero 图，全部走 CSS 变量 --
   // 精进 12：浅色配色「锁定」——不再按背景图算强调色；深色主题逻辑保持原样。
   const effMode = (t) => (t && t.pref === 'dark') ? 'dark' : 'light';
-  const LOCKED = ['--accent', '--accent-ink', '--accent-deep', '--accent-line',
-                  '--accent-chip', '--accent-chip-ink'];
+  // -- 精进 13：浅色主题「跟随背景图」的嫩感配方 --
+  // 色相取自图片，明度/饱和度走固定参数，保证任何图都算出明亮柔和的浅色。
+  // 对比度基准取最暗的浅底 --card2 #FBF6EA：块上深字 ≥4.5:1、细线 ≥3:1 都按它校验。
+  const LIGHT_BASE = '#FBF6EA';
+  const lightPalette = (h, s) => {
+    let sat = Math.min(.70, Math.max(.45, s));
+    const build = (sat) => {
+      const accent = rgb2hex(...hsl2rgb(h, sat, .62));
+      const is = Math.min(.60, sat * .85);
+      return { accent, ink: rgb2hex(...hsl2rgb(h, is, fitLight(h, is, accent, 4.5, .30, .06))) };
+    };
+    let p = build(sat);
+    // 蓝紫系亮度天然偏低，深字压到最暗也可能够不到 4.5:1 → 逐档降饱和提亮
+    while (contrast(p.ink, p.accent) < 4.5 && sat > .33) { sat -= .06; p = build(sat); }
+    return { accent: p.accent, ink: p.ink,
+             deep: rgb2hex(...hsl2rgb(h, .60, fitLight(h, .60, LIGHT_BASE, 4.5, .50, .15))),
+             line: rgb2hex(...hsl2rgb(h, .68, fitLight(h, .68, LIGHT_BASE, 3.0, .50, .20))) };
+  };
   const applyTheme = (t) => {
     if (!t) return;
     t = Object.assign({}, DEFAULT_THEME, t);   // 兜底：主题对象缺 accent 等字段时不至于加载卡死
     const root = document.documentElement;
     const isLight = effMode(t) === 'light';
     root.dataset.theme = isLight ? 'light' : 'dark';
+    const [h, s] = rgb2hsl(...hex2rgb(t.accent));
     if (isLight) {
-      // 清掉运行时内联值，回落到 :root 的「奶油暖阳」锁定配色——
-      // 换任何背景图，主色/强调色都保持不变
-      LOCKED.forEach(p => root.style.removeProperty(p));
+      // 精进 13：恢复「跟随背景图」——色相跟图走嫩感配方，换图即换主色/强调色
+      const c = lightPalette(h, s);
+      root.style.setProperty('--accent', c.accent);
+      root.style.setProperty('--accent-ink', c.ink);
+      root.style.setProperty('--accent-deep', c.deep);
+      root.style.setProperty('--accent-line', c.line);
+      root.style.removeProperty('--accent-chip');   // 清掉深色主题留下的内联 transparent
     } else {
       root.style.setProperty('--accent', t.accent);
       root.style.setProperty('--accent-ink', t.ink);
-      const [h, s] = rgb2hsl(...hex2rgb(t.accent));
       // 深色主题：亮色强调文字（与 analyzePixels 同参）
       root.style.setProperty('--accent-deep',
         rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95))));
       root.style.setProperty('--accent-chip', 'transparent');
+      root.style.removeProperty('--accent-line');   // 回落 CSS 的 var(--accent)
     }
     // 精进 12：hero 遮罩与文字跟着「界面深浅」走（不再按图片亮度单独判断）
     root.style.setProperty('--hero-ink', isLight ? '#5C4A3D' : '#fff');
@@ -2796,8 +2817,7 @@
     });
     const info = el('theme-info');
     info.innerHTML = (pref === 'light' ? '浅色' : '深色') + ' ·<span class="tdot"></span>'
-      + (pref === 'light' ? '琥珀金（配色锁定）'
-                          : accentName(t.accent) + '（深浅与背景图各自独立）');
+      + accentName(t.accent) + '（跟随背景图）';
   };
   // 精进 11：手动切换深浅（浅色 / 深色），与背景图互不影响
   el('theme-mode').querySelectorAll('button').forEach(b => {
@@ -2816,7 +2836,7 @@
     const analyze = window.__themeAnalyze || analyzeImageSrc; // 测试注入点（jsdom 无 canvas）
     const res = await analyze(src);
     const prev = data.theme || DEFAULT_THEME;
-    // 精进 11：换图只换图 —— 深浅偏好原样保留，不再随图片亮度变化
+    // 精进 13：深浅偏好原样保留（与图片亮度无关），强调色按新图色相重算
     const keepPref = prev.pref === 'dark' ? 'dark' : 'light';
     // 分析失败（无 canvas / 图片跨域受限）→ 保留原配色，仅换图
     const t = res ? { img: src, mode: res.mode, accent: res.accent, ink: res.ink,
@@ -2857,7 +2877,7 @@
     reader.readAsDataURL(f);
   });
   // 测试暴露口：纯函数直接挂 window（页面运行不依赖）
-  window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName };
+  window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette };
 
 
   // ===== 启动 =====
