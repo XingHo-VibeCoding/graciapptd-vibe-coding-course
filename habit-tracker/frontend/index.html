@@ -40,7 +40,8 @@
       --veil-top:.78;                      /* 浅色主题顶部遮罩更厚：深棕标题才读得清 */
       --hero-ink:#5C4A3D;                  /* hero 上文字色：跟随界面深浅 */
       --hero-shadow:0 1px 8px rgba(255,255,255,.85);
-      --overlay:rgba(92,74,61,.38);        /* 弹窗遮罩：暖棕半透，不用黑 */
+      --overlay:rgba(92,74,61,.38);        /* 弹窗遮罩：深棕半透，不用黑（精进 14 起跟随正文色）*/
+      --desk:#EFE9DF;                      /* 桌面预览时手机窗外底色（精进 14 起跟随图片色相）*/
     }
     /* 深色主题：由「我的-主题」的深浅开关独立控制，与背景图无关 */
     html[data-theme="dark"]{
@@ -55,6 +56,7 @@
       --hero-ink:#fff;
       --hero-shadow:0 1px 8px rgba(0,0,0,.55);
       --overlay:rgba(0,0,0,.6);
+      --desk:#07080c;
     }
     /* ===== 精进 12：强调文字恢复为「纯文字色」，不再加背景色块 =====
        用户反馈嫩黄高光底越改越丑，已全部回滚；浅底上靠「色 + 字重」表达重点，
@@ -78,8 +80,7 @@
        内容列收窄到 430px、通高、边框阴影模拟机身，外围深色桌面背景；
        手机上（<520px）不受影响，仍全屏。 */
     @media (min-width:520px){
-      body{ background:#EFE9DF; }                    /* 桌面预览外底色：暖灰，不用黑 */
-      html[data-theme="dark"] body{ background:#07080c; }  /* 深色主题维持原样 */
+      body{ background:var(--desk); }                /* 桌面预览外底色：跟随主题（精进 14）*/
       .app{ max-width:430px; min-height:100dvh; box-sizing:border-box; background:var(--bg);
             box-shadow:0 0 0 1px var(--line), 0 24px 80px rgba(0,0,0,.5); }
       nav div{ max-width:430px; }
@@ -2733,11 +2734,40 @@
   // -- 应用主题：深浅 + 强调色 + hero 图，全部走 CSS 变量 --
   // 精进 12：浅色配色「锁定」——不再按背景图算强调色；深色主题逻辑保持原样。
   const effMode = (t) => (t && t.pref === 'dark') ? 'dark' : 'light';
+  // -- 精进 14：浅色主题的「面系」也跟随背景图 --
+  // 页底 / 次级面 / 分隔线 / 正文 / 次级字 / 桌面外框 整组跟图变色相。
+  // 配方由精进 12 锁定的奶油暖阳值反推而来（h=48 时逐值复现现值）：
+  // 高饱和 + 极高明度——色相看得见，但仍然是明亮浅色，绝不会算成深色或土色。
+  const SURFACE = { bgS:.70, bgL:.986, c2S:.68, c2L:.951, lnS:.44, lnL:.888,
+                    inkS:.21, mutS:.16, outS:.33, outL:.906 };
+  const fitDark = (h, s, bg, target, from) => {      // 从起始明度往下压，直到对底色刚好达标
+    let l = from;
+    while (l > .03 && contrast(rgb2hex(...hsl2rgb(h, s, l)), bg) < target) l -= .01;
+    return Math.max(.03, l);
+  };
+  const lightSurface = (h) => {
+    const p = SURFACE;
+    const bg = rgb2hex(...hsl2rgb(h, p.bgS, p.bgL));
+    const ink = rgb2hex(...hsl2rgb(h, p.inkS, fitDark(h, p.inkS, bg, 8.2, .34)));
+    const [ir, ig, ib] = hex2rgb(ink);
+    return {
+      bg,
+      c2: rgb2hex(...hsl2rgb(h, p.c2S, p.c2L)),
+      line: rgb2hex(...hsl2rgb(h, p.lnS, p.lnL)),
+      ink,
+      muted: rgb2hex(...hsl2rgb(h, p.mutS, fitDark(h, p.mutS, bg, 4.5, .50))),
+      desk: rgb2hex(...hsl2rgb(h, p.outS, p.outL)),
+      veil: hex2rgb(bg).join(','),
+      overlay: 'rgba(' + ir + ',' + ig + ',' + ib + ',.38)',
+    };
+  };
   // -- 精进 13：浅色主题「跟随背景图」的嫩感配方 --
   // 色相取自图片，明度/饱和度走固定参数，保证任何图都算出明亮柔和的浅色。
-  // 对比度基准取最暗的浅底 --card2 #FBF6EA：块上深字 ≥4.5:1、细线 ≥3:1 都按它校验。
-  const LIGHT_BASE = '#FBF6EA';
-  const lightPalette = (h, s) => {
+  // 对比度基准取「次级面」（精进 14 起由 lightSurface 按图色相算出，
+  // 蓝图下比暖图更暗一档，故基准动态传入）：块上深字 ≥4.5:1、细线 ≥3:1 都按它校验。
+  const LIGHT_BASE = '#FBF6EA';                       // 无图/灰调时的兜底基准
+  const lightPalette = (h, s, base) => {
+    const BASE = base || LIGHT_BASE;
     let sat = Math.min(.70, Math.max(.45, s));
     const build = (sat) => {
       const accent = rgb2hex(...hsl2rgb(h, sat, .62));
@@ -2748,8 +2778,8 @@
     // 蓝紫系亮度天然偏低，深字压到最暗也可能够不到 4.5:1 → 逐档降饱和提亮
     while (contrast(p.ink, p.accent) < 4.5 && sat > .33) { sat -= .06; p = build(sat); }
     return { accent: p.accent, ink: p.ink,
-             deep: rgb2hex(...hsl2rgb(h, .60, fitLight(h, .60, LIGHT_BASE, 4.5, .50, .15))),
-             line: rgb2hex(...hsl2rgb(h, .68, fitLight(h, .68, LIGHT_BASE, 3.0, .50, .20))) };
+             deep: rgb2hex(...hsl2rgb(h, .60, fitLight(h, .60, BASE, 4.5, .50, .15))),
+             line: rgb2hex(...hsl2rgb(h, .68, fitLight(h, .68, BASE, 3.0, .50, .20))) };
   };
   const applyTheme = (t) => {
     if (!t) return;
@@ -2758,15 +2788,29 @@
     const isLight = effMode(t) === 'light';
     root.dataset.theme = isLight ? 'light' : 'dark';
     const [h, s] = rgb2hsl(...hex2rgb(t.accent));
+    const sfLight = isLight ? lightSurface(h) : null;   // 精进 14：面系（浅色用）
     if (isLight) {
-      // 精进 13：恢复「跟随背景图」——色相跟图走嫩感配方，换图即换主色/强调色
-      const c = lightPalette(h, s);
+      // 精进 14：面系整组跟随图片色相（页底/次级面/线/文字/窗外底色）
+      const sf = sfLight;
+      root.style.setProperty('--bg', sf.bg);
+      root.style.setProperty('--card2', sf.c2);
+      root.style.setProperty('--line', sf.line);
+      root.style.setProperty('--ink', sf.ink);
+      root.style.setProperty('--muted', sf.muted);
+      root.style.setProperty('--desk', sf.desk);
+      root.style.setProperty('--overlay', sf.overlay);
+      root.style.setProperty('--accent-chip-ink', sf.ink);
+      // 精进 13：强调色跟图走嫩感配方（对比度基准用新的次级面）
+      const c = lightPalette(h, s, sf.c2);
       root.style.setProperty('--accent', c.accent);
       root.style.setProperty('--accent-ink', c.ink);
       root.style.setProperty('--accent-deep', c.deep);
       root.style.setProperty('--accent-line', c.line);
       root.style.removeProperty('--accent-chip');   // 清掉深色主题留下的内联 transparent
     } else {
+      // 深色主题：面系回落样式表里的深色值（清掉浅色留下的内联覆盖）
+      ['--bg', '--card2', '--line', '--ink', '--muted', '--desk', '--overlay', '--accent-chip-ink']
+        .forEach(p => root.style.removeProperty(p));
       root.style.setProperty('--accent', t.accent);
       root.style.setProperty('--accent-ink', t.ink);
       // 深色主题：亮色强调文字（与 analyzePixels 同参）
@@ -2776,10 +2820,11 @@
       root.style.removeProperty('--accent-line');   // 回落 CSS 的 var(--accent)
     }
     // 精进 12：hero 遮罩与文字跟着「界面深浅」走（不再按图片亮度单独判断）
-    root.style.setProperty('--hero-ink', isLight ? '#5C4A3D' : '#fff');
+    // 精进 14：浅色下改用面系算出的底色/正文色，与整页保持一致
+    root.style.setProperty('--hero-ink', isLight ? sfLight.ink : '#fff');
     root.style.setProperty('--hero-shadow', isLight ? '0 1px 8px rgba(255,255,255,.85)'
                                                     : '0 1px 8px rgba(0,0,0,.55)');
-    root.style.setProperty('--veil-rgb', isLight ? '254,253,249' : '11,12,14');
+    root.style.setProperty('--veil-rgb', isLight ? sfLight.veil : '11,12,14');
     root.style.setProperty('--hero-img', 'url("' + t.img + '")');
   };
   const accentName = (hex) => {                              // 分析结果展示用色名（仅文案）
@@ -2877,7 +2922,7 @@
     reader.readAsDataURL(f);
   });
   // 测试暴露口：纯函数直接挂 window（页面运行不依赖）
-  window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette };
+  window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette, lightSurface };
 
 
   // ===== 启动 =====
