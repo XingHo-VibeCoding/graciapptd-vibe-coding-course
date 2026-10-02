@@ -2681,9 +2681,12 @@
     const accent = rgb2hex(...hsl2rgb(h, s, .52));           // 实心按钮底色
     const is = Math.min(.7, s * .8);                         // 深字色：同色相压暗到对比达标
     const ink = rgb2hex(...hsl2rgb(h, is, fitLight(h, is, accent, 4.5, .2, .04)));
+    // 精进 9：deep（文字高亮）起步明度 .6→.72、饱和度折扣 .6→.85。
+    // 原参数算出的是 #7a8ab8 这类灰暗中调色（用户反馈"太深太闷"），
+    // 提亮后对比度只会更高，C1（≥4.5:1）仍稳。
     const deep = mode === 'light'                            // 强调文字色：随主题底色取深/浅
-      ? rgb2hex(...hsl2rgb(h, s * .75, fitLight(h, s * .75, '#f2f4f7', 4.5, .46, .2)))
-      : rgb2hex(...hsl2rgb(h, s * .6, fitLight(h, s * .6, '#0b0c0e', 4.5, .6, .9)));
+      ? rgb2hex(...hsl2rgb(h, s * .88, fitLight(h, s * .88, '#f2f4f7', 4.5, .46, .2)))
+      : rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95)));
     return { mode, accent, ink, deep };
   };
   // -- 图片 → 缩略到 48px 宽再取像素（jsdom 无 canvas 时返回 null，走兜底）--
@@ -2716,9 +2719,9 @@
     if ((effMode(t) === 'light') !== (t.mode === 'light')) {
       // 手动偏好与图片分析模式相反：deep 按实际底色重算，保证文字 ≥4.5:1
       const [h, s] = rgb2hsl(...hex2rgb(t.accent));
-      deep = effMode(t) === 'light'
-        ? rgb2hex(...hsl2rgb(h, s * .75, fitLight(h, s * .75, '#f2f4f7', 4.5, .46, .2)))
-        : rgb2hex(...hsl2rgb(h, s * .6, fitLight(h, s * .6, '#0b0c0e', 4.5, .6, .9)));
+      deep = effMode(t) === 'light'                          // 精进 9：与 analyzePixels 同参，保持两条路径一致
+        ? rgb2hex(...hsl2rgb(h, s * .88, fitLight(h, s * .88, '#f2f4f7', 4.5, .46, .2)))
+        : rgb2hex(...hsl2rgb(h, s * .85, fitLight(h, s * .85, '#0b0c0e', 4.5, .72, .95)));
     }
     root.style.setProperty('--accent-deep', deep);
     root.style.setProperty('--hero-img', 'url("' + t.img + '")');
