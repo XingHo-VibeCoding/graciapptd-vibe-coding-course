@@ -1,174 +1,252 @@
 # 自律计划 · 部署手册（DEPLOY.md）
 
-- 版本：v1.0（2026-10-01 Day 15 建立）
-- 用途：把**云函数 `api`** 和**前端页面**第一次推上公网的可复现步骤。以后每次重新部署照这份做。
-- 今天只部署两样东西：`GET /api/health` 云函数 + `frontend/` 静态页面。**不建数据库、不配跨域**（Day 16–20）。
+- 版本：**v2.0（2026-10-03 Day 17）** — 基于**实测跑通**的流程重写；v1.0（Day 15）是按旧版 CloudBase 写的，多处与实际不符（见文末「v1.0 订正表」）。
+- 用途：把**云函数 `api`**、**数据库表**、**前端页面**推上公网的可复现步骤。以后每次重新部署照这份做。
+- 本版配套脚本：`db/schema.sql`、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
 
-> **重要前提**：本项目的前端是 **vanilla 单文件 HTML（零构建）**，见 `TECH_DESIGN.md` §二。
-> 所以**没有 `npm run build` 这一步**——`frontend/` 目录里的东西就是最终产物，直接上传即可。
+> **两条重要前提**
+> 1. 前端是 **vanilla 单文件 HTML（零构建）**（TECH_DESIGN §二）→ **没有 `npm run build`**，`frontend/` 里的东西就是最终产物。
+> 2. 云函数**零 npm 依赖**（用 Node 20 自带的全局 `fetch` 直连 CloudBase PostgreSQL 的 REST 接口）→ **没有 `npm install`**，上传的就是 `cloudfunctions/api/` 里的两个文件。
 
 ---
 
-## 〇、部署前检查清单（30 秒）
-
-- [ ] `cloudfunctions/api/index.js` 存在且返回 `{ ok: true, service: "Self discipline plan" }`
-- [ ] `cloudfunctions/api/package.json` 存在（无第三方依赖）
-- [ ] `frontend/index.html` + `frontend/assets/` 齐全（共约 3.3 MB）
-- [ ] 前端里**没有**绝对路径（`src="/..."`）、**没有** `localhost` 引用（否则静态托管上会 404 / 白屏）
-
-本地自查命令（在仓库根目录跑）：
+## 〇、开工前检查（30 秒）
 
 ```bash
+tcb --version            # 需要 CloudBase CLI 3.8+
+tcb env list             # 确认能登录、且能列出环境
 grep -n 'src="/\|href="/\|url("/' habit-tracker/frontend/index.html   # 应为空
 grep -n "localhost\|127.0.0.1" habit-tracker/frontend/index.html      # 应为空
 ```
 
----
-
-## 一、第 1 步：开通 CloudBase 环境（附录 M，约 10–15 分钟）
-
-1. 打开 <https://console.cloud.tencent.com/tcb>，用微信/QQ 登录（需实名）。
-2. 点「**新建环境**」，填环境名（如 `habit-tracker`），套餐选**按量计费**（个人练习够用，有免费额度）。
-3. 创建完成后，在环境列表复制 **环境 ID**（形如 `habit-tracker-1a2b3c4d5e6f7g8h`）。
-4. **把环境 ID 记下来**——第 2、3、4 步都要用，也要填进 `api-contract.md` §六。
-
-> 这一步涉及实名与开通，只能你自己操作。
+**环境 ID 以 `tcb env list` 的输出为准**，不要相信任何文档里抄来的值。
+本项目真实环境 ID：`habit-tracker-d9gh0mjel767ff0d2`（上海，免费体验版）。
 
 ---
 
-## 二、第 2 步：部署云函数 `api`
-
-### 路线 A：控制台（零基础推荐，不用装任何东西）
-
-1. 进入刚建的环境 → 左侧「**云函数**」→「**新建云函数**」。
-2. 函数名称填 `api`（**必须叫 api**，路由里写死了）。
-3. 运行环境选 **Node.js 18**（或 Node.js 16+），创建方式选「**空白函数**」。
-4. 把本地 `habit-tracker/cloudfunctions/api/index.js` 的**全部内容**复制粘贴进在线编辑器。
-5. 如果编辑器有"依赖配置"，把 `package.json` 的内容也贴进去（本函数**零第三方依赖**，只有元信息）。
-6. 点「**保存并安装依赖**」→ 再点「**部署**」。
-7. 部署成功后，用页面上的「**测试**」按钮点一下（不用传任何参数）——应看到 `{"ok":true,"service":"Self discipline plan"}`。
-   - 这一步在控制台里就等于访问了根路径，函数的 `pickPath()` 会把根路径当健康检查处理。
-
-### 路线 B：命令行 CLI（想以后一键部署时用）
+## 一、登录 CLI（扫码，一次就够）
 
 ```bash
-npm i -g @cloudbase/cli        # 安装 CLI（一次就够）
-tcb login                      # 浏览器扫码登录
-tcb fn deploy api -e <环境ID>   # 部署 cloudfunctions/api 目录
-tcb fn invoke api -e <环境ID>   # 本地触发一次，看返回
+tcb login --flow device
 ```
 
----
+会打印一个授权链接和用户码，用微信/QQ 登录腾讯云后确认即可。
+登录态缓存在本机，后续命令直接用；换机器或过期后重跑这一条。
 
-## 三、第 3 步：给云函数开「HTTP 访问服务」（生成公网地址）
-
-> 云函数默认**没有公网地址**，必须挂到 HTTP 访问服务上才能用浏览器打开。
-
-1. 环境 → 左侧「**HTTP 访问服务**」（部分版本在「云函数 → 函数详情 → 触发方式」里）。
-2. 点「**新建**」/「添加路径」：
-   - **路径**：`/api`
-   - **关联资源**：云函数 → `api`
-3. 保存。页面会出现一条形如
-   `https://<环境ID>.service.tcloudbase.com/api/...` 的**默认域名**。
-4. 复制这个域名。
-
-> **路径映射说明**：配了 `/api` 之后，访问 `/api/health` 会触发 `api` 函数。
-> 代码里的 `pickPath()` 同时兼容"平台剥掉 `/api` 前缀"和"带末尾斜杠"两种情况，所以路径怎么配都能命中，不用担心。
+> **坑**：登录成功后 CLI 会追问「是否收集使用数据 (Y/n)」。
+> 如果它在**非交互环境**（脚本、后台任务）里卡住，凭据其实**已经写好了** —— 直接中断该命令，用 `tcb env list` 验证登录态即可。
 
 ---
 
-## 四、第 4 步：部署前端到静态网站托管
+## 二、建表 + 种子 + 验证（在真库执行 SQL）
 
-### 路线 A：控制台
-
-1. 环境 → 左侧「**静态网站托管**」→ 首次进入点「**开通**」（免费额度够练习）。
-2. 进入「**文件管理**」，把 **`habit-tracker/frontend/` 里面的内容**上传到**根目录**：
-   - `index.html`
-   - `assets/`（整个文件夹，里面是图片）
-3. ⚠️ **别把 `habit-tracker/` 或 `frontend/` 这一层文件夹整个传上去**——传上去后首页会变成 `/frontend/index.html`，直接访问根域名会 404。
-4. 上传完成后，页面上会给出**默认域名**，形如
-   `https://<环境ID>-<随机串>.tcloudbaseapp.com/index.html`。
-
-### 路线 B：命令行 CLI
+CLI 可以直连环境里的 PostgreSQL 执行 SQL，不用开控制台：
 
 ```bash
-tcb hosting deploy habit-tracker/frontend -e <环境ID>
+tcb db execute --sql "$(cat habit-tracker/db/schema.sql)"   # 建两张核心表（可重复执行）
+tcb db execute --sql "$(cat habit-tracker/db/seed.sql)"     # 种子数据（可重复执行，应自报 7 / 8）
+tcb db execute --sql "$(cat habit-tracker/db/verify.sql)"   # 6 段验证，最后一段应回 7 / 8
 ```
 
-> 该命令会把 `frontend/` 里的**内容**部署到静态托管根目录，正是我们要的效果。
+查表与结果（`--json` 才看得到行）：
+
+```bash
+tcb db execute --json --sql "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+tcb db execute --json --sql "SELECT date::text, mood FROM plan_days WHERE uid='seed-demo-user' ORDER BY date"
+```
+
+**本步骤的验收**：`public` 下出现 `plan_days` 与 `checkins`；`plan_days` 7 行、`checkins` 8 行（`uid='seed-demo-user'`）。
 
 ---
 
-## 五、验证方法（Day 15 的三张截图就照这里截）
+## 三、创建环境 API Key（云函数读数据库的凭证）
 
-### 5.1 验证云函数（截图 1）
+云函数要读 CloudBase PostgreSQL，需要一个「服务端身份」。用环境 API Key：
+
+```bash
+tcb env apikey create habit-tracker-api
+# ⚠️ 返回的 token 明文**只在创建时出现这一次**，立刻存好（下一步要用）
+```
+
+- Key 类型是 `service_role`（服务端角色，可绕过 RLS）。**它绝不能出现在前端**，只能待在云函数的环境变量里。
+- 查看/回收：`tcb env apikey list` / `tcb env apikey delete <keyId>`。
+
+---
+
+## 四、写部署配置（含密钥，故不入库）
+
+```bash
+cp habit-tracker/cloudbaserc.example.json habit-tracker/cloudbaserc.json
+# 然后把 cloudbaserc.json 里的三处占位替换为真实值：
+#   envId                  → 真实环境 ID
+#   TCB_ENV                → 真实环境 ID
+#   CLOUDBASE_API_KEY      → 上一步拿到的 API Key token
+```
+
+| 文件 | 是否入库 | 说明 |
+|---|---|---|
+| `cloudbaserc.example.json` | ✅ 入库 | 不含密钥的模板，供后人照抄 |
+| `cloudbaserc.json` | ❌ **不入库**（已在 `.gitignore`） | 含 API Key 明文 |
+
+> **顺序很重要**：`.gitignore` 里 `cloudbaserc.json` 这条规则是**先把规则立好、再落密钥**的。
+> 反过来做（先建文件后补规则）就可能把密钥提交上去 —— 仓库是 public 的。
+
+云函数运行时读三个环境变量：
+
+| 变量 | 作用 |
+|---|---|
+| `TCB_ENV` | 环境 ID，用来拼数据库 REST 接口地址 |
+| `CLOUDBASE_API_KEY` | 服务端身份，云函数带着它读库 |
+| `DEMO_UID` | **Day 17 临时**：还没接匿名登录，用它在服务端指定"看谁的数据"。Day 18 接上登录后必须删掉 |
+
+---
+
+## 五、部署云函数 + 开公网访问路径
+
+```bash
+cd habit-tracker
+MSYS_NO_PATHCONV=1 tcb fn deploy api --force --path /api --runtime Nodejs20.19
+```
+
+一条命令做三件事：**部署代码** + **应用 cloudbaserc.json 里的配置（含环境变量）** + **创建 HTTP 访问路径 `/api`**。
+
+成功后打印：
+
+```
+Cloud function HTTP access service link: https://<环境ID>.service.tcloudbase.com/api
+```
+
+> **两个坑**
+> 1. **`--path /api` 在 Git Bash 里会被篡改成 Windows 路径**（MSYS 会把 `/api` 当路径转换）→ 加 `MSYS_NO_PATHCONV=1` 前缀。
+> 2. **不要加 `--httpFn`**：这个 CLI 里它的含义是「Web 函数」，会要求 `scf_bootstrap` 启动文件（那是另一种形态）。我们要的是**事件型云函数 + HTTP 访问服务路由**。
+> 3. **默认域名不许手工加路由**：直接 `tcb routes add --data '{"domain":"<环境ID>.service.tcloudbase.com",...}'` 会报
+>    「is a system internal domain, manual creation or modification is not supported」。
+>    正解就是用 `--path` 让 `fn deploy` 顺带把路由建出来（或去控制台 HTTP 网关页面点「新建」）。
+
+**生效时间**：路由创建后可能需要几分钟；首次访问有冷启动（1–3 秒），刷新一次即可。
+
+---
+
+## 六、部署前端到静态托管
+
+```bash
+# 在仓库根目录执行
+MSYS_NO_PATHCONV=1 tcb hosting deploy habit-tracker/frontend
+```
+
+- 该命令把 `frontend/` 里的**内容**（`index.html` + `assets/`）部署到静态托管**根目录**。
+- 千万别上传 `habit-tracker/` 或 `frontend/` 这一层目录 —— 那样首页会变成 `/frontend/index.html`，直接访问根域名 404。
+- 公网地址：`https://<环境ID>-<随机串>.tcloudbaseapp.com/`（本项目为 `...-1499348397.tcloudbaseapp.com`）。
+
+---
+
+## 七、验证方法（Day 17 的两张截图照这里截）
+
+### 7.1 云函数读接口（截图 1）
 
 浏览器地址栏直接打开：
 
 ```
-https://<环境ID>.service.tcloudbase.com/api/health
+https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/health
+https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/day?date=2026-10-01
 ```
 
-**应看到**：
+**应看到**：第一行 `{"ok":true,"service":"Self discipline plan"}`；
+第二行是带 `code/message/data` 信封的 JSON，`data.checkins` 里是**库里真实存在的那几条待办**。
 
-```json
-{ "ok": true, "service": "Self discipline plan" }
+**图里要有的**：地址栏完整 URL + 上述 JSON。
+
+命令行等价写法（更快，可贴进终端）：
+
+```bash
+BASE=https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api
+curl "$BASE/health"
+curl "$BASE/day?date=2026-10-01"
+curl "$BASE/checkins?date=2026-10-01&limit=2"     # 顺带验证条数限制
 ```
 
-**图里要有的**：地址栏完整 URL + 上面的 JSON。
+### 7.2 前端页面（截图 2）
 
-> 刷新一次内容不变是正常的（这个接口本就返回固定值）；如果看到的是 HTML 报错页 /「404 page not found」/ 超时，见 §七 排错。
-> 首次访问可能因**冷启动**慢 1–3 秒，多刷一次即可。
+打开 `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`。
 
-### 5.2 验证前端页面（截图 2）
-
-浏览器打开静态托管给的公网地址（`https://<环境ID>-xxxx.tcloudbaseapp.com/index.html`）。
-
-**应看到**：自律计划首页（顶部落日大图 + 今天待办 + 底部四个导航）。
-点几下导航（今天 / 思考 / 应用 / 我的）确认都能切——**数据仍是浏览器本地的 mock 数据**，因为接口还没接。
+**应看到**：自律计划首页（顶部落日大图 + 今天待办 + 底部导航），导航都能切。
+**注意**：本期**没配跨域 CORS**，所以页面里的 `fetch` 会被浏览器拦，页面数据仍是**浏览器本地的 mock 数据** —— 这是**预期**的（见 §九）。
 
 **图里要有的**：地址栏 + 页面内容。
 
-### 5.3 验证控制台环境信息（截图 3）
+### 7.3 真库验证（Day 17 的核心考核）
 
-在 CloudBase 控制台的环境「**概览**」页截图。
+「接口读的是真库还是假数据」必须证明。办法是**直接改库里的数据，看接口是否跟着变**：
 
-**图里要有的**：**环境 ID**、**剩余额度**、**到期日期**。
+```bash
+# 1) 改前：记下当前心情（应为 calm）
+curl "$BASE/day?date=2026-10-01"
+
+# 2) 真库改一行
+tcb db execute --sql "UPDATE plan_days SET mood='joy', updated_at=now() WHERE uid='seed-demo-user' AND date=DATE '2026-10-01'"
+
+# 3) 改后：接口应返回 mood=joy，且 updatedAt 变成刚才的时间
+curl "$BASE/day?date=2026-10-01"
+
+# 4) 复原
+tcb db execute --sql "UPDATE plan_days SET mood='calm' WHERE uid='seed-demo-user' AND date=DATE '2026-10-01'"
+```
+
+**验收标准**：第 3 步返回的 `mood` 必须变成 `joy`。变了 = 数据真的来自数据库。
 
 ---
 
-## 六、本期刻意不做的事（说清楚，免得以为漏了）
+## 八、控制台手动路线（CLI 不可用时的备选）
+
+1. **建表**：环境 → 数据库 → PostgreSQL → SQL 编辑器，依次粘贴 `schema.sql` → `seed.sql` → `verify.sql`。
+2. **API Key**：环境 → API Key → 新建，复制 token。
+3. **云函数**：云函数 → 新建（名称必须 `api`，运行时 Node.js 20）→ 粘贴 `cloudfunctions/api/index.js` → 保存并部署 →
+   在「函数配置 → 环境变量」里补上 §四 那三个变量（**这一步别忘，否则接口会回 500**）。
+4. **HTTP 访问**：HTTP 网关 → 路由管理 → 新建 → 关联资源选「云函数 / api」→ 域名选**默认域名** → 触发路径填 `/api`。
+5. **前端**：静态网站托管 → 文件管理 → 上传 `frontend/` 里的**内容**到根目录。
+
+---
+
+## 九、本期刻意不做的事
 
 | 事项 | 为什么不做 | 什么时候做 |
 |---|---|---|
-| 配置跨域 CORS | 前端**还没接接口**，用不着；地址栏/curl 测试不受 CORS 限制 | Day 16 之后前端开始 fetch 时 |
-| 建数据库表 | 契约刚定，先按契约建表 | Day 16 |
-| 真实业务接口 | 按 `api-contract.md` 逐个实现 | Day 17–20 |
-| 自定义域名 / HTTPS 证书 | 默认域名已够用 | 后续优化 |
+| 配置跨域 CORS | 页面还没接接口；地址栏/curl 测不受 CORS 限制 | 前端开始 `fetch` 时（Day 18+） |
+| 匿名登录 + RLS | 需要先把读接口跑通，身份链路下一批做 | Day 18 |
+| 其余 5 张表 | 按课程节奏 Day 18 前追加到 `schema-2.sql`（不改 `schema.sql`） | Day 18 |
+| 业务写入接口 | 读接口先验证通过 | Day 18 |
+| 自定义域名 / HTTPS 证书 | 默认域名够用 | 后续优化 |
 
-> **顺便解释「为什么地址栏能测、前端 fetch 会失败」**：CORS 是浏览器的**同源策略**限制——你在地址栏敲 URL 属于"直接导航"，浏览器不管；但页面里的 JS 发 `fetch` 属于"跨域请求"，浏览器会先问服务器"允不允许"，没配就拦。所以今天能验证，不代表接口能被页面调用。
+> **为什么「地址栏能测、页面 fetch 会失败」**：CORS 是浏览器的**同源策略**限制 —— 地址栏敲 URL 属于"直接导航"，浏览器不管；
+> 页面里的 JS 发 `fetch` 属于"跨域请求"，浏览器会先问服务器"允不允许"，没配就拦。
+> 所以今天能验证，不代表接口能被页面调用。
 
 ---
 
-## 七、排错对照表
+## 十、排错对照表（Day 17 实测补充）
 
 | 现象 | 原因 | 怎么办 |
 |---|---|---|
-| `404 page not found` | HTTP 访问服务没配 `/api` 路径，或路径配错 | 回第 3 步检查路径与关联函数 |
-| 返回 HTML 而不是 JSON | 打开的是静态托管的地址，不是云函数地址 | 云函数地址主机名是 `service.tcloudbase.com`，别搞混 |
-| `{"code":404,"message":"接口不存在：..."}` | 函数部署成功但路由没命中 | 看 message 里的 `availableRoutes`（会列出真实可用路由），核对路径 |
-| 静态页面白屏 / 图片全裂 | 上传时多带了一层目录，或 `assets/` 没传 | 回第 4 步：只传 `frontend/` 里的**内容** |
-| 前端页面打开是旧版本 | 浏览器缓存 | `Ctrl + F5` 强制刷新 |
-| 云函数第一次访问超时 | 冷启动 | 再刷一次；仍超时看函数「日志」 |
-| 控制台"测试"返回正常但公网访问失败 | 没配 HTTP 访问服务 | 回第 3 步 |
+| `domain ... is a system internal domain` | 默认域名由系统托管，不许手工建路由 | 用 `tcb fn deploy ... --path /api` 自动建，或去控制台 HTTP 网关页面建 |
+| `HTTP access service path must start with /` | Git Bash 把 `/api` 篡改成 Windows 路径 | 命令前加 `MSYS_NO_PATHCONV=1` |
+| 提示要 `scf_bootstrap` | 误用了 `--httpFn`（这是「Web 函数」形态） | 去掉 `--httpFn`，用事件型 + HTTP 访问服务 |
+| 命令静默被杀 / 无输出 | 沙箱拦了外网 | 部署类命令需在放行网络的环境下执行 |
+| 接口回 `{"code":500,...}` | 云函数里环境变量没配 / API Key 失效 / 表不存在 | 看云函数日志：`tcb fn log api`；再核对 §四 三个变量 |
+| 接口回 `{"code":401,...}` | 没取到身份（`DEMO_UID` 没配，且没有登录上下文） | 补 `DEMO_UID` 环境变量 |
+| 接口回 `{"code":404,...,"availableRoutes":[...]}` | 路由没命中 | 看 `availableRoutes` 里真实有哪些路径，核对 URL |
+| 返回 HTML 而不是 JSON | 打开的是静态托管地址，不是云函数地址 | 云函数域名是 `*.service.tcloudbase.com`，别搞混 |
+| 静态页面白屏 / 图片全裂 | 上传时多带了一层目录，或 `assets/` 没传 | 只传 `frontend/` 里的**内容** |
+| 页面打开是旧版本 | 浏览器 / CDN 缓存 | `Ctrl + F5`；CDN 通常几分钟刷新 |
+| 控制台「测试」正常但公网访问失败 | 没配 HTTP 访问路径 | 见 §五 |
 
 ---
 
-## 八、部署完成后要做的事
+## 附：v1.0（Day 15）订正表 —— 为什么必须重写
 
-1. 回到 `api-contract.md` **§六 部署记录**，填入三行：
-   - 环境 ID
-   - 云函数公网地址
-   - 前端 mock 版公网地址
-2. 把这份手册的版本号升到 v1.1，备注实际部署日期。
-3. 提交推送（文档与线上保持一致，是 R2 的要求）。
+| v1.0 的说法 | 实测结论 |
+|---|---|
+| 环境 ID `habit-tracker-d3ghf0mjer76ffo02` | ❌ 错的，真实是 `habit-tracker-d9gh0mjel767ff0d2` |
+| 在控制台手工配「HTTP 访问服务」路径 `/api` | 新版叫 **HTTP 网关**；默认域名**不许手工加路由**，要用 `fn deploy --path` |
+| 用 `tcb hosting deploy` 部署前端 | ✅ 仍然正确 |
+| 「云函数默认没有公网地址」 | ⚠️ 方向对，但新版是「HTTP 网关路由」而非旧版「HTTP 访问服务」配置项 |
+| 没说云函数怎么读数据库 | ❌ 漏了：需要**环境 API Key + 三个环境变量**（Day 17 补） |

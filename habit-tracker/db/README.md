@@ -102,12 +102,37 @@ CREATE INDEX checkins_uid_date_idx ON checkins (uid, date);
 
 ## 四、怎么在 CloudBase 里执行
 
-1. 打开 <https://console.cloud.tencent.com/tcb>，选环境 `habit-tracker`
+**方式 A：命令行（推荐，Day 17 实测可用）**
+
+```bash
+tcb db execute --sql "$(cat db/schema.sql)"
+tcb db execute --sql "$(cat db/seed.sql)"
+tcb db execute --sql "$(cat db/verify.sql)"
+# 想看到返回的行必须加 --json
+tcb db execute --json --sql "SELECT date::text, mood FROM plan_days WHERE uid='seed-demo-user' ORDER BY date"
+```
+
+> `db execute` 默认只打印"影响行数"，**SELECT 的结果集要用 `--json` 才看得到** —— 这个坑 Day 17 踩过一次。
+
+**方式 B：控制台**
+
+1. 打开 <https://console.cloud.tencent.com/tcb>，选环境
+   `habit-tracker-d9gh0mjel767ff0d2`（**以 `tcb env list` 输出为准**）
 2. 左侧「**数据库**」→ 选中 **PostgreSQL**（不是"云数据库"那个选项）
 3. 进「**SQL 编辑器**」，按顺序粘贴执行：`schema.sql` → `seed.sql` → `verify.sql`
-4. 执行完在「**表管理 / 数据**」页能看到两张表和里面的数据（Day 16 截图就截这里）
+4. 执行完在「**表管理 / 数据**」页能看到两张表和里面的数据
 
 > 想再验证一次**可重复执行**：把 `seed.sql` 再执行一遍，然后跑 `verify.sql` 最后那条计数——数字应该还是 7 / 8。
+
+### 4.1 真库执行记录（2026-10-03 Day 17 首次）
+
+| 步骤 | 结果 |
+|---|---|
+| `schema.sql` | ✅ 建出 `plan_days` / `checkins`（此前 public 下**一张表都没有**——Day 16 只在本地 pglite 验过） |
+| `seed.sql` | ✅ 自报 `plan_days 7 / checkins 8` |
+| `verify.sql` | ✅ 6 段全跑通，末段计数 7 / 8 |
+| 关联查询（验证 3） | ✅ 09-30 → 3 条打卡（完成 2）；10-01 → 5 条（完成 1） |
+| RLS 状态 | 两张表均为 **未开启**（`relrowsecurity = false`） |
 
 ---
 
@@ -127,7 +152,12 @@ CREATE INDEX checkins_uid_date_idx ON checkins (uid, date);
 
 种子数据统一用 `uid = 'seed-demo-user'`（编造的账号）。
 
-等 Day 17 接口接上真实身份后，**想让自己的账号在页面上看到这批数据**，执行一次：
+**Day 17 现状（接口已通，但登录还没接）**：云函数取 `uid` 的顺序是
+① `context.userInfo.uid`（平台注入的登录身份，接上匿名登录后自动生效）→ ② 函数环境变量 `DEMO_UID`。
+当前环境变量 `DEMO_UID` 就设为 `seed-demo-user`，所以**接口读到的正是这批种子数据** —— 这是刻意的，
+这样"接口能读出数据"与"数据来自真库"两件事可以分开验证。
+
+等 Day 18 接上匿名登录、拿到你自己的 `uid` 之后，想让自己的账号看到这批数据，执行一次：
 
 ```sql
 UPDATE plan_days SET uid = '<你的真实 uid>' WHERE uid = 'seed-demo-user';

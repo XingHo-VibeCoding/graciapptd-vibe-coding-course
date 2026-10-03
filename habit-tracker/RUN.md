@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.5（2026-10-02 精进 14：中性面系也跟随背景图，与强调色整组联动）
+- 版本：v3.6（2026-10-03 Day 17：后端读接口上线公网 + 真库验证；前端仍为本地 mock 数据）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -10,7 +10,9 @@
 ## 一、这个项目是什么
 
 一个纯网页版的自律助手：时间轴待办 + 心情五选一 + 无压力思考 + 周月报。
-**无后端、无安装依赖、无登录**——所有数据存在浏览器 localStorage 里（约 5MB）。
+**前端无安装依赖**——页面数据存在浏览器 localStorage 里（约 5MB）。
+**第 3 周起加了云端**：CloudBase 云函数 `api` + PostgreSQL 两张核心表，提供真库读接口（Day 17 起）。
+**页面还没接接口**（跨域 CORS 未配，见 DEPLOY.md §九），所以现在「页面看到的」仍是本地数据，「接口返回的」已是数据库数据。
 
 ## 二、怎么跑起来（3 步）
 
@@ -42,6 +44,16 @@ http://localhost:8765/habit-tracker/frontend/index.html
 ```
 
 > `localhost` 的意思就是"本机自己"——这个地址只有你的电脑能打开，别人访问不了，数据也在你浏览器里，隐私安全。
+
+**（可选）第 4 步：直接看线上版**
+
+| 看什么 | 地址 |
+|---|---|
+| 前端页面（静态托管） | `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/` |
+| 后端读接口 | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/day?date=2026-10-01` |
+| 健康检查 | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/health` |
+
+> 部署/重新部署的完整步骤见 `DEPLOY.md`（v2.0，基于实测重写）。
 
 ## 三、怎么验证它没坏（对照 PRD 验收标准）
 
@@ -98,6 +110,10 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A47 浅色恢复跟随背景图 | 「我的→主题」依次选 3 张不同色相的背景图（落日=蓝 / 背景4=暖橙 / 默认金黄），每换一张看周历选中块、筛选按钮、待办时间、导航激活项 | 每换一张图强调色系跟着变（蓝→`#6d86cf` 系、橙→`#e2935a` 系、金黄→`#e2c75a` 系），全部明亮柔和不出土色；强调文字对浅底仍 ≥4.5:1；深色主题换图行为与之前一致（精进 13） |
 
 | A48 面系跟随背景图 | 「我的→主题」依次换 3 张不同色相的背景图（金黄 / 背景4 暖橙 / 落日蓝紫），看页面底色、弹窗与输入框的次级面、分隔线、正文颜色 | 金黄图 → 奶油暖阳原样不变；暖橙图 → 整页偏暖白；蓝紫图 → 整页偏冷白、正文变深蓝灰；卡片始终保持纯白；正文/次级字对页底对比 ≥8:1 / ≥4.5:1；深色主题与之前完全一致（精进 14） |
+
+| A49 后端读接口上线 | 浏览器地址栏打开 `.../api/health`、`.../api/day?date=2026-10-01`、`.../api/checkins?date=2026-10-01&limit=2` | ① health 回扁平 `{"ok":true,"service":"Self discipline plan"}`；② day 回信封 JSON，`data.planDay.mood` 与 `data.checkins` 为**数据库里真实存在的行**（5 条待办）；③ checkins 回 `total=5, limit=2, items=2`（条数限制生效）；④ 非法日期回 400、未取身份回 401、库里报错回 500，均为统一信封（Day 17） |
+| A49b 真库验证 | `tcb db execute --sql "UPDATE plan_days SET mood='joy' ... WHERE date=DATE '2026-10-01'"` 后刷新接口 | 接口返回的 `mood` 立刻由 `calm` 变 `joy`、`updatedAt` 刷新；复原后变回 `calm` —— 证明数据来自数据库而非写死（Day 17） |
+| A49c 云函数本地自测 | `node habit-tracker/cloudfunctions/api/selftest.js` | 63/63 通过（路由命中、参数校验、身份、字段映射、异常兜底；不联网） |
 
 > 报告（F4）还没做——按 R7 规则一天一块。思考（F3）卡片流 MVP（Day 14）与 AI 洞察（Day 15）已完成；应用页（F6）骨架与专注计时（Day 18）已完成；情绪表情已图片化（Day 19）；纪念&倒数日（Day 21）、肯定语（Day 22）、随即话题（精进 7）已开放；记账已按用户要求移除（2026-09-27）；剩小组件待做。
 

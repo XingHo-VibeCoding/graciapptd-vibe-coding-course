@@ -1,9 +1,18 @@
 # 自律计划 · API 接口契约（api-contract.md）
 
-- 版本：v1.0（2026-10-01 Day 15 建立）— 取代 v0.1 草稿
+- 版本：v1.1（2026-10-03 Day 17 起升版；v1.0 于 2026-10-01 Day 15 建立）
 - 作用：**前端和云端之间的"合同"**。前端按这份文档发请求，后端按这份文档回数据；任何一方想改形状，先改这份文档，再改代码（R2 文档先行）。
-- **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。今天（Day 15）只有 `GET /api/health` 是真的，其余**全部只登记占位、不实现**。
+- **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。
+- **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）；其余仍为占位，按 Day 18–20 逐个实现。
 - 依据：`TECH_DESIGN.md` §三 数据模型 / §四 API 列表；并按 `frontend/index.html` 的**实际功能面**补全（Day 15 新增：专注计时 / 纪念&倒数日 / 肯定语 / 主题换肤）。
+
+> **⚠️ 课程示例接口名与本项目的关系**（Day 17 与用户确认，勿再纠结）：
+> 课程案例里出现的是 `GET /api/hot`（热搜）与 `GET /api/favorites`（收藏），那是课程演示项目的接口。
+> **本项目是打卡应用，既没有热搜概念、也没有收藏模型**，所以：
+> - `GET /api/favorites` → 对应本项目的**「列表读取」接口**（今天页待办列表就是第一个：`GET /api/checkins`）；
+> - `GET /api/hot` → **本项目没有对应物**。课程它要考察的实质是"接口读出来的必须是**真库里的真实数据**，不是前端 mock / 假数据"，
+>   本项目用 `GET /api/day` + `GET /api/checkins` 读 CloudBase 真库来达成同一个目标（Day 17 验收方式见 §六）。
+
 
 > **怎么用这份文档**（给未来的自己）：
 > 1. 前端要调接口 → 只查本文档，不猜路径；
@@ -18,8 +27,8 @@
 
 | 项 | 值 |
 |---|---|
-| Base URL | `https://<环境ID>.service.tcloudbase.com/api`（部署后填真实值，见 §六 部署记录） |
-| 承载方式 | CloudBase **云函数 `api`**（Node.js，单函数承载全部路由），由「HTTP 访问服务」暴露为公网地址 |
+| Base URL | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`（真实值，2026-10-03 部署后登记） |
+| 承载方式 | CloudBase **云函数 `api`**（Node.js 20，单函数承载全部路由），由「HTTP 访问服务」暴露为公网地址 |
 | 请求头 | `Content-Type: application/json`（写操作必带） |
 | 跨域 CORS | ⚠️ **本期不配置**（Day 16–20 再处理）。浏览器从别的域名直接 `fetch` 会被拦，属预期；本阶段测试走**浏览器地址栏**或 `curl` |
 
@@ -68,6 +77,12 @@
 - **前端永远不许明传 `uid`**（含 query、body、header）。谁的数据由服务端从上下文判定——这是防越权的第一道闸。
 - 下文所有接口的"请求参数"里都**不会**出现 `uid`，这是刻意的。
 
+> **⚠️ Day 17 的实现现状（临时，Day 18 要收敛）**：匿名登录还没接，云函数取 `uid` 的顺序是
+> ① `context.userInfo.uid`（平台注入，接上登录后自动生效）→ ② 函数环境变量 `DEMO_UID`（服务端配置的演示身份）。
+> **两者都不来自请求参数**，所以"前端不许明传 uid"这条没有被破坏；但它意味着**今天所有人看到的是同一份演示数据**。
+> Day 18 接上匿名登录后必须删掉 `DEMO_UID` 兜底，改为只认 `context.userInfo.uid`，并按 §二 的说明把 RLS 打开。
+
+
 ### 1.5 数据格式约定
 
 | 类型 | 格式 | 例 |
@@ -110,7 +125,7 @@
 
 ---
 
-## 三、已实现接口（今天唯一活着的接口）
+## 三、已实现接口
 
 ### `GET /api/health` —— 服务健康检查（Day 15）
 
@@ -145,9 +160,81 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 ---
 
-## 四、待实现接口（**今天只登记占位，不实现**）
+### `GET /api/day?date=YYYY-MM-DD` —— 今天页首屏合并读取（**Day 17 已实现**）
 
-> 以下是第 3 周要落地的全部接口。**现在登记的目的：先定名字和形状，避免前端先写死后端再改。**
+**用途**：打开今天页那一次请求，把当天要的东西一次取回，省往返。上方日期/心情来自 `plan_days`，下面的待办列表来自 `checkins`。
+
+**请求参数**：
+
+| 参数 | 必填 | 类型 | 说明 |
+|---|---|---|---|
+| `date` | ⭕ | string | `YYYY-MM-DD`；不传默认**服务端当天（东八区）**，前端建议总是显式传，避免时区歧义 |
+
+**响应**：同 §4.1 的定义（`{ code, message, data: { date, planDay, checkins } }`）。
+`planDay` 为 `null` 表示这一天还没建过记录（**不是错误**，前端照常渲染空列表）。
+
+**实际行为补充（实现细节，前端可依赖）**：
+
+- `checkins` 的排序固定为 `sort` 升序（同日内），再以 `id` 兜底 → 顺序稳定。
+- 数据库时间戳列（`created_at` / `updated_at` / `done_at`）在响应里统一是**毫秒数**；为空则为 `null`。
+- 日期在响应里原样回传字符串 `YYYY-MM-DD`（不是时间戳）。
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| 日期格式不对，或日期不存在（如 `2026-02-30`） | `{"code":400,"message":"日期格式不对，应为 YYYY-MM-DD","data":null}` |
+| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+| 服务端异常（数据库连不上 / 表不存在） | `{"code":500,"message":"服务端出了点问题，稍后再试","data":null}` |
+
+---
+
+### `GET /api/checkins?date=&from=&to=&done=&limit=` —— 打卡项列表读取（**Day 17 已实现**）
+
+**用途**：只读列表（周历切换、单日刷新、后续报告页取数）。
+
+**请求参数**（全部可选）：
+
+| 参数 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `date` | string | — | 单日查询；**与 `from`/`to` 互斥**，同时传回 400 |
+| `from` / `to` | string | — | 区间查询（含首尾），可只传一边 |
+| `done` | boolean | — | `true` 只看已完成 / `false` 只看未完成 |
+| `limit` | number | 20 | 返回条数上限，范围 **1–100**（Day 17 余力加练） |
+
+**响应**：
+
+```json
+{ "code": 0, "message": "ok",
+  "data": { "total": 8, "limit": 20, "items": [
+    { "id": 101, "date": "2026-10-01", "text": "晨跑 30 分钟", "time": "07:30",
+      "quad": "q2", "done": true, "doneAt": 1759302600000, "sort": 0 }
+  ] } }
+```
+
+| 字段 | 说明 |
+|---|---|
+| `total` | **满足条件的总条数**（不是本页条数），前端靠它判断"还有没有下一页" |
+| `limit` | 把生效的条数上限回显，方便前端判断是否被截断 |
+| `items` | 本页数据；排序固定 `date` 升序 → `sort` 升序 → `id` 兜底 |
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| 日期格式不对 / 日期不存在 | `{"code":400,"message":"日期格式不对，应为 YYYY-MM-DD","data":null}` |
+| `date` 与 `from`/`to` 同时传 | `{"code":400,"message":"date 与 from/to 不能同时传，请二选一","data":null}` |
+| `from` 晚于 `to` | `{"code":400,"message":"from 不能晚于 to","data":null}` |
+| `done` 不是 `true`/`false` | `{"code":400,"message":"done 只能是 true 或 false","data":null}` |
+| `limit` 不是 1–100 的整数 | `{"code":400,"message":"limit 必须是 1~100 的整数","data":null}` |
+| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+
+---
+
+## 四、待实现接口（Day 18–20 逐个补；下面标 ✅ 的两条已在 §三 实现）
+
+> 以下是第 3 周要落地的全部接口。**先定名字和形状，避免前端先写死后端再改。**
+> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；其余待做。
 
 ### 📌 先记住这条：别忘了「列表读取」接口
 
@@ -168,74 +255,20 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 ### 4.1 今天页（`plan_days` + `checkins`）
 
-#### `GET /api/day?date=YYYY-MM-DD` —— 首屏合并读取
+#### `GET /api/day?date=YYYY-MM-DD` —— 首屏合并读取 ✅ **Day 17 已实现**
 
-**用途**：打开今天页那一次请求，把当天要的东西一次取回，省往返（TECH_DESIGN §四）。
+> **完整定义见 §三**（响应形状、全部错误码、排序与时间戳口径都在那里，此处不重复免得两边不一致）。
 
-**请求参数**（query）：
-
-| 参数 | 必填 | 类型 | 说明 |
-|---|---|---|---|
-| `date` | ✅ | string | `YYYY-MM-DD`；不传默认服务端当天（但前端**建议总是显式传**，避免时区歧义） |
-
-**响应**：
-
-```json
-{
-  "code": 0,
-  "message": "ok",
-  "data": {
-    "date": "2026-10-01",
-    "planDay": { "date": "2026-10-01", "mood": "calm", "createdAt": 1759302600000 },
-    "checkins": [
-      { "id": 101, "date": "2026-10-01", "text": "晨跑 30 分钟", "time": "07:30",
-        "quad": "q2", "done": true,  "doneAt": 1759302600000, "sort": 0 },
-      { "id": 102, "date": "2026-10-01", "text": "写周报",       "time": null,
-        "quad": null, "done": false, "doneAt": null,          "sort": 1 }
-    ]
-  }
-}
-```
-
-**字段说明**：
+**字段速查**：
 
 - `planDay` 为 `null` 表示这一天还没建过记录（**不是错误**，前端照常渲染空列表）。
 - `mood` 取值：`sad` / `blue` / `calm` / `cozy` / `joy`，未打卡为 `null`。
 - `quad` 取值：`q1` / `q2` / `q3` / `q4`，未分类为 `null`。
 - `sort` 是当天内的手动排序位（用于"移动到其他日期"后保持顺序）。
 
-**错误返回**：
+#### `GET /api/checkins` —— 打卡项列表读取 ✅ **Day 17 已实现**
 
-| 情况 | 返回 |
-|---|---|
-| 日期格式不对 | `{"code":400,"message":"日期格式不对，应为 YYYY-MM-DD","data":null}` |
-| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
-
-#### `GET /api/checkins?date=YYYY-MM-DD` —— 打卡项列表读取
-
-**用途**：只读列表（周历切换、单日刷新时用）。
-
-**请求参数**：
-
-| 参数 | 必填 | 类型 | 说明 |
-|---|---|---|---|
-| `date` | ⭕ | string | 单日查询 |
-| `from` / `to` | ⭕ | string | 区间查询（与 `date` 二选一） |
-| `done` | ⭕ | boolean | 只看已完成 / 未完成（用于后续筛选维度扩展） |
-
-**响应**：
-
-```json
-{
-  "code": 0, "message": "ok",
-  "data": { "total": 2, "items": [
-    { "id": 101, "date": "2026-10-01", "text": "晨跑 30 分钟", "time": "07:30",
-      "quad": "q2", "done": true, "doneAt": 1759302600000, "sort": 0 }
-  ] }
-}
-```
-
-**错误返回**：`400` 日期格式不对 / `400` `date` 与 `from`+`to` 同时传且冲突。
+> **完整定义见 §三**（含 `limit` 条数限制参数 `1–100`、区间查询与全部错误码）。
 
 #### `POST /api/checkins` —— 新建打卡项
 
@@ -651,9 +684,25 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 | 项 | 值 | 更新时间 |
 |---|---|---|
-| 云函数名 | `api`（内部路由 `/api/health`） | 2026-10-01 |
-| 环境 ID | `habit-tracker-d3ghf0mjer76ffo02`（2026-10-01 21:55 开通，免费体验版·上海） | 2026-10-01 |
-| 云函数公网地址 | **待填**（部署成功后补，形如 `https://<环境ID>.service.tcloudbase.com/api/health`） | — |
-| 前端 mock 版公网地址 | **待填**（静态托管部署成功后补） | — |
+| 云函数名 | `api`（内部路由 `/api/health`、`/api/day`、`/api/checkins`） | 2026-10-03 |
+| 环境 ID | **`habit-tracker-d9gh0mjel767ff0d2`**（2026-10-01 21:57 开通，免费体验版·上海） | 2026-10-03 |
+| 云函数公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`** | 2026-10-03 |
+| 前端 mock 版公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`** | 2026-10-03 |
+| 数据库 | CloudBase PostgreSQL 17.11，表 `plan_days`(7 行) + `checkins`(8 行)，均 `uid='seed-demo-user'`；RLS 未开启 | 2026-10-03 |
+| 部署方式 | CloudBase CLI 3.8.5（`tcb`）；配置见 `cloudbaserc.example.json`（真实文件 `cloudbaserc.json` 含密钥、已被 .gitignore 排除） | 2026-10-03 |
 
-> 部署完成后**必须回来把这三行填上**——它是"文档与线上一致"的凭证，也是截图里要出现的地址。
+> ⚠️ **更正记录（Day 17）**：本表此前登记的「环境 ID = `habit-tracker-d3ghf0mjer76ffo02`」是**错的**，
+> 真实值是 `habit-tracker-d9gh0mjel767ff0d2`。发现方式：`tcb env list` 列出唯一环境，与文档记录逐字符比对不一致。
+> 教训：**ID 这种"看着像随机串"的值，人眼校对不可靠** —— 必须以命令输出为准，文档里的值要能被一条命令复核。
+
+### 6.1 Day 17 验收记录（真库验证）
+
+| 验收项 | 结果 |
+|---|---|
+| `GET /api/health` 公网可访问 | ✅ `{"ok":true,"service":"Self discipline plan"}` |
+| `GET /api/day?date=2026-10-01` 返回真库数据 | ✅ 5 条打卡项 + `planDay.mood=calm`，与库里一致 |
+| `GET /api/checkins?date=2026-10-01&limit=2` 条数限制生效 | ✅ `total=5, limit=2, items=2` |
+| **改一行真库数据，接口跟着变** | ✅ 库里把 10-01 心情 `calm → joy`（`AffectedRows=1`），接口立刻返回 `joy` 且 `updatedAt` 刷新；复原后返回 `calm` |
+| 前端页面公网可访问 | ✅ `https://...tcloudbaseapp.com/` HTTP 200，178667 字节，标题「自律计划」 |
+
+> 这次验证证明：接口返回的是**真库里的数据**，不是前端 mock、也不是写死的假数据 —— 这正是课程 Day 17「接真实数据」在本项目里的达成方式。

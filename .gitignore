@@ -5,6 +5,11 @@
 .env.local
 .env.*.local
 
+# CloudBase CLI 的部署配置里含**函数环境变量**（其中有环境 API Key），
+# 所以真实文件不入库；入库的是不含密钥的模板 cloudbaserc.example.json。
+# 规则先立好再加密钥 —— 顺序反了就可能把密钥提交上去。
+cloudbaserc.json
+
 # ===== 依赖目录 =====
 node_modules/
 dist/

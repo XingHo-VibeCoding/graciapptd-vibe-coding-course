@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "<你的环境ID>",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "api",
+      "handler": "index.main",
+      "runtime": "Nodejs20.19",
+      "timeout": 10,
+      "memorySize": 256,
+      "installDependency": false,
+      "description": "自律计划唯一后端入口：单函数承载全部 REST 路由",
+      "envVariables": {
+        "TCB_ENV": "<你的环境ID>",
+        "CLOUDBASE_API_KEY": "<环境 API Key，形如 eyJhbGciOi...，只在创建时返回一次>",
+        "DEMO_UID": "seed-demo-user"
+      }
+    }
+  ]
+}
