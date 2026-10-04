@@ -1,8 +1,8 @@
 # 自律计划 · 部署手册（DEPLOY.md）
 
-- 版本：**v2.0（2026-10-03 Day 17）** — 基于**实测跑通**的流程重写；v1.0（Day 15）是按旧版 CloudBase 写的，多处与实际不符（见文末「v1.0 订正表」）。
+- 版本：**v2.1（2026-10-04 Day 18）** — 增加写入接口（POST）部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
 - 用途：把**云函数 `api`**、**数据库表**、**前端页面**推上公网的可复现步骤。以后每次重新部署照这份做。
-- 本版配套脚本：`db/schema.sql`、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
+- 本版配套脚本：`db/schema.sql`、`db/schema-2.sql`（增量）、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
 
 > **两条重要前提**
 > 1. 前端是 **vanilla 单文件 HTML（零构建）**（TECH_DESIGN §二）→ **没有 `npm run build`**，`frontend/` 里的东西就是最终产物。
@@ -46,6 +46,7 @@ CLI 可以直连环境里的 PostgreSQL 执行 SQL，不用开控制台：
 tcb db execute --sql "$(cat habit-tracker/db/schema.sql)"   # 建两张核心表（可重复执行）
 tcb db execute --sql "$(cat habit-tracker/db/seed.sql)"     # 种子数据（可重复执行，应自报 7 / 8）
 tcb db execute --sql "$(cat habit-tracker/db/verify.sql)"   # 6 段验证，最后一段应回 7 / 8
+tcb db execute --sql "$(cat habit-tracker/db/schema-2.sql)" # 增量：Day 18 幂等键列 + 唯一索引（可重复执行）
 ```
 
 查表与结果（`--json` 才看得到行）：
@@ -55,7 +56,8 @@ tcb db execute --json --sql "SELECT table_name FROM information_schema.tables WH
 tcb db execute --json --sql "SELECT date::text, mood FROM plan_days WHERE uid='seed-demo-user' ORDER BY date"
 ```
 
-**本步骤的验收**：`public` 下出现 `plan_days` 与 `checkins`；`plan_days` 7 行、`checkins` 8 行（`uid='seed-demo-user'`）。
+**本步骤的验收**：`public` 下出现 `plan_days` 与 `checkins`；`plan_days` 7 行；`schema-2.sql` 自报两行
+（`checkins.client_req_id 列已就绪 = 1`、`checkins_uid_reqid_uniq 索引已就绪 = 1`）。
 
 ---
 
@@ -140,9 +142,9 @@ MSYS_NO_PATHCONV=1 tcb hosting deploy habit-tracker/frontend
 
 ---
 
-## 七、验证方法（Day 17 的两张截图照这里截）
+## 七、验证方法（Day 17 / Day 18 的截图照这里截）
 
-### 7.1 云函数读接口（截图 1）
+### 7.1 云函数读接口（Day 17 截图 1）
 
 浏览器地址栏直接打开：
 
@@ -165,7 +167,7 @@ curl "$BASE/day?date=2026-10-01"
 curl "$BASE/checkins?date=2026-10-01&limit=2"     # 顺带验证条数限制
 ```
 
-### 7.2 前端页面（截图 2）
+### 7.2 前端页面（Day 17 截图 2）
 
 打开 `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`。
 
@@ -194,11 +196,66 @@ tcb db execute --sql "UPDATE plan_days SET mood='calm' WHERE uid='seed-demo-user
 
 **验收标准**：第 3 步返回的 `mood` 必须变成 `joy`。变了 = 数据真的来自数据库。
 
+### 7.4 写入接口（Day 18 的两张截图照这里截）
+
+写接口**不能用浏览器地址栏测**（地址栏只能发 GET）。用命令行，或控制台「云函数 → 测试」。
+
+**先准备**（把下面整段贴进终端，`BASE` 后面几步都要用）：
+
+```bash
+BASE=https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api
+```
+
+**① 正常写入 —— 截图 1（POST 成功返回）**
+
+```bash
+curl -s -X POST "$BASE/checkins" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: shot-0001" \
+  -d '{"date":"2026-10-01","text":"写 Day 18 学习笔记","time":"20:00","quad":"q2"}'
+```
+
+**应看到**：`{"code":0,"message":"已添加","data":{"id":9,…,"sort":5}}` —— `code:0` 就是成功。
+图里要有：**命令 + 返回的 JSON 形状**。
+
+**② 数据库里新增的那一行 —— 截图 2**
+
+```bash
+tcb db execute --json --sql "SELECT id, text, time, quad, done, sort, client_req_id FROM checkins WHERE uid='seed-demo-user' AND date=DATE '2026-10-01' ORDER BY sort"
+```
+
+或在控制台：环境 → 数据库 → PostgreSQL → 表管理 → `checkins` → 数据。
+**应看到**：刚写进去的那一行（`text` = 上面那条，`client_req_id` = `shot-0001`），且它**排在最后**（`sort` 最大）。
+
+**③ 重复提交被拒（Day 18 的核心考核）**
+
+把 ① 的命令**原样再跑一遍**（同一个 `Idempotency-Key`）：
+
+```bash
+curl -s -X POST "$BASE/checkins" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: shot-0001" \
+  -d '{"date":"2026-10-01","text":"写 Day 18 学习笔记","time":"20:00","quad":"q2"}'
+```
+
+**应看到**：`{"code":409,"message":"请勿重复提交：这条待办刚刚已经添加过了","data":null}`，且**库里不会多出第二行**。
+
+**④ 缺必填字段被拒（提示必须是中文）**
+
+```bash
+curl -s -X POST "$BASE/checkins" -H "Content-Type: application/json" -d '{"date":"2026-10-01"}'
+```
+
+**应看到**：`{"code":400,"message":"缺少必填字段 text（待办内容）","data":null}`。
+
+> **注意**：① 每跑一次就会真的往库里加一行（这才是"写入"该有的样子）。验证完如果不想留，
+> `tcb db execute --sql "DELETE FROM checkins WHERE client_req_id='shot-0001'"`。
+
 ---
 
 ## 八、控制台手动路线（CLI 不可用时的备选）
 
-1. **建表**：环境 → 数据库 → PostgreSQL → SQL 编辑器，依次粘贴 `schema.sql` → `seed.sql` → `verify.sql`。
+1. **建表**：环境 → 数据库 → PostgreSQL → SQL 编辑器，依次粘贴 `schema.sql` → `seed.sql` → `verify.sql` → `schema-2.sql`。
 2. **API Key**：环境 → API Key → 新建，复制 token。
 3. **云函数**：云函数 → 新建（名称必须 `api`，运行时 Node.js 20）→ 粘贴 `cloudfunctions/api/index.js` → 保存并部署 →
    在「函数配置 → 环境变量」里补上 §四 那三个变量（**这一步别忘，否则接口会回 500**）。

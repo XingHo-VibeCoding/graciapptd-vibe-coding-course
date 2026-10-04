@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.6（2026-10-03 Day 17：后端读接口上线公网 + 真库验证；前端仍为本地 mock 数据）
+- 版本：v3.7（2026-10-04 Day 18：后端第一个写入接口 `POST /api/checkins` 上线 + 防重复提交；前端仍为本地 mock 数据）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -11,8 +11,9 @@
 
 一个纯网页版的自律助手：时间轴待办 + 心情五选一 + 无压力思考 + 周月报。
 **前端无安装依赖**——页面数据存在浏览器 localStorage 里（约 5MB）。
-**第 3 周起加了云端**：CloudBase 云函数 `api` + PostgreSQL 两张核心表，提供真库读接口（Day 17 起）。
-**页面还没接接口**（跨域 CORS 未配，见 DEPLOY.md §九），所以现在「页面看到的」仍是本地数据，「接口返回的」已是数据库数据。
+**第 3 周起加了云端**：CloudBase 云函数 `api` + PostgreSQL 核心表，提供真库读写接口
+（Day 17 起：`GET /api/health`、`GET /api/day`、`GET /api/checkins`；Day 18 起：`POST /api/checkins`）。
+**页面还没接接口**（跨域 CORS 未配，见 DEPLOY.md §九），所以现在「页面看到的」仍是本地数据，「接口返回/写入的」已是数据库数据。
 
 ## 二、怎么跑起来（3 步）
 
@@ -113,7 +114,12 @@ http://localhost:8765/habit-tracker/frontend/index.html
 
 | A49 后端读接口上线 | 浏览器地址栏打开 `.../api/health`、`.../api/day?date=2026-10-01`、`.../api/checkins?date=2026-10-01&limit=2` | ① health 回扁平 `{"ok":true,"service":"Self discipline plan"}`；② day 回信封 JSON，`data.planDay.mood` 与 `data.checkins` 为**数据库里真实存在的行**（5 条待办）；③ checkins 回 `total=5, limit=2, items=2`（条数限制生效）；④ 非法日期回 400、未取身份回 401、库里报错回 500，均为统一信封（Day 17） |
 | A49b 真库验证 | `tcb db execute --sql "UPDATE plan_days SET mood='joy' ... WHERE date=DATE '2026-10-01'"` 后刷新接口 | 接口返回的 `mood` 立刻由 `calm` 变 `joy`、`updatedAt` 刷新；复原后变回 `calm` —— 证明数据来自数据库而非写死（Day 17） |
-| A49c 云函数本地自测 | `node habit-tracker/cloudfunctions/api/selftest.js` | 63/63 通过（路由命中、参数校验、身份、字段映射、异常兜底；不联网） |
+| A49c 云函数本地自测 | `node habit-tracker/cloudfunctions/api/selftest.js` | 通过（路由命中、参数校验、身份、字段映射、异常兜底；不联网）。Day 17 为 63/63；Day 18 补写入路径后为 **140/140** |
+
+| A50 写入接口上线 | 终端执行（写接口不能用地址栏测）：`curl -s -X POST ".../api/checkins" -H "Content-Type: application/json" -H "Idempotency-Key: shot-0001" -d '{"date":"2026-10-01","text":"写 Day 18 学习笔记","time":"20:00","quad":"q2"}'` | ① 回 `{"code":0,"message":"已添加","data":{"id":9,…,"sort":5}}`（信封形状与契约一致，`code:0` = 成功）；② `tcb db execute --json --sql "SELECT … FROM checkins WHERE uid='seed-demo-user' AND date=DATE '2026-10-01' ORDER BY sort"` 能看到**多出来的那一行**（`sort` 最大、排在最后），`checkins` 总行数 8 → 9（Day 18） |
+| A50b 重复提交被拒 | 把上面同一条 `curl` **原样再跑一遍**（`Idempotency-Key` 相同） | 回 `{"code":409,"message":"请勿重复提交：这条待办刚刚已经添加过了","data":null}`，且**库里不会多出第二行**（Day 18） |
+| A50c 缺必填字段被拒 | `curl -s -X POST ".../api/checkins" -H "Content-Type: application/json" -d '{"date":"2026-10-01"}'` | 回 `{"code":400,"message":"缺少必填字段 text（待办内容）","data":null}`，**提示是中文**，且一个字都没写库（Day 18） |
+| A50d 幂等不误伤 | 同一天同内容、但换一个 `Idempotency-Key` 再发 | 正常写入 —— 证明去重认的是**动作 id** 而不是**内容**；同名待办只要不是同一次动作就允许（Day 18） |
 
 > 报告（F4）还没做——按 R7 规则一天一块。思考（F3）卡片流 MVP（Day 14）与 AI 洞察（Day 15）已完成；应用页（F6）骨架与专注计时（Day 18）已完成；情绪表情已图片化（Day 19）；纪念&倒数日（Day 21）、肯定语（Day 22）、随即话题（精进 7）已开放；记账已按用户要求移除（2026-09-27）；剩小组件待做。
 
@@ -128,7 +134,7 @@ http://localhost:8765/habit-tracker/frontend/index.html
 
 ## 五、代码去哪看
 
-全部前端代码在一个文件里：`habit-tracker/frontend/index.html`（约 1400 行）。
+全部前端代码在一个文件里：`habit-tracker/frontend/index.html`（约 2900 行）。
 结构分五段，从上到下：CSS 样式 → HTML 骨架 → 存储层（loadData/saveData）→ 状态与渲染 → 事件绑定。
 找任何功能先看注释里的 `Day 8` / `F1` 标记，和 PRD 的编号一一对应。
 

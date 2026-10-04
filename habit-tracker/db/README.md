@@ -1,14 +1,18 @@
 # 自律计划 · 数据库（db/）
 
-- 版本：v1.0（2026-10-01 Day 16）
+- 版本：v1.1（2026-10-04 Day 18 增补；v1.0 于 2026-10-01 Day 16）
 - 环境：CloudBase PostgreSQL（**默认数据库类型，创建环境时已定，之后不可切换**）
-- 本目录三个文件：
+- 本目录四个文件：
 
 | 文件 | 作用 | 什么时候执行 |
 |---|---|---|
-| `schema.sql` | 建表（**今天只建两张核心表**） | 最先，可重复执行 |
+| `schema.sql` | 建表（Day 16 建两张核心表） | 最先，可重复执行 |
 | `seed.sql` | 种子数据（编造的示例，可重复执行） | 建表之后 |
 | `verify.sql` | SELECT 验证（证明结构可用） | 种子之后 |
+| `schema-2.sql` | **增量**建表 / 改表（Day 18 起；按日期分节追加） | 在 `schema.sql` 之后，需要时执行 |
+
+> **为什么有两个 schema 文件**：`schema.sql` 是 Day 16 的定稿，**历史不改写**（当天脚本当天可复现）；
+> 之后所有增删一律追加到 `schema-2.sql`，按日期分节。两边都**可重复执行**。
 
 ---
 
@@ -108,6 +112,7 @@ CREATE INDEX checkins_uid_date_idx ON checkins (uid, date);
 tcb db execute --sql "$(cat db/schema.sql)"
 tcb db execute --sql "$(cat db/seed.sql)"
 tcb db execute --sql "$(cat db/verify.sql)"
+tcb db execute --sql "$(cat db/schema-2.sql)"   # 增量（Day 18 起）
 # 想看到返回的行必须加 --json
 tcb db execute --json --sql "SELECT date::text, mood FROM plan_days WHERE uid='seed-demo-user' ORDER BY date"
 ```
@@ -119,7 +124,7 @@ tcb db execute --json --sql "SELECT date::text, mood FROM plan_days WHERE uid='s
 1. 打开 <https://console.cloud.tencent.com/tcb>，选环境
    `habit-tracker-d9gh0mjel767ff0d2`（**以 `tcb env list` 输出为准**）
 2. 左侧「**数据库**」→ 选中 **PostgreSQL**（不是"云数据库"那个选项）
-3. 进「**SQL 编辑器**」，按顺序粘贴执行：`schema.sql` → `seed.sql` → `verify.sql`
+3. 进「**SQL 编辑器**」，按顺序粘贴执行：`schema.sql` → `seed.sql` → `verify.sql` → `schema-2.sql`
 4. 执行完在「**表管理 / 数据**」页能看到两张表和里面的数据
 
 > 想再验证一次**可重复执行**：把 `seed.sql` 再执行一遍，然后跑 `verify.sql` 最后那条计数——数字应该还是 7 / 8。
@@ -133,6 +138,19 @@ tcb db execute --json --sql "SELECT date::text, mood FROM plan_days WHERE uid='s
 | `verify.sql` | ✅ 6 段全跑通，末段计数 7 / 8 |
 | 关联查询（验证 3） | ✅ 09-30 → 3 条打卡（完成 2）；10-01 → 5 条（完成 1） |
 | RLS 状态 | 两张表均为 **未开启**（`relrowsecurity = false`） |
+
+### 4.2 真库执行记录（2026-10-04 Day 18 增量）
+
+| 步骤 | 结果 |
+|---|---|
+| `schema-2.sql` | ✅ 自报两行：`checkins.client_req_id 列已就绪 = 1`、`checkins_uid_reqid_uniq 索引已就绪 = 1` |
+| 幂等索引定义 | ✅ `CREATE UNIQUE INDEX checkins_uid_reqid_uniq ON public.checkins USING btree (uid, client_req_id) WHERE (client_req_id IS NOT NULL)` |
+| 写入验证 | ✅ `POST /api/checkins` 真实写入一行（`id=9`，`client_req_id='day18-demo-0001'`），`checkins` 总行数 8 → 9 |
+
+> **Day 18 加这一列是为了什么**：课程要求"重复提交被拒"。Day 16 已确认 `checkins` **没有天然唯一键**
+> （"写周报"一天可能出现两次），所以按**内容**去重会误伤合法数据。改用**客户端幂等键**：
+> 一次"添加动作"一个 `client_req_id`，`(uid, client_req_id)` 唯一 —— 同一个动作重发被拦住，
+> 两次不同的添加动作照常写入。详细设计见 `schema-2.sql` 头部注释。
 
 ---
 

@@ -1,12 +1,13 @@
 /**
- * 自律计划 · 云函数 api 本地自测（Day 17 建立）
+ * 自律计划 · 云函数 api 本地自测（Day 17 建立，Day 18 补写入路径）
  * ---------------------------------------------------------------------------
- * 作用：**不联网、不连数据库**，把云函数的三种东西验证一遍——
+ * 作用：**不联网、不连数据库**，把云函数的四种东西验证一遍——
  *   1) 路由：路径/方法能不能命中，未命中会不会回 404 且列出可用路由
- *   2) 参数校验与身份：非法日期、互斥参数、limit 越界、未取到身份 → 各自的错误码
- *   3) 数据库交互：拼出来的 SQL 查询串对不对 + 数据库回的行有没有被正确映射成契约形状
+ *   2) 参数校验与身份：非法日期、互斥参数、limit 越界、缺必填字段、未取到身份 → 各自的错误码
+ *   3) 数据库交互：拼出来的 SQL 查询串 / 写入体对不对 + 数据库回的行有没有被正确映射成契约形状
+ *   4) 写入防护：重复提交（预检 + 唯一索引兜底两条路径）会不会都被拦住并回 409
  *
- * 怎么做到的：把全局 fetch 换成一个假的（stub），既能记录"你请求了哪个 URL"，
+ * 怎么做到的：把全局 fetch 换成一个假的（stub），既能记录"你请求了哪个 URL / 什么方法 / 写了什么"，
  *   又能返回我们指定的假数据。所以它是**纯本地、可重复、秒级**的。
  *
  * 怎么跑（在 habit-tracker/cloudfunctions/api 目录下）：
@@ -55,8 +56,15 @@ const installFakeFetch = () => {
   global.fetch = async (url, init) => {
     const u = String(url);
     const table = u.split('?')[0].split('/').pop();
-    captured.push({ url: u, table: table, headers: (init && init.headers) || {} });
-    const { rows, total, status, body } = responder(u, table);
+    captured.push({
+      url: u,
+      table: table,
+      headers: (init && init.headers) || {},
+      method: String((init && init.method) || 'GET').toUpperCase(),
+      body: init && init.body,           // 写入时用于断言"到底往库里写了什么"
+    });
+    // 把 init 也交给 responder：写接口需要按「方法」返回不同结果
+    const { rows, total, status, body } = responder(u, table, init || {});
     if (status && status !== 200) {
       return {
         ok: false, status: status,
@@ -71,6 +79,17 @@ const installFakeFetch = () => {
       text: async () => JSON.stringify(rows),
     };
   };
+};
+
+/** 取出某次请求写入的 JSON 体（无体 / 不是 JSON 时返回 null） */
+const bodyOf = (index) => {
+  const raw = captured[index].body;
+  if (raw === undefined || raw === null || raw === '') return null;
+  try {
+    return JSON.parse(String(raw));
+  } catch (e) {
+    return null;
+  }
 };
 
 /** 取出某次请求 URL 的查询参数（重复键会全部保留，方便断言区间查询） */
@@ -96,6 +115,37 @@ const CHECKIN_ROWS = [
   { id: 101, date: '2026-10-01', text: '晨跑 30 分钟', time: '07:30', quad: 'q2', done: true, done_at: '2026-10-01T00:02:00+00:00', sort: 0 },
   { id: 102, date: '2026-10-01', text: '写周报', time: null, quad: null, done: false, done_at: null, sort: 1 },
 ];
+/** 假数据库"刚插入的那一行" */
+const NEW_ROW = {
+  id: 901, date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2',
+  done: false, done_at: null, sort: 5,
+};
+
+/**
+ * 写接口（POST /api/checkins）用的假数据库。
+ * 同一个表会被三种请求打到，靠「方法 + URL」区分：
+ *   · POST（写入）        → 返回"刚插入的那一行"
+ *   · GET 带 client_req_id → 幂等预检（默认"没写过"）
+ *   · GET 其它（查排序位）  → 返回当天最大 sort
+ * opt：
+ *   row / insertEmpty       —— 写入返回什么（默认 NEW_ROW；insertEmpty=true 模拟网关不回传）
+ *   insertStatus/insertBody —— 模拟写入失败（如 409 + 23505 唯一冲突）
+ *   dupRows                 —— 预检查到"已经写过"的行
+ *   maxSortRows             —— 当天最大排序位
+ */
+const writeResponder = (opt) => {
+  const o = opt || {};
+  return (u, table, init) => {
+    const isPost = String((init && init.method) || 'GET').toUpperCase() === 'POST';
+    if (isPost) {
+      if (o.insertStatus) return { status: o.insertStatus, body: o.insertBody };
+      if (o.insertEmpty) return { rows: [] };
+      return { rows: [o.row || NEW_ROW] };
+    }
+    if (u.indexOf('client_req_id') > -1) return { rows: o.dupRows || [] };
+    return { rows: o.maxSortRows === undefined ? [{ sort: 4 }] : o.maxSortRows };
+  };
+};
 
 (async () => {
   // =========================================================================
@@ -277,7 +327,223 @@ const CHECKIN_ROWS = [
   eq('checkins：done 非 true/false → 400', r.code, 400);
 
   // =========================================================================
-  // 六、异常兜底
+  // 六、POST /api/checkins —— 新建打卡项（Day 18）
+  // =========================================================================
+
+  // —— 正常写入 ——
+  installFakeFetch();
+  responder = writeResponder({});
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2' }),
+  });
+  eq('POST：走信封且成功', r.code, 0);
+  eq('POST：成功文案', r.message, '已添加');
+  eq('POST：返回新建的那一行（契约形状）', r.data, {
+    id: 901, date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2',
+    done: false, doneAt: null, sort: 5,
+  });
+  eq('POST：先查排序位再写入（两次库操作）', captured.map((c) => c.method), ['GET', 'POST']);
+  eq('POST：查当天最大排序位（select=sort，order=sort.desc）',
+     [paramsOf(0).select, paramsOf(0).order, paramsOf(0).date, paramsOf(0).uid],
+     ['sort', 'sort.desc', 'eq.2026-10-01', 'eq.seed-demo-user']);
+  eq('POST：写库的列（snake_case、uid 由服务端补、未启用幂等时不带 client_req_id）',
+     bodyOf(1), { uid: 'seed-demo-user', date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2', done: false, sort: 5 });
+  eq('POST：请求头声明要回传插入的行', captured[1].headers.Prefer, 'return=representation');
+
+  // —— 排序位计算 ——
+  installFakeFetch();
+  responder = writeResponder({ maxSortRows: [] });
+  await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '第一条' }) });
+  eq('POST：当天没有任何待办时 sort 从 0 开始', bodyOf(1).sort, 0);
+
+  installFakeFetch();
+  responder = writeResponder({ maxSortRows: [{ sort: 11 }] });
+  await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '接在最后' }) });
+  eq('POST：sort = 当天最大 sort + 1（接在最后）', bodyOf(1).sort, 12);
+
+  // —— text 规范化 ——
+  installFakeFetch();
+  responder = writeResponder({});
+  await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '   写周报   ' }) });
+  eq('POST：存进去的是去掉首尾空白后的内容', bodyOf(1).text, '写周报');
+
+  installFakeFetch();
+  responder = writeResponder({});
+  r = await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '啊'.repeat(60) }) });
+  eq('POST：正好 60 字合法（边界）', r.code, 0);
+
+  // —— 缺必填 / 非法值：一律 400 + 中文，且一个字都不写库 ——
+  const badCases = [
+    ['缺 text', { date: '2026-10-01' }, '缺少必填字段 text（待办内容）'],
+    ['text 是空串', { date: '2026-10-01', text: '' }, '内容不能为空，且不超过 60 字'],
+    ['text 全是空格', { date: '2026-10-01', text: '    ' }, '内容不能为空，且不超过 60 字'],
+    ['text 超 60 字', { date: '2026-10-01', text: '啊'.repeat(61) }, '内容不能为空，且不超过 60 字'],
+    ['text 不是字符串', { date: '2026-10-01', text: 123 }, '内容不能为空，且不超过 60 字'],
+    ['缺 date', { text: '写周报' }, '缺少必填字段 date（这条待办属于哪一天）'],
+    ['date 格式不对', { date: '2026/10/01', text: '写周报' }, '日期格式不对，应为 YYYY-MM-DD'],
+    ['date 不存在（2 月 30 日）', { date: '2026-02-30', text: '写周报' }, '日期格式不对，应为 YYYY-MM-DD'],
+    ['time 格式不对', { date: '2026-10-01', text: '写周报', time: '25:00' }, '时间格式不对，应为 HH:mm（24 小时制）'],
+    ['time 缺前导零', { date: '2026-10-01', text: '写周报', time: '9:30' }, '时间格式不对，应为 HH:mm（24 小时制）'],
+    ['quad 非法', { date: '2026-10-01', text: '写周报', quad: 'q5' }, '象限只能是 q1 / q2 / q3 / q4'],
+    ['clientReqId 含非法字符', { date: '2026-10-01', text: '写周报', clientReqId: 'has space' },
+      'clientReqId 只能是 1~64 位的字母、数字、下划线或短横线'],
+  ];
+  for (const [name, body, msg] of badCases) {
+    installFakeFetch();
+    responder = writeResponder({});
+    r = await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify(body) });
+    eq('POST：' + name + ' → 400', r.code, 400);
+    eq('POST：' + name + ' 的中文提示', r.message, msg);
+    eq('POST：' + name + ' 时一次库都不查', captured.length, 0);
+  }
+
+  // —— 可选字段留空 = 存 NULL ——
+  installFakeFetch();
+  responder = writeResponder({});
+  await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '泡脚放松' }) });
+  eq('POST：不传 time/quad 时存 NULL（不是空串）', [bodyOf(1).time, bodyOf(1).quad], [null, null]);
+
+  installFakeFetch();
+  responder = writeResponder({});
+  await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '泡脚放松', time: '', quad: '' }) });
+  eq('POST：time/quad 传空串也当没传（存 NULL）', [bodyOf(1).time, bodyOf(1).quad], [null, null]);
+
+  // —— 请求体的三种来源 ——
+  installFakeFetch();
+  responder = writeResponder({});
+  r = await call({ httpMethod: 'POST', path: '/api/checkins', body: '{这不是 JSON' });
+  eq('POST：请求体不是合法 JSON → 400', r.code, 400);
+  eq('POST：非法 JSON 的中文提示', r.message, '请求体不是合法的 JSON');
+  eq('POST：非法 JSON 时不写库', captured.length, 0);
+
+  installFakeFetch();
+  responder = writeResponder({});
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    isBase64Encoded: true,
+    body: Buffer.from(JSON.stringify({ date: '2026-10-01', text: 'base64 来的' }), 'utf8').toString('base64'),
+  });
+  eq('POST：网关 base64 编码的请求体能正确解码', r.code, 0);
+  eq('POST：base64 解码后的内容正确', bodyOf(1).text, 'base64 来的');
+
+  installFakeFetch();
+  responder = writeResponder({});
+  await call({ httpMethod: 'POST', path: '/api/checkins', date: '2026-10-01', text: '控制台直接触发' });
+  eq('POST：控制台把字段摊在 event 顶层也能写入', bodyOf(1).text, '控制台直接触发');
+
+  // —— 身份（写入同样不许明传 uid）——
+  installFakeFetch();
+  responder = writeResponder({});
+  delete process.env.DEMO_UID;
+  r = await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '写周报' }) });
+  eq('POST：拿不到身份 → 401', r.code, 401);
+  eq('POST：拿不到身份时不写库', captured.length, 0);
+  process.env.DEMO_UID = 'seed-demo-user';
+
+  installFakeFetch();
+  responder = writeResponder({});
+  await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报', uid: 'hacker' }),
+    __context: { userInfo: { uid: 'real-user-uid' } },
+  });
+  eq('POST：写库的 uid 取登录身份，请求体里伪造的 uid 被忽略', bodyOf(1).uid, 'real-user-uid');
+
+  // =========================================================================
+  // 七、重复提交防护（Day 18 的核心）
+  // =========================================================================
+
+  // —— 第一层：服务层预检 ——
+  installFakeFetch();
+  responder = writeResponder({});
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报', clientReqId: 'req-abc-001' }),
+  });
+  eq('幂等：第一次带 clientReqId 正常写入', r.code, 0);
+  eq('幂等：带 key 时先预检再排序再写入', captured.map((c) => c.method), ['GET', 'GET', 'POST']);
+  eq('幂等：预检按 (uid, client_req_id) 查', [paramsOf(0).uid, paramsOf(0).client_req_id], ['eq.seed-demo-user', 'eq.req-abc-001']);
+  eq('幂等：写库时带上 client_req_id', bodyOf(2).client_req_id, 'req-abc-001');
+
+  installFakeFetch();
+  responder = writeResponder({ dupRows: [{ id: 901 }] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报', clientReqId: 'req-abc-001' }),
+  });
+  eq('幂等：同一个 clientReqId 再提交 → 409', r.code, 409);
+  eq('幂等：重复提交的中文提示', r.message, '请勿重复提交：这条待办刚刚已经添加过了');
+  eq('幂等：重复提交时 data 为 null（契约 1.2）', r.data, null);
+  eq('幂等：预检拦住后不再写库', captured.length, 1);
+
+  installFakeFetch();
+  responder = writeResponder({ dupRows: [{ id: 901 }] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    headers: { 'Idempotency-Key': 'header-key-9' },
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报' }),
+  });
+  eq('幂等：请求头 Idempotency-Key 同样生效 → 409', r.code, 409);
+
+  installFakeFetch();
+  responder = writeResponder({});
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报', clientReqId: 'different-key' }),
+  });
+  eq('幂等：内容相同但 clientReqId 不同 = 两次不同的添加动作，允许写入', r.code, 0);
+
+  // —— 第二层：数据库唯一索引兜底（并发下预检会漏，这一层才是真闸）——
+  installFakeFetch();
+  responder = writeResponder({
+    insertStatus: 409,
+    insertBody: { code: '23505', message: 'duplicate key value violates unique constraint "checkins_uid_reqid_uniq"' },
+  });
+  r = await call({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-01', text: '写周报', clientReqId: 'race-key' }),
+  });
+  eq('幂等：唯一索引冲突（23505）被翻译成 409，而不是 500', r.code, 409);
+  eq('幂等：唯一索引兜底的提示与服务层一致', r.message, '请勿重复提交：这条待办刚刚已经添加过了');
+
+  // —— 网关切走"回传插入行"时的读回兜底 ——
+  installFakeFetch();
+  responder = (u, table, init) => {
+    if (String((init && init.method) || 'GET').toUpperCase() === 'POST') return { rows: [] };
+    if (u.indexOf('order=id.desc') > -1) return { rows: [NEW_ROW] };   // 读回的查询
+    return { rows: [{ sort: 4 }] };
+  };
+  r = await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '写周报' }) });
+  eq('读回兜底：网关不回传插入行时，自己再查一次仍返回成功', r.code, 0);
+  eq('读回兜底：返回的仍是真实的那一行', r.data.id, 901);
+
+  installFakeFetch();
+  responder = (u, table, init) => {
+    if (String((init && init.method) || 'GET').toUpperCase() === 'POST') return { rows: [] };
+    if (u.indexOf('order=id.desc') > -1) return { rows: [] };
+    return { rows: [{ sort: 4 }] };
+  };
+  r = await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '写周报' }) });
+  eq('读回兜底：写入后读不回来 → 500（宁可报错，也不假装成功）', r.code, 500);
+
+  // —— 写入时的其它数据库故障 ——
+  installFakeFetch();
+  responder = writeResponder({ insertStatus: 500, insertBody: { message: 'connection refused' } });
+  r = await call({ httpMethod: 'POST', path: '/api/checkins', body: JSON.stringify({ date: '2026-10-01', text: '写周报' }) });
+  eq('POST：数据库故障 → 500 统一文案', r.code, 500);
+  eq('POST：数据库故障不泄露内部信息', r.message, '服务端出了点问题，稍后再试');
+
+  // —— 路由：PATCH/DELETE 属第 4 周，今天应当还是 404 ——
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins' });
+  eq('PATCH 尚未实现（第 4 周）→ 404', r.code, 404);
+  ok('404 的可用路由里已含 POST /api/checkins',
+     r.data.availableRoutes.indexOf('POST /api/checkins') > -1, JSON.stringify(r.data.availableRoutes));
+
+  // =========================================================================
+  // 八、异常兜底
   // =========================================================================
   installFakeFetch();
   responder = () => ({ status: 500, body: { message: 'relation "checkins" does not exist' } });

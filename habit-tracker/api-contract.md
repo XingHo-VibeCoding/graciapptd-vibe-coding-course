@@ -1,9 +1,9 @@
 # 自律计划 · API 接口契约（api-contract.md）
 
-- 版本：v1.1（2026-10-03 Day 17 起升版；v1.0 于 2026-10-01 Day 15 建立）
+- 版本：v1.2（2026-10-04 Day 18 起升版；v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
 - 作用：**前端和云端之间的"合同"**。前端按这份文档发请求，后端按这份文档回数据；任何一方想改形状，先改这份文档，再改代码（R2 文档先行）。
 - **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。
-- **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）；其余仍为占位，按 Day 18–20 逐个实现。
+- **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）；其余仍为占位，按 Day 19–20 逐个实现。
 - 依据：`TECH_DESIGN.md` §三 数据模型 / §四 API 列表；并按 `frontend/index.html` 的**实际功能面**补全（Day 15 新增：专注计时 / 纪念&倒数日 / 肯定语 / 主题换肤）。
 
 > **⚠️ 课程示例接口名与本项目的关系**（Day 17 与用户确认，勿再纠结）：
@@ -12,6 +12,10 @@
 > - `GET /api/favorites` → 对应本项目的**「列表读取」接口**（今天页待办列表就是第一个：`GET /api/checkins`）；
 > - `GET /api/hot` → **本项目没有对应物**。课程它要考察的实质是"接口读出来的必须是**真库里的真实数据**，不是前端 mock / 假数据"，
 >   本项目用 `GET /api/day` + `GET /api/checkins` 读 CloudBase 真库来达成同一个目标（Day 17 验收方式见 §六）。
+>
+> **Day 18 同理**：课程要求"正常 POST 返回 `{ok:true,...}`"。本项目**统一信封是铁律**（见 1.2），
+> 所以成功返回 `{"code":0,"message":"已添加","data":{...}}` —— `code:0` 就是本项目里"成功"的表达，
+> 与课程的 `ok:true` 同义。**以本文档为准**（课程自己也要求"形状与 api-contract.md 一致"）。
 
 
 > **怎么用这份文档**（给未来的自己）：
@@ -29,7 +33,7 @@
 |---|---|
 | Base URL | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`（真实值，2026-10-03 部署后登记） |
 | 承载方式 | CloudBase **云函数 `api`**（Node.js 20，单函数承载全部路由），由「HTTP 访问服务」暴露为公网地址 |
-| 请求头 | `Content-Type: application/json`（写操作必带） |
+| 请求头 | `Content-Type: application/json`（写操作必带）；`Idempotency-Key: <uuid>`（写操作**建议必带**，见 1.6） |
 | 跨域 CORS | ⚠️ **本期不配置**（Day 16–20 再处理）。浏览器从别的域名直接 `fetch` 会被拦，属预期；本阶段测试走**浏览器地址栏**或 `curl` |
 
 ### 1.2 响应形状
@@ -77,10 +81,11 @@
 - **前端永远不许明传 `uid`**（含 query、body、header）。谁的数据由服务端从上下文判定——这是防越权的第一道闸。
 - 下文所有接口的"请求参数"里都**不会**出现 `uid`，这是刻意的。
 
-> **⚠️ Day 17 的实现现状（临时，Day 18 要收敛）**：匿名登录还没接，云函数取 `uid` 的顺序是
+> **⚠️ 实现现状（临时，等接入匿名登录那天收敛）**：匿名登录还没接，云函数取 `uid` 的顺序是
 > ① `context.userInfo.uid`（平台注入，接上登录后自动生效）→ ② 函数环境变量 `DEMO_UID`（服务端配置的演示身份）。
-> **两者都不来自请求参数**，所以"前端不许明传 uid"这条没有被破坏；但它意味着**今天所有人看到的是同一份演示数据**。
-> Day 18 接上匿名登录后必须删掉 `DEMO_UID` 兜底，改为只认 `context.userInfo.uid`，并按 §二 的说明把 RLS 打开。
+> **两者都不来自请求参数**，所以"前端不许明传 uid"这条没有被破坏；但它意味着**现在所有人看到的是同一份演示数据**。
+> 接入匿名登录、删掉 `DEMO_UID` 兜底、并按 §二 打开 RLS —— 这是一件事，**按课程安排在其对应那天一起做**，
+> 不拆散。届时本段改写为"已接入"。
 
 
 ### 1.5 数据格式约定
@@ -93,13 +98,40 @@
 | 空值 | 一律用 `null`，不用 `undefined` / 空字符串 | — |
 | 布尔 | 真 `true` / 假 `false`（不用 0/1） | — |
 
+### 1.6 写入幂等约定（Day 18 建立）
+
+**为什么要有**：写接口最大的麻烦不是"写不进去"，而是"**同一次写入被执行了两次**"——
+用户双击按钮、网络超时后客户端自动重试、用户刷新页面又提交一次……结果就是库里多出一条重复数据。
+读接口天然幂等（读多少次都一样），写接口不是，所以必须专门防。
+
+**怎么防 —— 客户端幂等键（idempotency key）**：
+
+| 项 | 约定 |
+|---|---|
+| 字段名 | `clientReqId`（请求体字段），或请求头 `Idempotency-Key`；**两者都传时以 body 为准** |
+| 取值 | 每次「添加动作」**现场生成一个** uuid（1~64 位字母/数字/下划线/短横线）；**同一个动作重发必须复用同一个值** |
+| 语义 | 它标识的是**一次动作**，不是**一份内容** —— 所以用户真想加两条同名待办，两次用两个不同 id，照常写入 |
+| 服务端处理 | 先查 `(uid, clientReqId)` 是否已写过 → 有则回 `409`；写入时由数据库唯一索引 `checkins_uid_reqid_uniq` 兜底并发 |
+| 不传会怎样 | 不传 = **不启用幂等保护**（仅做字段校验）。手测/curl 可以不传；**前端必须传** |
+
+**重复提交的响应**（两条路径文案一致）：
+
+```json
+{ "code": 409, "message": "请勿重复提交：这条待办刚刚已经添加过了", "data": null }
+```
+
+> **为什么不直接用"同一天 + 同内容"去重？**
+> 因为 Day 16 已确认 `checkins` 没有天然唯一键（"写周报"一天可能出现两次），
+> 按内容去重会把**合法的重复内容**也一起拒掉 —— 那是误伤。用动作 id 才能把
+> "同一个动作重发"和"两次不同的添加动作"分开。
+
 ---
 
 ## 二、数据表清单（第 3 周 Day 16 建表依据）
 
 > 表格从**前端页面的实际字段**反推，不是凭空设计。TECH_DESIGN §三 是 v2.0 版本（只有 4 张表），本期按 Day 18–22 新增的板块补全为 7 张。
 >
-> **建表进度（Day 16）**：**核心两表 `plan_days` / `checkins` 已建**，脚本在 `db/schema.sql`（含字段说明与约束），种子在 `db/seed.sql`（可重复执行），验证语句 `db/verify.sql`，设计说明 `db/README.md`。其余 5 张表按课程安排 Day 18 之前补，追加到 `db/schema-2.sql`，**不改 `schema.sql`**。
+> **建表进度（Day 16 建、Day 18 增补）**：**核心两表 `plan_days` / `checkins` 已建**，脚本在 `db/schema.sql`（含字段说明与约束），种子在 `db/seed.sql`（可重复执行），验证语句 `db/verify.sql`，设计说明 `db/README.md`。Day 18 给 `checkins` 加了幂等键列 `client_req_id` + 唯一索引，写在 **`db/schema-2.sql`**（增量脚本，**不改 `schema.sql`**）。其余 5 张表在需要它们的接口开工那天，按同样方式追加到 `db/schema-2.sql`。
 
 | 表名 | 中文名 | 谁在用 | 说明 |
 |---|---|---|---|
@@ -231,10 +263,66 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 ---
 
-## 四、待实现接口（Day 18–20 逐个补；下面标 ✅ 的两条已在 §三 实现）
+### `POST /api/checkins` —— 新建打卡项（**Day 18 已实现，第一个写入接口**）
+
+**用途**：用户在今天页加一条待办。
+
+**请求头**：`Content-Type: application/json`；建议带 `Idempotency-Key: <uuid>`（见 1.6）。
+
+**请求体**：
+
+```json
+{ "date": "2026-10-01", "text": "写周报", "time": "14:00", "quad": "q2", "clientReqId": "9f1c…" }
+```
+
+| 字段 | 必填 | 类型 | 说明 |
+|---|---|---|---|
+| `date` | ✅ | string | 归属日期 `YYYY-MM-DD`，必须真实存在 |
+| `text` | ✅ | string | 内容；**去首尾空白后** 1–60 字 |
+| `time` | ⭕ | string | `HH:mm` 24 小时制；不传 / 空串 = 未安排（存 `NULL`） |
+| `quad` | ⭕ | string | `q1`/`q2`/`q3`/`q4`；不传 / 空串 = 未分类（存 `NULL`） |
+| `clientReqId` | ⭕ | string | 幂等键（1~64 位字母/数字/`_`/`-`）；也可放请求头 `Idempotency-Key`（见 1.6） |
+
+> **服务端补的字段**（前端不许传，传了也忽略）：`uid`（取登录身份）、`done`（恒 `false`）、
+> `sort`（当天已有条目的最大 `sort` + 1，空的一天从 0 开始）。
+
+**响应**：
+
+```json
+{ "code": 0, "message": "已添加",
+  "data": { "id": 103, "date": "2026-10-01", "text": "写周报", "time": "14:00",
+            "quad": "q2", "done": false, "doneAt": null, "sort": 5 } }
+```
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| 缺 `text` | `{"code":400,"message":"缺少必填字段 text（待办内容）","data":null}` |
+| `text` 去空白后为空 / 超 60 字 / 不是字符串 | `{"code":400,"message":"内容不能为空，且不超过 60 字","data":null}` |
+| 缺 `date` | `{"code":400,"message":"缺少必填字段 date（这条待办属于哪一天）","data":null}` |
+| `date` 格式不对或不存在 | `{"code":400,"message":"日期格式不对，应为 YYYY-MM-DD","data":null}` |
+| `time` 不是 `HH:mm` | `{"code":400,"message":"时间格式不对，应为 HH:mm（24 小时制）","data":null}` |
+| `quad` 不在 q1~q4 | `{"code":400,"message":"象限只能是 q1 / q2 / q3 / q4","data":null}` |
+| `clientReqId` 格式非法 | `{"code":400,"message":"clientReqId 只能是 1~64 位的字母、数字、下划线或短横线","data":null}` |
+| 请求体不是合法 JSON | `{"code":400,"message":"请求体不是合法的 JSON","data":null}` |
+| **重复提交**（`clientReqId` 已用过） | `{"code":409,"message":"请勿重复提交：这条待办刚刚已经添加过了","data":null}` |
+| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+
+**防重复提交的两层**（实现细节，前端可依赖）：
+
+1. **服务层预检**：先查 `(uid, clientReqId)` 是否已存在 → 有则 409。作用是给出友好中文提示。
+2. **数据库唯一索引兜底**：`checkins_uid_reqid_uniq`（部分唯一索引，`WHERE client_req_id IS NOT NULL`）。
+   并发下两个请求可能同时通过预检，真正兜住的是这一层；冲突时 PostgreSQL 报 SQLSTATE `23505`，服务端翻译成同一个 409。
+
+> ⚠️ **不传 `clientReqId` 就没有去重保护**（仅做字段校验）。curl 手测可以省，**前端必须传**。
+
+---
+
+## 四、待实现接口（Day 19–20 逐个补；标 ✅ 的已在 §三 实现）
 
 > 以下是第 3 周要落地的全部接口。**先定名字和形状，避免前端先写死后端再改。**
-> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；其余待做。
+> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；其余待做。
 
 ### 📌 先记住这条：别忘了「列表读取」接口
 
@@ -270,35 +358,11 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 > **完整定义见 §三**（含 `limit` 条数限制参数 `1–100`、区间查询与全部错误码）。
 
-#### `POST /api/checkins` —— 新建打卡项
+#### `POST /api/checkins` —— 新建打卡项 ✅ **Day 18 已实现**
 
-**请求体**：
+> **完整定义见 §三**（请求头、全部字段与校验规则、全部错误码、幂等与防重复提交的两层机制都在那里，此处不重复免得两边不一致）。
 
-```json
-{ "date": "2026-10-01", "text": "写周报", "time": "14:00", "quad": "q2" }
-```
-
-| 字段 | 必填 | 说明 |
-|---|---|---|
-| `date` | ✅ | 归属日期 |
-| `text` | ✅ | 内容，1–60 字（与前端 `maxlength` 一致） |
-| `time` | ⭕ | `HH:mm`；不传 = 未安排时间 |
-| `quad` | ⭕ | 四象限；不传 = 未分类 |
-
-**响应**：
-
-```json
-{ "code": 0, "message": "已添加",
-  "data": { "id": 103, "date": "2026-10-01", "text": "写周报", "time": "14:00",
-            "quad": "q2", "done": false, "doneAt": null, "sort": 2 } }
-```
-
-**错误返回**：
-
-| 情况 | 返回 |
-|---|---|
-| `text` 为空或超 60 字 | `{"code":400,"message":"内容不能为空，且不超过 60 字","data":null}` |
-| 日期格式不对 | `{"code":400,"message":"日期格式不对，应为 YYYY-MM-DD","data":null}` |
+**字段速查**：`date` ✅、`text` ✅（去首尾空白后 1–60 字）、`time` ⭕、`quad` ⭕、`clientReqId` ⭕（幂等键，见 1.6）。
 
 #### `PATCH /api/checkins/:id` —— 修改（打勾 / 改时间 / 改内容 / 改象限）
 
@@ -684,11 +748,12 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 | 项 | 值 | 更新时间 |
 |---|---|---|
-| 云函数名 | `api`（内部路由 `/api/health`、`/api/day`、`/api/checkins`） | 2026-10-03 |
+| 云函数名 | `api`（内部路由 `/api/health`、`/api/day`、`/api/checkins`、**`POST /api/checkins`**） | 2026-10-04 |
 | 环境 ID | **`habit-tracker-d9gh0mjel767ff0d2`**（2026-10-01 21:57 开通，免费体验版·上海） | 2026-10-03 |
 | 云函数公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`** | 2026-10-03 |
 | 前端 mock 版公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`** | 2026-10-03 |
-| 数据库 | CloudBase PostgreSQL 17.11，表 `plan_days`(7 行) + `checkins`(8 行)，均 `uid='seed-demo-user'`；RLS 未开启 | 2026-10-03 |
+| 数据库 | CloudBase PostgreSQL 17.11；`plan_days`(7 行) + `checkins`(8 行种子 + 1 行 Day 18 写入验证行 = 9 行)，均 `uid='seed-demo-user'`；RLS 未开启 | 2026-10-04 |
+| 建表脚本 | `db/schema.sql`（Day 16 核心两表）+ `db/schema-2.sql`（Day 18 幂等键列 `client_req_id` 与唯一索引 `checkins_uid_reqid_uniq`） | 2026-10-04 |
 | 部署方式 | CloudBase CLI 3.8.5（`tcb`）；配置见 `cloudbaserc.example.json`（真实文件 `cloudbaserc.json` 含密钥、已被 .gitignore 排除） | 2026-10-03 |
 
 > ⚠️ **更正记录（Day 17）**：本表此前登记的「环境 ID = `habit-tracker-d3ghf0mjer76ffo02`」是**错的**，
@@ -706,3 +771,22 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 | 前端页面公网可访问 | ✅ `https://...tcloudbaseapp.com/` HTTP 200，178667 字节，标题「自律计划」 |
 
 > 这次验证证明：接口返回的是**真库里的数据**，不是前端 mock、也不是写死的假数据 —— 这正是课程 Day 17「接真实数据」在本项目里的达成方式。
+
+### 6.2 Day 18 验收记录（写入 + 读回验证）
+
+**怎么验的**：先在真库执行 `db/schema-2.sql`（建幂等键列与唯一索引），部署云函数，然后用 `curl`
+从公网依次打四组请求 —— 每条都是**对线上地址发的真实请求**，不是本地自测。
+
+| 验收项 | 命令要点 | 实际结果 |
+|---|---|---|
+| 正常写入 | `POST /api/checkins`，带 `Idempotency-Key: day18-demo-0001`，内容「写 Day 18 学习笔记」 | ✅ `{"code":0,"message":"已添加","data":{"id":9,…,"sort":5}}` |
+| **数据库真的多了一行** | `curl` 读回 `GET /api/day?date=2026-10-01` | ✅ 从 5 条变 **6 条**，新增的 `id=9`、`sort=5` 排在最后；库里 `checkins` 总行数 8 → **9** |
+| **重复提交被拒** | 同一条请求（同一个 `clientReqId`）再发一次 | ✅ `{"code":409,"message":"请勿重复提交：这条待办刚刚已经添加过了","data":null}` |
+| **缺必填字段被拒且提示中文** | `POST` 只传 `{"date":"2026-10-01"}` | ✅ `{"code":400,"message":"缺少必填字段 text（待办内容）","data":null}` |
+| 不误伤：同内容不同动作 | 同一天同内容，但换一个 `clientReqId` | ✅ 正常写入（`id=10`）——证明去重认的是**动作 id**，不是**内容**（验证后已清理该行） |
+| 数据库约束真的生效 | 查 `pg_indexes` | ✅ `CREATE UNIQUE INDEX checkins_uid_reqid_uniq ON public.checkins USING btree (uid, client_req_id) WHERE (client_req_id IS NOT NULL)` |
+
+**这次验证的核心问题（课程问的）**：防的是**「同一次写入被执行两次」**（用户双击 / 网络重试），
+**不是**「内容重复」——所以用客户端幂等键 + 数据库唯一索引两层拦截，而不是按内容去重。
+具体怎么测的：`curl` 用同一个 `clientReqId` 连发两次，第二次拿到 409；再换一个 `clientReqId` 发同样的内容，正常写入。
+
