@@ -1,6 +1,6 @@
 # 自律计划 · 部署手册（DEPLOY.md）
 
-- 版本：**v2.1（2026-10-04 Day 18）** — 增加写入接口（POST）部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
+- 版本：**v2.2（2026-10-05）** — §7.4 补「⑤ 读回验证」（课程要求最后调一次读取接口确认写入可读）；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
 - 用途：把**云函数 `api`**、**数据库表**、**前端页面**推上公网的可复现步骤。以后每次重新部署照这份做。
 - 本版配套脚本：`db/schema.sql`、`db/schema-2.sql`（增量）、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
 
@@ -247,6 +247,20 @@ curl -s -X POST "$BASE/checkins" -H "Content-Type: application/json" -d '{"date"
 ```
 
 **应看到**：`{"code":400,"message":"缺少必填字段 text（待办内容）","data":null}`。
+
+**⑤ 读回验证（确认写进去的能读出来）**
+
+课程的"收藏列表接口"在本项目没有对应物，对应物就是**列表读取接口**（见 `api-contract.md` §1.1 对照）。
+按日期读回当天列表：
+
+```bash
+curl -s "$BASE/checkins?date=2026-10-01"
+```
+
+**应看到**：`{"code":0,"message":"ok","data":{"total":N,"items":[…]}}`，其中 `items` 的**最后一条**就是 ① 刚写进去的那条
+（`text` = "写 Day 18 学习笔记"、`sort` 最大）。
+
+> 想更直观地看首屏效果，也可以读合并接口：`curl -s "$BASE/day?date=2026-10-01"`（同时返回 `planDay` 与当天全部 `checkins`）。
 
 > **注意**：① 每跑一次就会真的往库里加一行（这才是"写入"该有的样子）。验证完如果不想留，
 > `tcb db execute --sql "DELETE FROM checkins WHERE client_req_id='shot-0001'"`。
