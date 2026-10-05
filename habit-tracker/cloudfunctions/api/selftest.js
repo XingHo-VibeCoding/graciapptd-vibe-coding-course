@@ -1,11 +1,12 @@
 /**
- * 自律计划 · 云函数 api 本地自测（Day 17 建立，Day 18 补写入路径）
+ * 自律计划 · 云函数 api 本地自测（Day 17 建立，Day 18 补写入路径，Day 19 补分层）
  * ---------------------------------------------------------------------------
- * 作用：**不联网、不连数据库**，把云函数的四种东西验证一遍——
+ * 作用：**不联网、不连数据库**，把云函数的五种东西验证一遍——
  *   1) 路由：路径/方法能不能命中，未命中会不会回 404 且列出可用路由
  *   2) 参数校验与身份：非法日期、互斥参数、limit 越界、缺必填字段、未取到身份 → 各自的错误码
  *   3) 数据库交互：拼出来的 SQL 查询串 / 写入体对不对 + 数据库回的行有没有被正确映射成契约形状
  *   4) 写入防护：重复提交（预检 + 唯一索引兜底两条路径）会不会都被拦住并回 409
+ *   5) 分层（Day 19）：数据库代码是不是真的搬去了 db.js，且数据访问层能脱离路由独立工作
  *
  * 怎么做到的：把全局 fetch 换成一个假的（stub），既能记录"你请求了哪个 URL / 什么方法 / 写了什么"，
  *   又能返回我们指定的假数据。所以它是**纯本地、可重复、秒级**的。
@@ -16,6 +17,9 @@
  */
 
 const api = require('./index.js');
+const db = require('./db.js');   // Day 19 拆出来的数据访问层：这一层要能脱离路由单独测
+const fs = require('fs');
+const path = require('path');
 
 process.env.TCB_ENV = 'test-env-id';
 process.env.CLOUDBASE_API_KEY = 'test-api-key';
@@ -563,6 +567,115 @@ const writeResponder = (opt) => {
   r = await call({ httpMethod: 'GET', path: '/api/day', queryStringParameters: { date: '2026-10-01' } });
   eq('缺少数据库配置：兜成 500（不泄露内部信息）', r.code, 500);
   process.env.CLOUDBASE_API_KEY = savedKey;
+
+  // =========================================================================
+  // 九、分层结构（Day 19：数据库操作拆到 db.js）
+  // =========================================================================
+
+  // —— 9.1 静态检查：数据库代码是不是真的搬走了 ——
+  // 为什么要读源码文本：这类"搬没搬走"的事，靠跑行为测不出来 ——
+  // 搬走之前行为也全对，所以只有看代码本身才知道分层有没有真做到。
+  const readSrc = (f) => fs.readFileSync(path.join(__dirname, f), 'utf8');
+  const idxSrc = readSrc('index.js');
+  const dbSrc = readSrc('db.js');
+
+  ok('路由层不再自己调 fetch（数据库访问已全部搬走）', idxSrc.indexOf('fetch(') === -1);
+  ok('路由层不再出现数据库 REST 基址', idxSrc.indexOf('tcloudbasegateway') === -1);
+  ok('路由层不再出现数据库列名 client_req_id', idxSrc.indexOf('client_req_id') === -1);
+  ok('路由层不再出现数据库列名 done_at', idxSrc.indexOf('done_at') === -1);
+  ok('数据访问层里才有 fetch', dbSrc.indexOf('fetch(') > -1);
+  ok('路由层通过 require 引用数据访问层', idxSrc.indexOf("require('./db.js')") > -1);
+
+  // —— 9.2 数据访问层的对外接口面（加函数要同步改这里，等于一张清单）——
+  eq('数据访问层对外暴露的函数名单',
+     Object.keys(db).sort().join(','),
+     ['createCheckin', 'dbConfig', 'existsCheckinWithReqId', 'findCheckinByContent',
+      'findCheckinByReqId', 'findLastSort', 'findPlanDay', 'insert', 'isDuplicateError',
+      'listCheckins', 'listCheckinsByDay', 'mapCheckin', 'mapPlanDay', 'pickTotal', 'select']
+       .sort().join(','));
+
+  // —— 9.3 数据访问层能脱离路由独立工作（这才是"拆干净了"的证明）——
+  installFakeFetch();
+  responder = () => ({ rows: [PLAN_ROW], total: 1 });
+  const dayRow = await db.findPlanDay('seed-demo-user', '2026-10-01');
+  eq('数据层可直接调用：findPlanDay 返回契约形状（不经路由）', dayRow, {
+    date: '2026-10-01', mood: 'calm',
+    createdAt: Date.parse(PLAN_ROW.created_at), updatedAt: Date.parse(PLAN_ROW.updated_at),
+  });
+  eq('数据层自动补 uid 条件与列清单',
+     [paramsOf(0).uid, paramsOf(0).select], ['eq.seed-demo-user', 'date,mood,created_at,updated_at']);
+
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  eq('这天没记录时 findPlanDay 返回 null（不是错误）',
+     await db.findPlanDay('seed-demo-user', '2026-10-02'), null);
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ sort: 11 }], total: 1 });
+  eq('findLastSort 返回当天最大排序位', await db.findLastSort('seed-demo-user', '2026-10-01'), 11);
+
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  eq('这天没有条目时 findLastSort 返回 null（上层好从 0 起算）',
+     await db.findLastSort('seed-demo-user', '2026-10-01'), null);
+
+  installFakeFetch();
+  responder = () => ({ rows: CHECKIN_ROWS, total: 2 });
+  const listByDay = await db.listCheckinsByDay('seed-demo-user', '2026-10-01');
+  eq('listCheckinsByDay 返回契约形状的数组（done 布尔、doneAt 毫秒）',
+     [listByDay[0].done, listByDay[0].doneAt, listByDay[1].doneAt],
+     [true, Date.parse(CHECKIN_ROWS[0].done_at), null]);
+  eq('listCheckinsByDay 只发一次查询', captured.length, 1);
+
+  installFakeFetch();
+  responder = () => ({ rows: [CHECKIN_ROWS[1]], total: 42 });
+  const listed = await db.listCheckins('seed-demo-user', { date: '2026-10-01', limit: 1 });
+  eq('listCheckins 返回 { total, items }（total 用数据库报的总数）',
+     [listed.total, listed.items.length], [42, 1]);
+
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  await db.listCheckins('seed-demo-user', { from: '2026-09-25', to: '2026-10-01', limit: 20 });
+  eq('listCheckins 的区间查询下发为同列两个条件',
+     paramsOf(0).date, ['gte.2026-09-25', 'lte.2026-10-01']);
+
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  await db.listCheckins('seed-demo-user', { date: '2026-10-01', done: 'false', limit: 20 });
+  eq('listCheckins 的完成状态下发为 is.false', paramsOf(0).done, 'is.false');
+
+  installFakeFetch();
+  responder = () => ({ rows: [NEW_ROW], total: 1 });
+  const made = await db.createCheckin({
+    uid: 'seed-demo-user', date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2',
+    sort: 5, reqId: 'req-x',
+  });
+  eq('createCheckin 把业务字段翻成数据库列名（含幂等键列、done 恒 false）', bodyOf(0), {
+    uid: 'seed-demo-user', date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2',
+    done: false, sort: 5, client_req_id: 'req-x',
+  });
+  eq('createCheckin 返回契约形状的那一行', made, {
+    id: 901, date: '2026-10-01', text: '写周报', time: '14:00', quad: 'q2',
+    done: false, doneAt: null, sort: 5,
+  });
+
+  installFakeFetch();
+  responder = () => ({ rows: [NEW_ROW], total: 1 });
+  await db.createCheckin({ uid: 'u', date: '2026-10-01', text: 't', time: null, quad: null, sort: 0, reqId: '' });
+  ok('没传幂等键时不写 client_req_id 列（保持 NULL）', bodyOf(0).client_req_id === undefined);
+
+  installFakeFetch();
+  responder = () => ({ status: 409, body: { code: '23505', message: 'duplicate key value' } });
+  let dupErr = null;
+  try {
+    await db.createCheckin({ uid: 'u', date: '2026-10-01', text: 't', time: null, quad: null, sort: 0, reqId: 'r' });
+  } catch (e) {
+    dupErr = e;
+  }
+  ok('createCheckin 遇到唯一冲突会把 SQLSTATE 带回来（供上层翻成 409）',
+     db.isDuplicateError(dupErr) === true && dupErr.pgCode === '23505');
+  ok('isDuplicateError 不把别的数据库错误当重复',
+     db.isDuplicateError({ pgCode: '42601' }) === false && db.isDuplicateError(null) === false);
 
   global.fetch = realFetch;
   console.log = realLog;

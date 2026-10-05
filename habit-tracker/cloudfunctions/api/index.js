@@ -1,5 +1,5 @@
 /**
- * 自律计划 · 云函数 api（Day 15 建立 v0.1.0 → Day 17 v0.2.0 → Day 18 v0.3.0）
+ * 自律计划 · 云函数 api（Day 15 建立 v0.1.0 → Day 17 v0.2.0 → Day 18 v0.3.0 → Day 19 v0.4.0）
  * ---------------------------------------------------------------------------
  * 这个函数是「前端的唯一后端入口」：所有接口都从这里进，内部再按路径分发给具体处理函数。
  * 为什么一个函数承载所有接口，而不是一个接口一个函数？
@@ -10,26 +10,35 @@
  *   Day 17  GET  /api/day           今天页首屏合并读取（plan_days + checkins）
  *   Day 17  GET  /api/checkins      打卡项列表读取（支持单日/区间/完成状态/条数限制）
  *   Day 18  POST /api/checkins      新建打卡项（全字段校验 + 重复提交防护）
- *   Day 19+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
+ *   Day 19  结构重构：数据库操作拆到 db.js（数据访问层），接口行为与契约零变化
+ *   Day 20+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
  *
- * 【零依赖】只用 Node 内置能力 + Node 18 自带的全局 fetch，不装任何 npm 包。
- *   数据库怎么读？——不装 `pg` 驱动，改走 CloudBase 的 PostgreSQL REST 接口
- *   （`https://<环境ID>.api.tcloudbasegateway.com/v1/rdb/rest/<表名>?<查询条件>`，
- *     PostgREST 风格：筛选写 `列=eq.值`，取列写 `select=`，排序写 `order=`）。
- *   这样云函数目录里连 node_modules 都不用，控制台粘贴即可部署。
- *   ⚠️ 要求运行环境 Node.js 18+（全局 fetch 是 18 才有的）。
+ * 【Day 19 分层】本文件**不再直接读写数据库** —— 那是 db.js（数据访问层）的活。
+ *   现在这个文件只管三件事：
+ *     ① HTTP 解析：把触发事件解析成「方法 / 路径 / query / body」
+ *     ② 校验与业务规则：必填字段、格式、幂等键、排序位、写后读回
+ *     ③ 拼响应：调 db.js 取/写数据，再套上契约要求的统一信封
+ *   要数据就写 `await db.listCheckinsByDay(uid, date)`；
+ *   不再自己拼数据库查询串，也不再在业务代码里出现任何数据库列名。
+ *   分层图见 TECH_DESIGN.md「二.1 分层结构」。
+ *
+ * 【零依赖】整个云函数只用 Node 内置能力 + Node 18 自带的全局 fetch，不装任何 npm 包（含 `pg` 驱动）。
+ *   ⚠️ 因此运行环境必须 Node.js 18 及以上。
  *
  * 【身份从哪来】按契约 1.4，前端永远不许明传 uid：
  *   匿名登录还未接入（课程把它排在后面的日子），所以 uid 依次取：
  *     1) context.userInfo.uid —— 平台注入的登录身份（配好匿名登录后自动生效）
- *     2) process.env.DEMO_UID —— 服务端配置的演示身份（今天靠它做真库验证，绝不来自请求参数）
+ *     2) process.env.DEMO_UID —— 服务端配置的演示身份（绝不来自请求参数）
  *   两个都没有 → 按契约回 401。
  *   ⚠️ 这是**临时**状态：等接上匿名登录那天，必须删掉第 2 条，只认平台注入的身份。
  */
 
+// —— 数据访问层（Day 19 从本文件拆出去的那一层）：所有数据库读写的唯一入口 ——
+const db = require('./db.js');
+
 // —— 服务身份：写进健康检查响应里，用来确认"公网地址返回的是我自己的服务" ——
 const SERVICE = 'Self discipline plan';
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 
 /**
  * 业务接口的统一响应形状（见 api-contract.md 1.2）：
@@ -137,177 +146,7 @@ const resolveUid = (context) => {
 };
 
 // ===========================================================================
-// 二、数据库：CloudBase PostgreSQL 的 REST 接口（零依赖，用全局 fetch）
-// ===========================================================================
-
-/**
- * 取数据库连接配置。全部来自**函数环境变量**，不写进代码、不进仓库：
- *   TCB_ENV            —— 环境 ID（云函数运行时由 CloudBase 自动注入；也兼容手动配 CLOUDBASE_ENV_ID / ENV_ID）
- *   CLOUDBASE_API_KEY  —— 环境 API Key（在控制台「环境 → API Key」或 `tcb env apikey` 创建）
- */
-const dbConfig = () => {
-  const envId = process.env.TCB_ENV || process.env.CLOUDBASE_ENV_ID || process.env.ENV_ID || '';
-  const apiKey = process.env.CLOUDBASE_API_KEY || '';
-  return {
-    envId: envId,
-    apiKey: apiKey,
-    base: envId ? 'https://' + envId + '.api.tcloudbasegateway.com/v1/rdb/rest' : '',
-  };
-};
-
-/**
- * 查一张表。零依赖的关键就在这 20 行：
- *   query 里的键值对直接拼成 PostgREST 查询串，例如
- *     { uid: 'eq.seed-demo-user', date: 'eq.2026-10-01', select: 'id,text', order: 'sort.asc' }
- *   会请求 `.../rest/checkins?uid=eq.seed-demo-user&date=eq.2026-10-01&select=id,text&order=sort.asc`
- *
- *   ⚠️ 同一个列上要挂两个条件（区间查询 `date >= A 且 date <= B`）时，
- *      PostgREST 要的是**重复同名参数**，而 JS 对象的键不能重复——
- *      所以这里允许值是数组：`{ date: ['gte.A', 'lte.B'] }` → `date=gte.A&date=lte.B`（两个条件是 AND）。
- *
- * 返回 { rows, total }：
- *   rows  —— 数据行（已解析成 JS 对象）
- *   total —— 满足条件的总行数（靠 `Prefer: count=exact` + 响应头 Content-Range 拿到；
- *            拿不到就退回本页行数，前端仍然能工作，只是"还有没有下一页"不准）
- */
-const pgSelect = async (table, query) => {
-  const { envId, apiKey, base } = dbConfig();
-  if (!envId || !apiKey) {
-    throw new Error('数据库未配置：缺少环境变量 TCB_ENV 或 CLOUDBASE_API_KEY');
-  }
-  if (typeof fetch !== 'function') {
-    throw new Error('运行环境不支持全局 fetch，请把云函数运行环境设为 Node.js 18 及以上');
-  }
-
-  const search = new URLSearchParams();
-  Object.keys(query).forEach((k) => {
-    const v = query[k];
-    if (v === undefined || v === null || v === '') return;
-    // 数组 = 同一列多个条件，重复拼接（见上方说明）
-    (Array.isArray(v) ? v : [v]).forEach((one) => search.append(k, String(one)));
-  });
-
-  const url = base + '/' + table + (search.toString() ? '?' + search.toString() : '');
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: 'Bearer ' + apiKey, // 服务端身份（service_role），不泄露给前端
-      Accept: 'application/json',
-      Prefer: 'count=exact',
-    },
-  });
-
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch (e) {
-    throw new Error('数据库返回的不是合法 JSON（HTTP ' + res.status + '）：' + text.slice(0, 200));
-  }
-
-  if (!res.ok) {
-    const detail = body && (body.message || body.error || body.details);
-    throw new Error('数据库查询失败（HTTP ' + res.status + '）：' + (detail || text.slice(0, 200)));
-  }
-
-  const rows = Array.isArray(body) ? body : [];
-  return { rows: rows, total: pickTotal(res.headers.get('content-range'), rows.length) };
-};
-
-/** 从 Content-Range（形如 `0-7/8`）里解析总数；解析不出来就用本页行数兜底。 */
-const pickTotal = (contentRange, fallback) => {
-  if (!contentRange) return fallback;
-  const after = String(contentRange).split('/')[1];
-  const n = Number(after);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-/**
- * 往一张表插一行（PostgREST 的 POST 语义）。和 pgSelect 是同一套零依赖思路。
- *   · 请求体 = 要插入的列（对象），键名用**数据库列名**（snake_case）
- *   · Prefer: return=representation —— 让数据库把"刚插进去的那一行"回传，
- *     这样响应里能直接给出新 id，不用再查一次
- *   · resolution=ignore-duplicates? **不用**。我们的重复提交要靠报错拦住（409），
- *     静默忽略会让"重复提交"变成"看起来成功但其实没写"，前端无法分辨。
- *
- * 返回：插入后的那一行（对象）；网关没回传表示时返回 null（调用处会读回兜底）。
- * 失败时抛的错误对象上带 `pgCode`（PostgreSQL 的 SQLSTATE，如 '23505' 唯一冲突），
- * 供调用处区分"重复提交"和其它故障。
- */
-const pgInsert = async (table, row) => {
-  const { envId, apiKey, base } = dbConfig();
-  if (!envId || !apiKey) {
-    throw new Error('数据库未配置：缺少环境变量 TCB_ENV 或 CLOUDBASE_API_KEY');
-  }
-  if (typeof fetch !== 'function') {
-    throw new Error('运行环境不支持全局 fetch，请把云函数运行环境设为 Node.js 18 及以上');
-  }
-
-  const res = await fetch(base + '/' + table, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + apiKey,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      Prefer: 'return=representation',
-    },
-    body: JSON.stringify(row),
-  });
-
-  const text = await res.text();
-  let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch (e) {
-    body = null; // 插入失败的响应也可能不是 JSON，下面统一按状态码处理
-  }
-
-  if (!res.ok) {
-    const detail = body && (body.message || body.details || body.error);
-    const err = new Error('数据库写入失败（HTTP ' + res.status + '）：' + (detail || String(text).slice(0, 200)));
-    err.pgCode = body && body.code ? String(body.code) : ''; // PostgREST 把 SQLSTATE 放在 code 里
-    throw err;
-  }
-
-  return Array.isArray(body) && body.length ? body[0] : null;
-};
-
-// ===========================================================================
-// 三、行 → 接口形状的映射（数据库 snake_case → 契约 camelCase）
-// ===========================================================================
-
-/** 时间戳列：数据库回 ISO 字符串，契约要毫秒数 */
-const toMs = (v) => {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Date.parse(v);
-  return Number.isNaN(n) ? null : n;
-};
-
-/** plan_days 一行 → 契约里的 planDay 对象 */
-const mapPlanDay = (r) => ({
-  date: r.date,
-  mood: r.mood === undefined ? null : r.mood,
-  createdAt: toMs(r.created_at),
-  updatedAt: toMs(r.updated_at),
-});
-
-/** checkins 一行 → 契约里的打卡项对象 */
-const mapCheckin = (r) => ({
-  id: r.id === null || r.id === undefined ? null : Number(r.id),
-  date: r.date,
-  text: r.text,
-  time: r.time === undefined ? null : r.time,
-  quad: r.quad === undefined ? null : r.quad,
-  done: r.done === true,
-  doneAt: toMs(r.done_at),
-  sort: r.sort === null || r.sort === undefined ? 0 : Number(r.sort),
-});
-
-const CHECKIN_COLS = 'id,date,text,time,quad,done,done_at,sort';
-const PLANDAY_COLS = 'date,mood,created_at,updated_at';
-
-// ===========================================================================
-// 四、参数校验（前端的错要早点挡住，别让它变成一条奇怪的 SQL）
+// 二、参数校验（前端的错要早点挡住，别让它变成一条奇怪的查询）
 // ===========================================================================
 
 /** 日期必须是 YYYY-MM-DD 且真的存在（挡住 2026-02-30 这种） */
@@ -338,7 +177,25 @@ const QUADS = ['q1', 'q2', 'q3', 'q4'];
 const isReqId = (s) => /^[A-Za-z0-9_-]{1,64}$/.test(s);
 
 // ===========================================================================
-// 五、接口实现
+// 三、业务规则用的小工具
+// ===========================================================================
+
+/**
+ * 写接口的服务端日志（Day 18 余力加练）。
+ * 一行里放齐排查问题需要的全部要素：动作、谁、写了什么、结果、新 id、耗时。
+ * 出问题时在 CloudBase 控制台「云函数 → api → 日志」搜 [api][write] 即可定位。
+ * 注意：**只打元信息，不打用户内容正文**（待办内容属于用户隐私，日志不该留）。
+ */
+const logWrite = (action, info) => {
+  const parts = Object.keys(info).map((k) => k + '=' + info[k]);
+  console.log('[api][write] ' + action + ' | ' + parts.join(' '));
+};
+
+/** 重复提交的统一文案与错误码（两条路径共用，保证提示一致） */
+const DUPLICATE = () => reply(409, '请勿重复提交：这条待办刚刚已经添加过了', null);
+
+// ===========================================================================
+// 四、接口实现（只做 HTTP 与业务规则的活，数据一律找 db.js 要）
 // ===========================================================================
 
 /**
@@ -355,23 +212,14 @@ const getDay = async (event, context) => {
   const date = q.date || todayLocal();
   if (!isDate(date)) return reply(400, '日期格式不对，应为 YYYY-MM-DD', null);
 
-  const day = await pgSelect('plan_days', {
-    uid: 'eq.' + uid,
-    date: 'eq.' + date,
-    select: PLANDAY_COLS,
-    limit: 1,
-  });
-  const list = await pgSelect('checkins', {
-    uid: 'eq.' + uid,
-    date: 'eq.' + date,
-    select: CHECKIN_COLS,
-    order: 'sort.asc,id.asc',
-  });
+  // 问数据访问层要"这一天"的两样东西（怎么查是它的事，这里只说"要什么"）
+  const planDay = await db.findPlanDay(uid, date);
+  const checkins = await db.listCheckinsByDay(uid, date);
 
   return reply(0, 'ok', {
     date: date,
-    planDay: day.rows.length ? mapPlanDay(day.rows[0]) : null,
-    checkins: list.rows.map(mapCheckin),
+    planDay: planDay,
+    checkins: checkins,
   });
 };
 
@@ -384,7 +232,7 @@ const getDay = async (event, context) => {
  *   done          true / false，只看已完成 / 未完成
  *   limit         返回条数上限，默认 20、最大 100（Day 17 余力加练）
  *
- * 排序：日期升序 → 同一天内按 sort 升序 → id 兜底（顺序稳定，翻页不会漏不会重）。
+ * 排序：日期升序 → 同一天内按排序位升序 → id 兜底（顺序稳定，翻页不会漏不会重）。
  */
 const listCheckins = async (event, context) => {
   const uid = resolveUid(context);
@@ -392,7 +240,7 @@ const listCheckins = async (event, context) => {
 
   const q = pickQuery(event);
 
-  // —— 参数校验：错就早说，别让它变成一条奇怪的 SQL ——
+  // —— 参数校验：错就早说，别让它变成一条奇怪的查询 ——
   if (q.date && (q.from || q.to)) {
     return reply(400, 'date 与 from/to 不能同时传，请二选一', null);
   }
@@ -413,45 +261,21 @@ const listCheckins = async (event, context) => {
     }
   }
 
-  // —— 组装查询 ——
-  const query = {
-    uid: 'eq.' + uid,
-    select: CHECKIN_COLS,
-    order: 'date.asc,sort.asc,id.asc',
+  // —— 交给数据访问层去查（单日/区间/完成状态/条数，都是它的活）——
+  const res = await db.listCheckins(uid, {
+    date: q.date,
+    from: q.from,
+    to: q.to,
+    done: q.done,
     limit: limit,
-  };
-  if (q.date) {
-    query.date = 'eq.' + q.date;
-  } else if (q.from && q.to) {
-    query.date = ['gte.' + q.from, 'lte.' + q.to]; // 同列两个条件 = 区间
-  } else if (q.from) {
-    query.date = 'gte.' + q.from;
-  } else if (q.to) {
-    query.date = 'lte.' + q.to;
-  }
-  if (q.done !== undefined) query.done = 'is.' + q.done;
+  });
 
-  const res = await pgSelect('checkins', query);
   return reply(0, 'ok', {
     total: res.total,
     limit: limit,
-    items: res.rows.map(mapCheckin),
+    items: res.items,
   });
 };
-
-/**
- * 写接口的服务端日志（Day 18 余力加练）。
- * 一行里放齐排查问题需要的全部要素：动作、谁、写了什么、结果、新 id、耗时。
- * 出问题时在 CloudBase 控制台「云函数 → api → 日志」搜 [api][write] 即可定位。
- * 注意：**只打元信息，不打用户内容正文**（待办内容属于用户隐私，日志不该留）。
- */
-const logWrite = (action, info) => {
-  const parts = Object.keys(info).map((k) => k + '=' + info[k]);
-  console.log('[api][write] ' + action + ' | ' + parts.join(' '));
-};
-
-/** 重复提交的统一文案与错误码（两条路径共用，保证提示一致） */
-const DUPLICATE = () => reply(409, '请勿重复提交：这条待办刚刚已经添加过了', null);
 
 /**
  * POST /api/checkins —— 新建打卡项（契约 4.1）
@@ -464,10 +288,10 @@ const DUPLICATE = () => reply(409, '请勿重复提交：这条待办刚刚已�
  *   → ④ 幂等预检（带 key 才做）→ ⑤ 算排序位 → ⑥ 写入 → ⑦ 读回确认 → ⑧ 日志
  *
  * 重复提交防了两层，缺一不可：
- *   · 服务层预检：先查 (uid, clientReqId) 在不在 —— 好处是能给出友好的中文提示；
+ *   · 服务层预检：先问数据访问层"这个幂等键用过了吗" —— 好处是能给出友好的中文提示；
  *     但它**挡不住并发**（两个请求可能同时查、同时没查到，然后都去写）。
- *   · 数据库唯一索引：checkins_uid_reqid_uniq —— 并发下真正兜住的那一道，
- *     冲突时 PostgreSQL 报 SQLSTATE 23505，这里翻译成 409 + 同一句中文。
+ *   · 数据库唯一索引：checkins_uid_reqid_uniq —— 并发下真正兜住的那一道；
+ *     冲突时数据访问层会把 PostgreSQL 的 SQLSTATE 23505 带回来，这里翻译成 409 + 同一句中文。
  */
 const createCheckin = async (event, context) => {
   const startedAt = Date.now();
@@ -520,15 +344,10 @@ const createCheckin = async (event, context) => {
     return reply(400, 'clientReqId 只能是 1~64 位的字母、数字、下划线或短横线', null);
   }
 
-  // ④ 幂等预检：同一个 clientReqId 已经写过了 → 直接拒（给友好中文，不打数据库报错）
+  // ④ 幂等预检：这个幂等键用过了 → 直接拒（给友好中文，不打数据库报错）
   if (reqId) {
-    const dup = await pgSelect('checkins', {
-      uid: 'eq.' + uid,
-      client_req_id: 'eq.' + reqId,
-      select: 'id',
-      limit: 1,
-    });
-    if (dup.rows.length) {
+    const used = await db.existsCheckinWithReqId(uid, reqId);
+    if (used) {
       logWrite('重复提交被拒（预检）', {
         uid: uid, date: date, reqId: reqId, code: 409, ms: Date.now() - startedAt,
       });
@@ -537,25 +356,18 @@ const createCheckin = async (event, context) => {
   }
 
   // ⑤ 排序位：接在同一天已有条目的最后面（空的一天从 0 开始）
-  const last = await pgSelect('checkins', {
-    uid: 'eq.' + uid,
-    date: 'eq.' + date,
-    select: 'sort',
-    order: 'sort.desc',
-    limit: 1,
-  });
-  const sort = last.rows.length ? Number(last.rows[0].sort) + 1 : 0;
+  const lastSort = await db.findLastSort(uid, date);
+  const sort = lastSort === null ? 0 : lastSort + 1;
 
-  // ⑥ 写入
-  const row = { uid: uid, date: date, text: text, time: time, quad: quad, done: false, sort: sort };
-  if (reqId) row.client_req_id = reqId;
-
-  let inserted;
+  // ⑥ 写入（数据库列名由数据访问层拼；唯一键冲突会带着 pgCode 抛回来）
+  let created;
   try {
-    inserted = await pgInsert('checkins', row);
+    created = await db.createCheckin({
+      uid: uid, date: date, text: text, time: time, quad: quad, sort: sort, reqId: reqId,
+    });
   } catch (err) {
     // 竞态兜底：预检没查到、但写入时数据库唯一索引拦下了（并发/重试）
-    if (err && err.pgCode === '23505') {
+    if (db.isDuplicateError(err)) {
       logWrite('重复提交被拒（唯一索引兜底）', {
         uid: uid, date: date, reqId: reqId, pgCode: err.pgCode, code: 409, ms: Date.now() - startedAt,
       });
@@ -565,34 +377,29 @@ const createCheckin = async (event, context) => {
   }
 
   // ⑦ 读回确认：网关没回传表示时，自己再查一次，保证响应里的 id 一定真实存在
-  let created = inserted;
   if (!created) {
-    const back = reqId
-      ? await pgSelect('checkins', { uid: 'eq.' + uid, client_req_id: 'eq.' + reqId, select: CHECKIN_COLS, limit: 1 })
-      : await pgSelect('checkins', {
-          uid: 'eq.' + uid, date: 'eq.' + date, text: 'eq.' + text,
-          select: CHECKIN_COLS, order: 'id.desc', limit: 1,
-        });
-    created = back.rows.length ? back.rows[0] : null;
+    created = reqId
+      ? await db.findCheckinByReqId(uid, reqId)
+      : await db.findCheckinByContent(uid, date, text);
   }
   if (!created) throw new Error('写入未返回也无法读回新建的那一行，结果不可确认');
 
-  // ⑧ 日志
+  // ⑧ 日志（只记元信息，不记用户内容正文）
   logWrite('写入成功', {
     uid: uid, date: date, textLen: text.length, reqId: reqId || '-',
     id: created.id, sort: sort, code: 0, ms: Date.now() - startedAt,
   });
 
-  return reply(0, '已添加', mapCheckin(created));
+  return reply(0, '已添加', created);
 };
 
 // ===========================================================================
-// 七、路由表
+// 五、路由表
 // ===========================================================================
 
 /**
  * 路由表：键 = 「方法 + 路径」，值 = 处理函数。
- * 加接口就往这张表里加一行，例如（Day 19 预计）：
+ * 加接口就往这张表里加一行（第 4 周的 PATCH / DELETE 也加在这里）：
  *   'PATCH /api/checkins/:id': updateCheckin
  * 处理函数签名统一是 async (event, context) => 响应对象。
  */
@@ -646,14 +453,12 @@ exports.main = async (event = {}, context = {}) => {
 };
 
 // —— 供本地自测引用（云函数运行时不依赖这里；不影响 exports.main）——
+// 注意：数据库相关的东西（表级查询 / 行映射 / 分页总数）已随重构搬到 db.js，
+// 自测要直接用就 `require('./db.js')`，本文件不再转发它们。
 exports.SERVICE = SERVICE;
 exports.VERSION = VERSION;
 exports.routes = routes;
-exports.pgSelect = pgSelect;
-exports.pgInsert = pgInsert;
 exports.pickBody = pickBody;
-exports.mapCheckin = mapCheckin;
-exports.mapPlanDay = mapPlanDay;
 exports.isDate = isDate;
 exports.isTime = isTime;
 exports.isReqId = isReqId;

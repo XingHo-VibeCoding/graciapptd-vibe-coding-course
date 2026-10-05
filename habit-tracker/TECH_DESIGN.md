@@ -1,6 +1,6 @@
 # 自律计划 · 技术设计文档（TECH_DESIGN.md）
 
-- 版本：v2.0（重写：由"纯前端单机路线"升级为"三方案比较 + 默认示范路线"）
+- 版本：v2.1（Day 19：新增「二.1 分层结构」一节并重画项目结构树；v2.0 为重写版——由"纯前端单机路线"升级为"三方案比较 + 默认示范路线"）
 - 撰写日期：2026-09-20（Day 5）
 - 依据：`PRD.md` v2.0（自律计划）
 - 版本历史：v1.0（同日早些时候）为纯前端 + localStorage 单机方案，已由 git 历史保留（提交 `133b7f5`），相当于任务清单里的"降级路线"；本版为完整版——多方案比较后给出默认路线
@@ -82,17 +82,33 @@
 
 ## 二、项目结构
 
-> **更新说明（Day 7.1）**：原计划是 React/Vite 多文件结构。考虑到 MVP 28 天节奏与零基础学员门槛，**改为 vanilla 单文件 HTML，按 5 步分步交付**。React/Vite 化作为 step 5 之后或后续的优化项（独立 TECH_DESIGN v3.0），不在本阶段范围。下方结构已同步更新。
+> **更新说明**：原计划是 React/Vite 多文件结构。考虑到 MVP 28 天节奏与零基础学员门槛，**改为 vanilla 单文件 HTML，按 5 步分步交付**。React/Vite 化作为 step 5 之后或后续的优化项（独立 TECH_DESIGN v3.0），不在本阶段范围。
+> **Day 19 起**：第 3 周加了后端，云函数内部按「路由层 / 数据访问层」拆开（见下方 **二.1 分层结构**）。下方树已按**当前真实结构**重画。
 
 ```
 habit-tracker/
-├── docs/                     ← 文档层
-│   ├── research.md            （Day 3）
-│   ├── PRD.md                 （Day 4, v2.0）
-│   └── TECH_DESIGN.md         （Day 5，本文档，Day 7.1 更新结构）
 ├── frontend/
-│   └── index.html            ← 单文件 vanilla HTML（Day 7 起，每步迭代）
-└── scratch/                  ← 临时试验文件（R6 要求当天清空）
+│   ├── index.html              ← 单文件 vanilla HTML：全部前端代码（约 2900 行）
+│   └── assets/                 ← 6 张内置背景图
+├── cloudfunctions/
+│   └── api/                    ← 云函数「api」＝前端的唯一后端入口（Node.js 20，零 npm 依赖）
+│       ├── index.js            ← 路由层：HTTP 解析 / 参数校验 / 业务规则 / 路由表
+│       ├── db.js               ← 数据访问层：连接配置 / PostgREST 查询 / fetch / 行映射（Day 19 拆出）
+│       ├── selftest.js         ← 本地自测：不联网、stub 掉 fetch（162 条断言）
+│       └── package.json
+├── db/                         ← 数据库脚本（在真库执行；本地无 Postgres 时用 pglite 先验）
+│   ├── schema.sql              ← 建表（Day 16）
+│   ├── schema-2.sql            ← 增量脚本：Day 18 起所有结构变更都追加在这里，不改 schema.sql
+│   ├── seed.sql                ← 种子数据（编造的示例，可重复执行）
+│   ├── verify.sql              ← 验证语句
+│   └── README.md
+├── skills/                     ← 项目内 Skill（提交进仓库，供老师 review）
+├── docs/                       ← 早期素材（structure.svg 等）
+├── research.md                 ← Day 3 调研
+├── PRD.md / TECH_DESIGN.md     ← 需求文档 / 本文档
+├── api-contract.md             ← 接口契约：第 3 周建表与写接口的唯一依据
+├── RUN.md                      ← 怎么跑起来 / 怎么验证
+└── DEPLOY.md                   ← 部署手册（云函数 + 数据库 + 静态托管）
 ```
 
 **为什么放弃 React/Vite 路线（至少在 MVP 阶段）**：
@@ -101,7 +117,61 @@ habit-tracker/
 3. **数据模型没变**：所有 v2.0 的设计（4 张数据表、A1-A22 验收标准、3 主题 CSS 变量、规则拼装报告）都能在 vanilla 中实现
 4. **未来切换成本可控**：当所有 F1-F5 跑通后，可一次性切到 React 而无需重写产品逻辑
 
-> 前后端各自内部保持"三文件封顶"的精神不再适用（框架天生多文件），但**"存储只走一个模块"的铁律保留**：所有 localStorage 读写过 `loadData()/saveData()` 两个函数。
+> 前后端各自内部保持"三文件封顶"的精神不再适用（框架天生多文件），但**"存储只走一个模块"的铁律保留**：前端所有 localStorage 读写过 `loadData()/saveData()` 两个函数；后端所有数据库读写过 `db.js`（见下）。
+
+### 二.1 分层结构（Day 19：云函数拆出数据访问层）
+
+第 3 周的后端只有两个代码文件，各管一层，**依赖方向单向**：路由层 → 数据访问层 → 数据库。
+
+```mermaid
+flowchart TB
+  FE["前端 frontend/index.html<br/>单文件 vanilla JS（本期数据仍在 localStorage）"]
+  subgraph ROUTE["路由层 · cloudfunctions/api/index.js"]
+    R1["① 解析 HTTP：方法 / 路径 / query / body"]
+    R2["② 校验与业务规则：必填字段 · 格式 · 幂等键 · 排序位 · 写后读回"]
+    R3["③ 拼统一信封响应 code / message / data"]
+  end
+  subgraph DATA["数据访问层 · cloudfunctions/api/db.js（Day 19 拆出）"]
+    D1["连接配置（读函数环境变量）"]
+    D2["PostgREST 查询串 + fetch"]
+    D3["PostgreSQL 错误码（23505 = 唯一冲突）"]
+    D4["行映射：数据库列名 → 契约字段名"]
+  end
+  DB[("CloudBase PostgreSQL<br/>plan_days / checkins")]
+
+  FE -->|"HTTPS 公网地址 /api/…"| R1
+  R1 --> R2
+  R2 --> R3
+  R3 -->|"await db.findPlanDay(uid, date)<br/>业务语义调用（不是 SQL）"| D1
+  D1 --> D2
+  D2 --> D3
+  D3 --> D4
+  D4 -->|"REST 接口（Bearer 环境 API Key）"| DB
+```
+
+**每层只知道自己该知道的事**（这是分层的全部意义）：
+
+| 层 | 文件 | 知道什么 | **不**知道什么 |
+|---|---|---|---|
+| 路由层 | `cloudfunctions/api/index.js` | HTTP 怎么进怎么出、契约要什么形状、业务规则（校验 / 幂等 / 排序位 / 写后读回） | 数据库怎么连、表里有哪些列、查询串怎么写 |
+| 数据访问层 | `cloudfunctions/api/db.js` | 怎么连数据库、表结构与列名、查询怎么写、错误码什么意思 | HTTP 长什么样、响应信封、业务规则 |
+| 数据库 | CloudBase PostgreSQL | 数据本身 + 约束（唯一索引 / CHECK） | —— |
+
+**这次重构具体搬了什么**（"查数据库的代码"从哪移到哪）：
+
+| 搬走的代码 | 原来在哪 | 现在在哪 |
+|---|---|---|
+| 连接配置 `dbConfig()`（环境变量 → REST 基址） | index.js | **db.js** |
+| `pgSelect` / `pgInsert`（拼查询串 + 调 fetch） | index.js | **db.js**，改名成更中性的 `select` / `insert` |
+| 分页总数解析 `pickTotal` | index.js | **db.js** |
+| 列清单 `CHECKIN_COLS` / `PLANDAY_COLS` | index.js | **db.js** |
+| 行映射 `mapPlanDay` / `mapCheckin`（`done_at` → `doneAt`） | index.js | **db.js** |
+| 散在各处的查询对象拼装（`uid: 'eq.…'`、`order: 'sort.asc'`） | index.js | **db.js** 的表级函数 `findPlanDay` / `listCheckinsByDay` / `listCheckins` / `existsCheckinWithReqId` / `findCheckinByReqId` / `findCheckinByContent` / `findLastSort` / `createCheckin` |
+
+**搬家的好处**：以后要换数据库（改用 `pg` 驱动、换服务商、加一层缓存）只改 `db.js` 一个文件，路由层一行不用动；反过来加接口，也只在 `index.js` 加一条路由 + 调 `db.*`。
+**接口路径与字段名一个都没动** —— 契约 `api-contract.md` 本次未作任何修改。
+
+**怎么保证"搬完没搬坏"**：`cloudfunctions/api/selftest.js` 的断言从 140 条增至 **162 条**，新增的第 9 节专测分层 —— 既做**静态检查**（断言 `index.js` 里已不再出现 `fetch(`、REST 基址、数据库列名），也**直接调用 `db.js`** 证明它能脱离路由独立工作（这是"拆干净了"的真正证明）。
 
 ## 三、数据模型（CloudBase PostgreSQL）
 

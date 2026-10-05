@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.7（2026-10-04 Day 18：后端第一个写入接口 `POST /api/checkins` 上线 + 防重复提交；前端仍为本地 mock 数据）
+- 版本：v3.8（2026-10-05 Day 19：云函数拆出数据访问层 `db.js`——接口行为与契约零变化；前端仍为本地 mock 数据）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -121,6 +121,8 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A50c 缺必填字段被拒 | `curl -s -X POST ".../api/checkins" -H "Content-Type: application/json" -d '{"date":"2026-10-01"}'` | 回 `{"code":400,"message":"缺少必填字段 text（待办内容）","data":null}`，**提示是中文**，且一个字都没写库（Day 18） |
 | A50d 幂等不误伤 | 同一天同内容、但换一个 `Idempotency-Key` 再发 | 正常写入 —— 证明去重认的是**动作 id** 而不是**内容**；同名待办只要不是同一次动作就允许（Day 18） |
 
+| A51 分层重构 | 看 `habit-tracker/cloudfunctions/api/` 目录，应有两个代码文件；再浏览器打开线上接口 | ① `index.js` = 路由层（只有 HTTP 解析 / 校验 / 业务规则 / 路由表），`db.js` = 数据访问层（连接配置 / 查询拼装 / fetch / 行映射）；② 本地自测的**静态断言**证明 `index.js` 里已无 `fetch(`、REST 基址与数据库列名；③ `node habit-tracker/cloudfunctions/api/selftest.js` 由 140/140 → **162/162** 全过；④ 线上接口回归与重构前完全一致（Day 19） |
+
 > 报告（F4）还没做——按 R7 规则一天一块。思考（F3）卡片流 MVP（Day 14）与 AI 洞察（Day 15）已完成；应用页（F6）骨架与专注计时（Day 18）已完成；情绪表情已图片化（Day 19）；纪念&倒数日（Day 21）、肯定语（Day 22）、随即话题（精进 7）已开放；记账已按用户要求移除（2026-09-27）；剩小组件待做。
 
 ## 四、常见问题（FAQ）
@@ -134,9 +136,19 @@ http://localhost:8765/habit-tracker/frontend/index.html
 
 ## 五、代码去哪看
 
-全部前端代码在一个文件里：`habit-tracker/frontend/index.html`（约 2900 行）。
+**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 2900 行）。
 结构分五段，从上到下：CSS 样式 → HTML 骨架 → 存储层（loadData/saveData）→ 状态与渲染 → 事件绑定。
 找任何功能先看注释里的 `Day 8` / `F1` 标记，和 PRD 的编号一一对应。
+
+**后端**（第 3 周起，两个代码文件，分层说明见 `TECH_DESIGN.md` 二.1）：
+
+| 文件 | 属于哪一层 | 管什么 |
+|---|---|---|
+| `habit-tracker/cloudfunctions/api/index.js` | 路由层 | HTTP 解析（`pickXxx`）、参数校验、业务规则（幂等预检 / 排序位 / 写后读回）、路由表 |
+| `habit-tracker/cloudfunctions/api/db.js` | 数据访问层 | 连接配置、PostgREST 查询拼装、`fetch`、错误码识别、行映射（Day 19 拆出） |
+| `habit-tracker/cloudfunctions/api/selftest.js` | 测试 | 本地自测：不联网、stub 掉 `fetch`（162 条断言） |
+
+接口的路径与字段以 `habit-tracker/api-contract.md` 为准；部署步骤看 `habit-tracker/DEPLOY.md`；数据库脚本在 `habit-tracker/db/`。
 
 ---
 
