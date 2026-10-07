@@ -1,6 +1,6 @@
 # 自律计划 · 部署手册（DEPLOY.md）
 
-- 版本：**v2.3（2026-10-05）** — §五 补「上传的是整个函数目录（含新拆出的 db.js）」说明；v2.2（2026-10-05）§7.4 补「⑤ 读回验证」；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
+- 版本：**v2.4（2026-10-07）** — 新增 §十一「跨域（CORS）」：实测矩阵 + 诊断方法 + 免费版套餐限制；§六 补「前端改动后重新部署与缓存」；§七 加 Day 20 验证方法；§九 把"配置跨域"移出"本期不做"。v2.3（2026-10-05）§五 补「上传的是整个函数目录」；v2.2（2026-10-05）§7.4 补「⑤ 读回验证」；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
 - 用途：把**云函数 `api`**、**数据库表**、**前端页面**推上公网的可复现步骤。以后每次重新部署照这份做。
 - 本版配套脚本：`db/schema.sql`、`db/schema-2.sql`（增量）、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
 
@@ -145,6 +145,17 @@ MSYS_NO_PATHCONV=1 tcb hosting deploy habit-tracker/frontend
 - 千万别上传 `habit-tracker/` 或 `frontend/` 这一层目录 —— 那样首页会变成 `/frontend/index.html`，直接访问根域名 404。
 - 公网地址：`https://<环境ID>-<随机串>.tcloudbaseapp.com/`（本项目为 `...-1499348397.tcloudbaseapp.com`）。
 
+> **Day 20 起**：前端接了云接口，所以**每次改完 `frontend/index.html` 都要重新跑这条命令**才会上线
+> （前端是零构建的单文件，不存在"忘了 build"的问题，但**确实容易忘了 deploy**）。
+> 部署输出里会列出上传的文件清单（`index.html` + 6 张图）并打印访问地址，逐行核对一遍最稳。
+
+**部署完要验证"线上的确实是新版本"**（CDN 有缓存）：
+
+```bash
+curl -s -H "Cache-Control: no-cache" "https://<环境ID>-<随机串>.tcloudbaseapp.com/index.html" | grep -c "const API_BASE"
+# 返回 1（或更多）= 线上那份已经含 Day 20 的接线代码；返回 0 = 还是旧版，等几分钟或 Ctrl+F5
+```
+
 ---
 
 ## 七、验证方法（Day 17 / Day 18 的截图照这里截）
@@ -176,8 +187,10 @@ curl "$BASE/checkins?date=2026-10-01&limit=2"     # 顺带验证条数限制
 
 打开 `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`。
 
-**应看到**：自律计划首页（顶部落日大图 + 今天待办 + 底部导航），导航都能切。
-**注意**：本期**没配跨域 CORS**，所以页面里的 `fetch` 会被浏览器拦，页面数据仍是**浏览器本地的 mock 数据** —— 这是**预期**的（见 §九）。
+**应看到**：自律计划首页（顶部主题大图 + 今天待办 + 底部导航），导航都能切。
+**Day 17–19 时**：页面里的 `fetch` 还没接（跨域未验证），所以数据仍是浏览器本地的 mock —— 当时是预期。
+**Day 20 起**：页面真的去读云端接口了，「今日待做」下面是**数据库里的真实待办**，
+标题下方还有一行小字「云端数据 · 更新于 …」（见 §7.5）。
 
 **图里要有的**：地址栏 + 页面内容。
 
@@ -270,6 +283,43 @@ curl -s "$BASE/checkins?date=2026-10-01"
 > **注意**：① 每跑一次就会真的往库里加一行（这才是"写入"该有的样子）。验证完如果不想留，
 > `tcb db execute --sql "DELETE FROM checkins WHERE client_req_id='shot-0001'"`。
 
+### 7.5 前端接线（Day 20 的两张截图照这里截）
+
+这一天的验收是"**公网首页展示数据库真实数据**"，所以要三样证据：**页面**、**请求地址**、**改库跟着变**。
+
+**① 公网首页 —— 截图 1（主图）**
+
+1. **先把种子数据的日期平移到今天**，否则首页（今天）读到的是空列表：
+   ```bash
+   tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"   # 幂等，可重复跑
+   tcb db execute --json --sql "SELECT count(*) FROM checkins WHERE uid='seed-demo-user' AND date=CURRENT_DATE"
+   ```
+   应看到今天有 6 条。
+2. 浏览器打开 `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`（**Ctrl+F5 强刷一次**，防旧缓存）。
+3. **图里要有的**：**地址栏里完整的公网 URL** + 页面上「今日待做」里那几条**数据库真实待办**（"晨跑 30 分钟""整理下周计划"…）
+   + 标题下那行小字「云端数据 · 更新于 …」。
+
+**② 请求地址确实是公网地址 —— 截图 2（F12）**
+
+按 `F12` → **Network（网络）** → `Ctrl+R` 刷新 → 找到 `day?date=…` 这条请求点开看 **Headers → Request URL**。
+
+**应看到**：`https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/day?date=<今天>`
+（**不是** `localhost`，也**不是**静态托管地址 —— 前者说明你打开的是本地版，后者说明你把页面地址当成了接口地址）。
+顺便看一眼 **Status 200** 和 **Response** 里的 `{"code":0,…}`。
+
+**③ 改一行真库数据，刷新跟着变 —— 核心考核**
+
+```bash
+# 改前先记下页面上的内容，然后改库
+tcb db execute --sql "UPDATE checkins SET text='部署手册验证行' WHERE uid='seed-demo-user' AND date=CURRENT_DATE AND sort=1"
+# 回浏览器刷新 → 页面上第二条待办的字应变成「部署手册验证行」
+# 复原
+tcb db execute --sql "UPDATE checkins SET text='整理下周计划' WHERE uid='seed-demo-user' AND date=CURRENT_DATE AND sort=1"
+```
+
+**验收标准**：刷新后页面内容跟着变 = 页面显示的**真就是数据库里的数据**。
+（再补一刀更直观：`UPDATE plan_days SET mood='joy', updated_at=now()` → 那行小字的时间会立刻前进。）
+
 ---
 
 ## 八、控制台手动路线（CLI 不可用时的备选）
@@ -287,15 +337,15 @@ curl -s "$BASE/checkins?date=2026-10-01"
 
 | 事项 | 为什么不做 | 什么时候做 |
 |---|---|---|
-| 配置跨域 CORS | 页面还没接接口；地址栏/curl 测不受 CORS 限制 | 前端开始 `fetch` 时（Day 18+） |
-| 匿名登录 + RLS | 需要先把读接口跑通，身份链路下一批做 | Day 18 |
-| 其余 5 张表 | 按课程节奏 Day 18 前追加到 `schema-2.sql`（不改 `schema.sql`） | Day 18 |
-| 业务写入接口 | 读接口先验证通过 | Day 18 |
+| ~~配置跨域 CORS~~ | ✅ **已完成**（Day 20）：实测发现 CloudBase 网关**默认就处理**，本环境托管域名在安全域名白名单里、本地开发地址网关内置放行 —— 云函数代码里一行 CORS 都不用写。详见 §十一 | 已做 |
+| 匿名登录 + RLS | 需要先把读写接口都跑通，身份链路下一批做 | 后续 |
+| 其余 5 张表 | 按课程节奏逐个追加到 `schema-2.sql`（不改 `schema.sql`） | 需要它们的接口开工那天 |
+| 勾选/删除/移动/改心情的写接口 | 只做了"新增"（`POST /api/checkins`）；改与删（`PATCH`/`DELETE`）按 R7 一天一块 | 逐个补 |
 | 自定义域名 / HTTPS 证书 | 默认域名够用 | 后续优化 |
 
-> **为什么「地址栏能测、页面 fetch 会失败」**：CORS 是浏览器的**同源策略**限制 —— 地址栏敲 URL 属于"直接导航"，浏览器不管；
-> 页面里的 JS 发 `fetch` 属于"跨域请求"，浏览器会先问服务器"允不允许"，没配就拦。
-> 所以今天能验证，不代表接口能被页面调用。
+> **为什么 Day 17–19 "地址栏能测、页面 fetch 却是本机数据"**：CORS 是浏览器的**同源策略**限制 ——
+> 地址栏敲 URL 属于"直接导航"，浏览器不管；页面里的 JS 发 `fetch` 属于"跨域请求"，浏览器会拦。
+> 当时页面还没接接口，所以看不出差别。**Day 20 接线后这个区别才真正生效**，也因此必须先确认跨域通不通（§十一）。
 
 ---
 
@@ -314,6 +364,74 @@ curl -s "$BASE/checkins?date=2026-10-01"
 | 静态页面白屏 / 图片全裂 | 上传时多带了一层目录，或 `assets/` 没传 | 只传 `frontend/` 里的**内容** |
 | 页面打开是旧版本 | 浏览器 / CDN 缓存 | `Ctrl + F5`；CDN 通常几分钟刷新 |
 | 控制台「测试」正常但公网访问失败 | 没配 HTTP 访问路径 | 见 §五 |
+| 接口 `curl` 能通，但页面上还是本机数据 | 跨域被浏览器拦（或页面没接上接口） | F12 → Console 找 `blocked by CORS policy`；再按 §十一 一条命令验证来源 |
+| Console 报 `No 'Access-Control-Allow-Origin' header is present` | 请求来源**不在安全域名白名单**，网关不给 CORS 头 | §十一：`tcb cors list` 看白名单，用 `curl -H "Origin: …"` 复现 |
+| 页面显示「本机数据（未连云端）」 | 这个环境没有 `fetch`（很老的浏览器） | 换现代浏览器；正常浏览器不会走到这个分支 |
+| 页面显示「云端暂时联系不上」 | 断网 / 超时 / 接口地址写错 | 先地址栏打开 `/api/health` 确认接口活着；再看 F12 Network 里请求的 URL |
+
+---
+
+## 十一、跨域（CORS）：怎么配、怎么认出问题出在哪
+
+> Day 20 主题。**一句话结论**：本项目的跨域由 **CloudBase 网关统一处理**，
+> 云函数代码里**不需要写任何 CORS 逻辑**；需要确认的只有一件事 —— **你的来源域名在不在白名单里**。
+
+### 11.1 原理：为什么"地址栏能打开、页面 fetch 却不行"
+
+- **地址栏敲 URL** ="直接导航"，浏览器不管来源，服务器返回什么就显示什么。
+- **页面里的 JS 发 `fetch`** = "跨域请求"。只要**协议 / 域名 / 端口**有任何一项不同，就是**跨源**。
+  浏览器会**先问服务器**："我这个来源，你允许吗？"（POST/自定义头还会先发一个 `OPTIONS` 预检）。
+  服务器回答里没有 `Access-Control-Allow-Origin`，浏览器就**把响应拦下不交给 JS**，
+  并在 Console 里打印 `blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present`。
+
+**怎么认出问题出在哪**：这句话翻译过来就是"**服务器没允许我这个来源**"。
+所以问题一定在**来源白名单**这一层，**不在**接口逻辑、不在 SQL、不在前端代码、更不是"接口挂了"。
+判据只有一个：**看响应里有没有 `Access-Control-Allow-Origin`**。
+
+### 11.2 一条命令当场复现 / 定位
+
+```bash
+BASE=https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api
+
+# ① 用"你真正的前端来源"打一下，应看到 access-control-allow-origin: <你的来源>
+curl -s -i -H "Origin: https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com" "$BASE/health" | grep -i "access-control\|^HTTP"
+
+# ② 换一个陌生来源：Should NOT 出现 access-control-allow-origin（= 会被浏览器拦）
+curl -s -i -H "Origin: https://evil.example.com" "$BASE/health" | grep -i "access-control\|^HTTP"
+
+# ③ 预检：前端发 POST 前浏览器会先发这个，应回 204 + allow-methods / allow-headers
+curl -s -i -X OPTIONS -H "Origin: https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com" \
+  -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type" "$BASE/checkins" | grep -i "access-control\|^HTTP"
+```
+
+`curl` 不受 CORS 限制，但它能**如实反映服务器的回答**——所以上面前两步的结果，就等于浏览器内部的判断依据。
+
+### 11.3 本项目实测结果（2026-10-07 Day 20）
+
+| 来源 | 是否返回 `Access-Control-Allow-Origin` | 结论 |
+|---|---|---|
+| `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com`（本项目前端） | ✅ 原样回显该来源 | 放行 |
+| `http://localhost:8765`、`http://127.0.0.1:8765` | ✅ 原样回显 | 放行（本地开发用） |
+| `https://evil.example.com`、`https://graciapptd.github.io`、别的环境的 `*.tcloudbaseapp.com` | ❌ 完全没有该响应头 | **会被浏览器拦** |
+| `OPTIONS` 预检（本环境前端来源 + `POST`） | ✅ `204` + `allow-methods: POST` + `allow-headers: content-type,idempotency-key` | 预检通过 |
+
+### 11.4 白名单怎么查、怎么加
+
+```bash
+tcb cors list            # 列出本环境的安全域名（Type=SYSTEM 是平台自带，USER 是我们自己的）
+tcb cors add <域名>      # 添加（会先问一次 Y/n；域名不带 https:// 前缀，本地开发写 localhost:端口）
+tcb cors rm  <域名>      # 删除
+```
+
+- **本项目当前状态**：`habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com` **已经在册**（`Type=USER`，
+  平台创建静态托管默认域名时自动登记的）—— 这就是"页面本来就能 fetch 成功"的直接原因。
+- **本地开发地址**（`localhost` / `127.0.0.1`）由**网关内置放行**，不在列表里也能用（已实测）。
+- ⚠️ **免费体验版的限制**：尝试再添加安全域名会报 `[CreateAuthDomain] 当前套餐无法执行此操作`
+  （试过 `localhost:8765` 与 `localhost` 两种写法都一样，说明是**套餐额度**而不是格式问题）。
+  **不影响本项目**：需要放行的那一条已经在位。将来换自定义域名时，把前端域名加进白名单即可。
+
+> **换到别的托管平台就会踩到**：如果哪天把前端放到 GitHub Pages（`*.github.io`）或自己的域名上，
+> 来源变了、白名单里没有 → 页面立刻 `fetch` 失败。那时要么把新域名加进白名单，要么把前端放回本环境托管。
 
 ---
 

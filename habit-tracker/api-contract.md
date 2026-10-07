@@ -1,6 +1,6 @@
 # 自律计划 · API 接口契约（api-contract.md）
 
-- 版本：v1.3（2026-10-05 课程要求复核：把「课程外壳 `{ok,data,error}`」与「课程接口名 `/api/favorites`」两处对照**正式落进 1.1、1.2**；v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
+- 版本：v1.4（2026-10-07 Day 20：**前端已接线**——§1.1 的跨域约定由「本期不配置」改为「已通并附实测」；新增 §6.3 前端接线验收记录。v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
 - 作用：**前端和云端之间的"合同"**。前端按这份文档发请求，后端按这份文档回数据；任何一方想改形状，先改这份文档，再改代码（R2 文档先行）。
 - **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。
 - **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）；其余仍为占位，按 Day 19–20 逐个实现。
@@ -34,7 +34,7 @@
 | Base URL | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`（真实值，2026-10-03 部署后登记） |
 | 承载方式 | CloudBase **云函数 `api`**（Node.js 20，单函数承载全部路由），由「HTTP 访问服务」暴露为公网地址 |
 | 请求头 | `Content-Type: application/json`（写操作必带）；`Idempotency-Key: <uuid>`（写操作**建议必带**，见 1.6） |
-| 跨域 CORS | ⚠️ **本期不配置**（Day 16–20 再处理）。浏览器从别的域名直接 `fetch` 会被拦，属预期；本阶段测试走**浏览器地址栏**或 `curl` |
+| 跨域 CORS | ✅ **已通**（2026-10-07 Day 20 实测）。由 CloudBase HTTP 访问服务在**网关层**统一处理：来源域名在「安全域名」白名单里（本环境静态托管域名已在其中）或属于本地开发地址时，网关自动补 `Access-Control-Allow-Origin` 等响应头；陌生域名**不返回** CORS 头，浏览器会拦。云函数代码里**不需要**写任何 CORS 逻辑 |
 
 > **课程接口名对照（2026-10-05 复核，勿再纠结）**：课程示例里的 `GET /api/favorites`（收藏列表）
 > 在本项目的对应物是**列表读取接口** —— 即 `GET /api/checkins`（打卡项列表）与 `GET /api/day`（首屏合并读取）。
@@ -772,8 +772,9 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 | 环境 ID | **`habit-tracker-d9gh0mjel767ff0d2`**（2026-10-01 21:57 开通，免费体验版·上海） | 2026-10-03 |
 | 云函数公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`** | 2026-10-03 |
 | 前端 mock 版公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`** | 2026-10-03 |
-| 数据库 | CloudBase PostgreSQL 17.11；`plan_days`(7 行) + `checkins`(8 行种子 + 1 行 Day 18 写入验证行 = 9 行)，均 `uid='seed-demo-user'`；RLS 未开启 | 2026-10-04 |
-| 建表脚本 | `db/schema.sql`（Day 16 核心两表）+ `db/schema-2.sql`（Day 18 幂等键列 `client_req_id` 与唯一索引 `checkins_uid_reqid_uniq`） | 2026-10-04 |
+| 前端接线版公网地址 | **同上（同一地址）**——2026-10-07 Day 20 重新部署，页面开始 `fetch` 上表接口 | 2026-10-07 |
+| 数据库 | CloudBase PostgreSQL 17.11；`plan_days`(7 行) + `checkins`(9 行)，均 `uid='seed-demo-user'`；**数据日期已于 Day 20 整体平移到「以今天为最后一天」**（见 `db/README.md` §4.3）；RLS 未开启 | 2026-10-07 |
+| 建表脚本 | `db/schema.sql`（Day 16 核心两表）+ `db/schema-2.sql`（Day 18 幂等键列 `client_req_id` 与唯一索引 `checkins_uid_reqid_uniq`）+ `db/seed-shift.sql`（Day 20 日期平移，幂等） | 2026-10-07 |
 | 部署方式 | CloudBase CLI 3.8.5（`tcb`）；配置见 `cloudbaserc.example.json`（真实文件 `cloudbaserc.json` 含密钥、已被 .gitignore 排除） | 2026-10-03 |
 
 > ⚠️ **更正记录（Day 17）**：本表此前登记的「环境 ID = `habit-tracker-d3ghf0mjer76ffo02`」是**错的**，
@@ -809,4 +810,26 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 **这次验证的核心问题（课程问的）**：防的是**「同一次写入被执行两次」**（用户双击 / 网络重试），
 **不是**「内容重复」——所以用客户端幂等键 + 数据库唯一索引两层拦截，而不是按内容去重。
 具体怎么测的：`curl` 用同一个 `clientReqId` 连发两次，第二次拿到 409；再换一个 `clientReqId` 发同样的内容，正常写入。
+
+### 6.3 Day 20 验收记录（前端接线 + 跨域）
+
+**这次接的是什么**：前端 `frontend/index.html` 从"只读浏览器本机数据"改为**云端优先、本机兜底** ——
+首屏与切日期走 `GET /api/day`，"添加待办"走 `POST /api/checkins`；勾选/删除/移动/改心情仍是本机行为
+（对应接口还没实现，见 §四 待实现清单）。契约本身**一个字段、一条路径都没改**。
+
+| 验收项 | 怎么验的 | 结果 |
+|---|---|---|
+| 公网首页展示数据库真实数据 | 取**线上那份 index.html** 在本地跑起来、用真网络打线上接口 | ✅ 页面请求 `GET /api/day?date=2026-10-07`，渲染出库里那 6 条待办（5 条带时间 + 1 条未安排）、`1/6 已完成`、心情不出弹窗 |
+| 控制台改数据，刷新跟着变 | 在真库 `UPDATE checkins SET text='控制台改过的待办'` + `UPDATE plan_days SET mood='joy', updated_at=now()`，再跑同一次检查 | ✅ 页面上的待办内容变成"控制台改过的待办"，页面那行小字的时间由 `21:20` 变 `21:29`（随后已复原） |
+| F12 里请求地址是公网地址 | 页面发出的请求被记录下来 | ✅ `GET https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/day?date=2026-10-07` |
+| 跨域是否放行 | 带 `Origin` 头 `curl` 三种来源 | ✅ 本环境托管域名 / `localhost:8765` 有 `Access-Control-Allow-Origin`；`evil.example.com` 没有（被拦）；`OPTIONS` 预检回 204 + `allow-methods: POST` |
+| 本机兜底（断网不白屏） | 让 `fetch` 直接抛错 | ✅ 页面照常进入内容区（用本机数据），小字提示"云端暂时联系不上" |
+| 新增待办真写进库 | 页面表单提交后查库 | ✅ 库里多出一行（`id=13`、`date=2026-10-07`、`client_req_id` 是新生成的 uuid）；自检后已清理，当天恢复 6 条 |
+| 前端行为自检 | `node test-home.js` | ✅ **374/374**（原 360 条走本机分支不变，新增 14 条专测云端分支） |
+| 云函数行为自检 | `node cloudfunctions/api/selftest.js` | ✅ **162/162**（后端代码本次零改动，仅作回归） |
+
+> **课程问的"跨域那一下，你是怎么认出问题出在哪的"** —— 本项目的答案是：**先看有没有 `Access-Control-Allow-Origin`**。
+> 浏览器报的是一句很吓人的 `blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present`，
+> 但只要把这句翻译过来就是"**服务器没允许我这个来源**"，问题一定在**来源白名单**，而不在接口逻辑、不在 SQL、不在前端代码。
+> 用一条命令就能当场复现并定位（见 `DEPLOY.md` §十一）。
 

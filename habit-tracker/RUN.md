@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.8（2026-10-05 Day 19：云函数拆出数据访问层 `db.js`——接口行为与契约零变化；前端仍为本地 mock 数据）
+- 版本：v3.9（2026-10-07 Day 20：**前端已接云接口**——首页/切日期读 `GET /api/day`、添加待办写 `POST /api/checkins`，并加「数据来源 + 最后更新时间」小字；跨域确认可用）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -10,10 +10,21 @@
 ## 一、这个项目是什么
 
 一个纯网页版的自律助手：时间轴待办 + 心情五选一 + 无压力思考 + 周月报。
-**前端无安装依赖**——页面数据存在浏览器 localStorage 里（约 5MB）。
+**前端无安装依赖**——它的数据来源在 Day 20 变成了 **云端优先、本机兜底**。
 **第 3 周起加了云端**：CloudBase 云函数 `api` + PostgreSQL 核心表，提供真库读写接口
 （Day 17 起：`GET /api/health`、`GET /api/day`、`GET /api/checkins`；Day 18 起：`POST /api/checkins`）。
-**页面还没接接口**（跨域 CORS 未配，见 DEPLOY.md §九），所以现在「页面看到的」仍是本地数据，「接口返回/写入的」已是数据库数据。
+
+**Day 20 接线后的准确状态**：
+
+| 能力 | 走哪里 | 说明 |
+|---|---|---|
+| 打开首页、切换日期看到的待办与心情 | ☁️ **云端真库**（`GET /api/day`） | 标题下那行小字会写「云端数据 · 更新于 …」 |
+| 添加待办 | ☁️ **云端真库**（`POST /api/checkins`） | 真写进数据库，刷新后还在；带客户端幂等键防重复 |
+| 勾选 / 取消勾选、删除、移动、选心情 | 💻 **仍是本机**（localStorage） | 这几项的后端接口还没写（`PATCH`/`DELETE`/`PUT /api/days/mood` 见契约 §四），所以刷新后会被云端数据覆盖 |
+| 思考页想法、专注记录、纪念日、肯定语、主题 | 💻 **仍是本机** | 对应接口未实现 |
+
+> 网络不通 / 接口挂了时，页面**照常打开**（用本机数据），只是标题下的小字会变成「云端暂时联系不上」——
+> 这就是"本机兜底"的意思，不会白屏。
 
 ## 二、怎么跑起来（3 步）
 
@@ -45,6 +56,9 @@ http://localhost:8765/habit-tracker/frontend/index.html
 ```
 
 > `localhost` 的意思就是"本机自己"——这个地址只有你的电脑能打开，别人访问不了，数据也在你浏览器里，隐私安全。
+>
+> **Day 20 起**：本地打开的这个页面也会去连线上接口（`localhost` 已在 CloudBase 的跨域放行范围内，实测可用）。
+> 所以本地预览看到的**就是数据库里的真实数据**，和线上版一致。
 
 **（可选）第 4 步：直接看线上版**
 
@@ -54,7 +68,7 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | 后端读接口 | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/day?date=2026-10-01` |
 | 健康检查 | `https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/health` |
 
-> 部署/重新部署的完整步骤见 `DEPLOY.md`（v2.0，基于实测重写）。
+> 部署/重新部署的完整步骤见 `DEPLOY.md`（v2.4，基于实测重写）。前端改完必须重新 `tcb hosting deploy` 才会上线。
 
 ## 三、怎么验证它没坏（对照 PRD 验收标准）
 
@@ -123,6 +137,13 @@ http://localhost:8765/habit-tracker/frontend/index.html
 
 | A51 分层重构 | 看 `habit-tracker/cloudfunctions/api/` 目录，应有两个代码文件；再浏览器打开线上接口 | ① `index.js` = 路由层（只有 HTTP 解析 / 校验 / 业务规则 / 路由表），`db.js` = 数据访问层（连接配置 / 查询拼装 / fetch / 行映射）；② 本地自测的**静态断言**证明 `index.js` 里已无 `fetch(`、REST 基址与数据库列名；③ `node habit-tracker/cloudfunctions/api/selftest.js` 由 140/140 → **162/162** 全过；④ 线上接口回归与重构前完全一致（Day 19） |
 
+| A52 前端接线上云 | 打开线上首页；F12 → Network 看 `day?date=` 这条请求 | ① 请求地址是**公网接口地址**（不是 localhost、也不是静态托管地址）；② 「今日待做」里是**数据库里真实存在的待办**（与 `tcb db execute --json --sql "SELECT text FROM checkins WHERE uid='seed-demo-user' AND date=CURRENT_DATE ORDER BY sort"` 一致）；③ 标题下小字写「云端数据 · 更新于 …」；④ **在控制台改一行再刷新，页面内容跟着变**（Day 20） |
+| A52b 跨域可用 | 带 `Origin` 头 `curl` 接口（命令见 `DEPLOY.md` §11.2） | 本环境前端来源与 `localhost:8765` 能拿到 `Access-Control-Allow-Origin`；陌生来源**没有**该响应头（= 会被浏览器拦）；`OPTIONS` 预检回 204 + `allow-methods: POST`（Day 20） |
+| A52c 新增待办真的入库 | 首页输入一条待办并提交 | ① 卡片立刻出现在今日列表；② toast 提示「已添加到云端」；③ `tcb db execute --json --sql "SELECT id,text,client_req_id FROM checkins WHERE date=CURRENT_DATE ORDER BY id DESC LIMIT 1"` 能看到这行（`client_req_id` 是新生成的 uuid）；④ **刷新后它还在**（Day 20） |
+| A52d 断网兜底不白屏 | 断网后打开页面 | 页面照常进入内容区（用本机数据），标题下小字提示「云端暂时联系不上」；不会卡在"加载中"或报错页（Day 20） |
+| A52e 首页最后更新时间 | 看「今日待做」标题下那行小字 | 有云端数据时显示「云端数据 · 更新于 M月D日 HH:MM」（取自 `plan_days.updated_at`）；在库里改这一行的时间，刷新后小字跟着前进（余力加练 · Day 20） |
+| A52f 前端云模式自检 | `node test-home.js`（工作区里那份） | **374/374** 通过：原 360 条走"本机兜底"分支不变，新增 14 条把 `fetch` 换成假的、专测云端分支（读接口渲染 / 请求地址 / 幂等键 / 落盘 id / 切日期重取 / 断网兜底）（Day 20） |
+
 > 报告（F4）还没做——按 R7 规则一天一块。思考（F3）卡片流 MVP（Day 14）与 AI 洞察（Day 15）已完成；应用页（F6）骨架与专注计时（Day 18）已完成；情绪表情已图片化（Day 19）；纪念&倒数日（Day 21）、肯定语（Day 22）、随即话题（精进 7）已开放；记账已按用户要求移除（2026-09-27）；剩小组件待做。
 
 ## 四、常见问题（FAQ）
@@ -133,12 +154,26 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | 提示"端口被占用"（Address already in use） | 8765 被别的程序占了 | 换个号：`python -m http.server 8766`，地址栏也改成 8766 |
 | 页面开了但样式全乱/白屏 | 没从仓库根目录启动，相对路径断了 | 回到第 1 步，确认当前目录再启动 |
 | 想清空所有数据重来 | 数据在 localStorage 里 | 浏览器按 F12 → Application（应用）→ Local Storage → 删除 `habit-tracker-v1` |
+| 改了 `frontend/index.html` 但线上没变 | 忘了重新部署，或 CDN 缓存 | 先 `tcb hosting deploy habit-tracker/frontend`，再 `Ctrl + F5` 强刷 |
+| 页面数据比数据库旧 | 云端那次请求失败，回落到了本机缓存 | 看标题下小字写的是不是「云端暂时联系不上」；是的话检查网络与接口地址 |
+| 勾选了待办、刷新又变回去了 | **预期行为**：勾选/删除还是本机操作，云端没有对应接口 | 说明见本文 §一 的表格（`PATCH`/`DELETE` 接口实现后才上云） |
 
 ## 五、代码去哪看
 
-**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 2900 行）。
-结构分五段，从上到下：CSS 样式 → HTML 骨架 → 存储层（loadData/saveData）→ 状态与渲染 → 事件绑定。
-找任何功能先看注释里的 `Day 8` / `F1` 标记，和 PRD 的编号一一对应。
+**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 3100 行）。
+结构分五段，从上到下：CSS 样式 → HTML 骨架 → **存储层（`loadData`/`saveData`）+ 云端接口客户端（`apiGet`/`apiPost`）** → 状态与渲染 → 事件绑定。
+找任何功能先看注释里的 `Day 8` / `F1` / `Day 20` 标记，和 PRD 的编号一一对应。
+
+**两条"只走一个出口"的铁律**（将来换地址 / 换后端 / 换存储，只改这两处）：
+
+| 出口 | 管什么 | 别处不许 |
+|---|---|---|
+| `loadData()` / `saveData()` | 本机 localStorage 的全部读写 | 直接写 `localStorage.getItem` |
+| `apiGet()` / `apiPost()` | 发往云端的全部网络请求（含超时、统一信封解析、断网判定） | 直接写 `fetch(...)` |
+
+> Day 20 的接线就落在第二行：`loadDayData`（旧：只读本机）拆成 `loadLocalData`（本机秒开）
+> + `fetchCloudDay`（云端取数后覆盖重绘）。**渲染层与交互层一行都没改** —— 因为云端数据被映射进了
+> 跟本机同一套结构（`data.todos[日期]` / `data.moods[日期]`）。
 
 **后端**（第 3 周起，两个代码文件，分层说明见 `TECH_DESIGN.md` 二.1）：
 

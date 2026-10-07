@@ -138,6 +138,12 @@
     .filter-status button{ border:none; background:transparent; color:var(--accent-deep);
                            font-size:13px; cursor:pointer; padding:2px 4px; }
 
+    /* 数据来源 + 最后更新时间（Day 20）：首页一行小字。
+       说清"这批待办是云端真库读来的、还是本机的"，并带上库里的最后更新时间 —— 
+       在控制台改一行数据再刷新，这一行的时间/内容会跟着变，等于把"数据真来自数据库"写在脸上。 */
+    #cloud-hint{ margin:-8px 0 10px; color:var(--muted); font-size:12px; line-height:1.7; }
+    #cloud-hint:empty{ display:none; }        /* 还没取到数据时不占位，避免出现空白一行 */
+
     /* ===== Day 8 四状态：加载 / 错误（空与数据在 content 内部切换）===== */
     .state{ text-align:center; padding:44px 0; color:var(--muted); font-size:14px; }
     #state-error button{ display:block; margin:12px auto 0; padding:8px 24px;
@@ -676,6 +682,8 @@
       <div id="content">
         <div class="card" id="today-card">
           <h2>今日待做 <span class="sub" id="today-count"></span></h2>
+          <!-- Day 20：数据来源与最后更新时间（云端数据到了才有内容，见 renderCloudHint） -->
+          <div id="cloud-hint" role="status"></div>
           <form id="add-form">
             <input id="todo-text" placeholder="要做点什么？" maxlength="60" />
             <input id="todo-time" type="time" title="可选：几点做" />
@@ -1134,6 +1142,53 @@
   };
   const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
+  // ===== 云端接口客户端（Day 20 接线）=====
+  // 为什么要有这一段：从 Day 20 起，页面的数据来源从"只有浏览器本机"变成"云端优先、本机兜底"。
+  // 铁律：前端所有网络请求**只走这里**（apiGet / apiPost），别处不许直接 fetch —— 
+  //      跟"localStorage 只走 loadData/saveData"是同一条规矩，将来换地址/换后端只改这一段。
+  const API_BASE = 'https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api';  // 见 api-contract.md §1.1
+  const API_TIMEOUT = 5000;      // 毫秒。超过就当"云端联系不上"，回落到本机数据，不让页面干等
+  // 有些环境没有 fetch（老浏览器；本地自测用的 jsdom 也没有）→ 直接走本机数据，一条网络请求都不发
+  const apiReady = () => typeof fetch === 'function';
+
+  // 统一请求：返回 { ok, data } 或 { ok:false, message, code, offline }
+  // 契约保证"HTTP 状态码恒为 200，业务结果看 code"，所以这里不判断 res.ok，只判断 body.code
+  const apiFetch = async (path, options) => {
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT) : null;
+    try {
+      const res = await fetch(API_BASE + path,
+        Object.assign(ctrl ? { signal: ctrl.signal } : {}, options));
+      const body = await res.json();
+      if (!body || body.code !== 0) {
+        return { ok: false, code: (body && body.code) || 0,
+                 message: (body && body.message) || '云端返回了预期之外的数据' };
+      }
+      return { ok: true, data: body.data };
+    } catch (e) {
+      // 断网 / 超时 / 跨域被浏览器拦 / 返回的不是 JSON —— 一律归为"云端暂时用不了"
+      return { ok: false, code: 0, message: '', offline: true };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+  const apiGet = (path) => apiFetch(path, { method: 'GET' });
+  const apiPost = (path, body) => apiFetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  // 幂等键：标识"一次添加动作"（不是"一份内容"），语义见 api-contract.md §1.6。
+  // 优先用浏览器自带的 uuid；老环境退回时间戳+随机数（同样满足 1~64 位字母数字短横线的要求）。
+  const newReqId = () => (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'req-' + Date.now() + '-' + Math.floor(Math.random() * 1000000);
+
+  // 云端取数状态，供首页那行小字显示（见 renderCloudHint）
+  // pending=正在取 / cloud=云端数据 / offline=联系不上 / error=云端回了个错误 / local=环境没有 fetch
+  let cloudState = { mode: 'pending', updatedAt: null, at: 0 };
+
+
   // ===== 四象限字典（C4 象限色板唯一来源）：q1-q4 + 未分类共五色 =====
   const QUADS = {
     q1: { label: 'Q1 重要且紧急',   color: 'var(--q1)' },
@@ -1205,13 +1260,71 @@
   let moveCtx = null;            // Day 13：正在移动的待办 { id, from }
   const el = (id) => document.getElementById(id);
 
-  // ===== 数据读取层：模拟一次异步（第 3 周换真 API 时页面结构不动）=====
+  // ===== 数据读取层（Day 20 接线后：云端优先 → 本机兜底）=====
+  // 第 2 周这里只是"模拟一次异步、读本机"。Day 20 把真接口接上，但**页面结构一行没动**：
+  // 取回来的云端数据被写进跟本机同一套结构（data.todos[日期] / data.moods[日期]），
+  // 所以下面的渲染层、交互层完全不需要知道"这批数据是从云上来的"。
   const LOAD_DELAY = 300;
-  const loadDayData = () => new Promise((resolve, reject) => {
+  const loadLocalData = () => new Promise((resolve, reject) => {
     setTimeout(() => {
       try { resolve(loadData()); } catch (e) { reject(e); }
     }, LOAD_DELAY);
   });
+
+  // 把接口返回的"这一天"映射进本机结构：planDay（心情）→ moods[date]，checkins（清单）→ todos[date]
+  const applyCloudDay = (store, date, payload) => {
+    const planDay = (payload && payload.planDay) || null;
+    const items = (payload && Array.isArray(payload.checkins)) ? payload.checkins : [];
+    // 云端没有心情记录就把本机那条也清掉 —— 云端是唯一真相源，本机只是缓存
+    if (planDay && planDay.mood) store.moods[date] = planDay.mood;
+    else delete store.moods[date];
+    store.todos[date] = items.map(c => ({
+      id: c.id, text: c.text, time: c.time, done: !!c.done, quad: c.quad,
+    }));
+    return planDay;
+  };
+
+  // 拉某一天的云端数据并重绘；拿不到就保持本机数据不变（离线兜底，页面不会白屏）
+  let cloudSeq = 0;                 // 请求序号：快速切日期时用它丢弃"过期响应"，防止旧结果盖掉新结果
+  const fetchCloudDay = async (date) => {
+    if (!apiReady()) { cloudState = { mode: 'local', updatedAt: null, at: 0 }; renderCloudHint(); return; }
+    const seq = ++cloudSeq;
+    const r = await apiGet('/day?date=' + encodeURIComponent(date));
+    if (seq !== cloudSeq) return;                 // 期间又切了日期 → 这次结果作废
+    if (!r.ok) {
+      cloudState = { mode: r.offline ? 'offline' : 'error', updatedAt: null, at: Date.now() };
+      renderCloudHint();                          // 数据没变，只需更新那行小字（不必整页重绘）
+      return;
+    }
+    const planDay = applyCloudDay(data, date, r.data);
+    cloudState = { mode: 'cloud', updatedAt: (planDay && planDay.updatedAt) || null, at: Date.now() };
+    saveData(data);                               // 顺手当成本机缓存：下次断网也能看到上次的样子
+    renderAll();
+  };
+
+  // 首页那行小字：数据从哪来 + 库里的最后更新时间
+  const fmtCloudTime = (ms) => {
+    const dt = new Date(ms);
+    return (dt.getMonth() + 1) + '月' + dt.getDate() + '日 '
+         + pad2(dt.getHours()) + ':' + pad2(dt.getMinutes());
+  };
+  const renderCloudHint = () => {
+    const node = el('cloud-hint');
+    if (!node) return;
+    if (demoMode) { node.textContent = ''; return; }
+    if (cloudState.mode === 'cloud') {
+      node.textContent = '云端数据 · 更新于 ' + fmtCloudTime(cloudState.updatedAt || cloudState.at)
+                       + ' · 勾选/删除暂存本机';
+    } else if (cloudState.mode === 'offline') {
+      node.textContent = '云端暂时联系不上 · 当前显示本机数据';
+    } else if (cloudState.mode === 'error') {
+      node.textContent = '云端返回异常 · 当前显示本机数据';
+    } else if (cloudState.mode === 'local') {
+      node.textContent = '本机数据（未连云端）';
+    } else {
+      node.textContent = '';                      // pending：还没取到，空着不占位
+    }
+  };
 
   // ===== 四状态切换：'loading' | 'error' | 'content' =====
   const showState = (state) => {
@@ -1225,15 +1338,49 @@
   // ===== 待办数据操作（todos 按日期分组：data.todos[date] = [{id,text,time,done,quad}]）=====
   const getTodos = (date) => data.todos[date] || [];
 
-  const addTodo = (text, time, quad) => {
-    if (!data || demoMode) return;
-    if (currentDate !== todayStr()) return;           // FAB/表单只在今天视图可见，双保险
-    const todo = { id: Date.now() + '-' + Math.floor(Math.random()*1000),
-                   text: text.trim(), time: time || null, done: false,
+  // Day 20：新增待办改为"云端优先"（POST /api/checkins），一次只允许一个在途请求
+  let adding = false;
+
+  const addTodo = async (text, time, quad) => {
+    if (adding) return false;                         // 防连点：上一次还没落地，忽略这一次
+    if (!data || demoMode) return false;
+    if (currentDate !== todayStr()) return false;     // FAB/表单只在今天视图可见，双保险
+    const date = currentDate;
+    const item = { text: (text || '').trim(), time: time || null,
                    quad: (quad && QUADS[quad]) ? quad : null };   // 象限可空 = 未分类
-    if (!todo.text) return;
-    (data.todos[currentDate] = data.todos[currentDate] || []).push(todo);
+    if (!item.text) return false;
+
+    // ① 有云端可用 → 真写进数据库（刷新后还在）。重复提交由幂等键 + 唯一索引兜底。
+    if (apiReady()) {
+      adding = true;
+      try {
+        const r = await apiPost('/checkins', { date: date, text: item.text, time: item.time,
+                                               quad: item.quad, clientReqId: newReqId() });
+        if (r.ok) {
+          // 用服务端返回的整条（含它分配的 id / sort）当权威结果，别自己编 id
+          (data.todos[date] = data.todos[date] || []).push({
+            id: r.data.id, text: r.data.text, time: r.data.time,
+            done: !!r.data.done, quad: r.data.quad,
+          });
+          saveData(data); renderAll();
+          showToast('已添加到云端');
+          return true;
+        }
+        if (!r.offline) {                           // 云端明确拒绝（参数/幂等冲突）→ 不入库也不落本机
+          showToast('这条没被云端接受：' + (r.message || ''));
+          return false;
+        }
+      } finally { adding = false; }
+    }
+
+    // ② 云端联系不上（断网/超时/被拦）→ 先存本机，页面照常能用
+    (data.todos[date] = data.todos[date] || []).push({
+      id: 'local-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      text: item.text, time: item.time, done: false, quad: item.quad,
+    });
     saveData(data); renderAll();
+    if (apiReady()) showToast('云端暂时联系不上，已先存本机');
+    return true;
   };
 
   // ===== Toast 轻提示（Day 11 交互反馈）：底部居中，约 1.8 秒自动消失 =====
@@ -1335,7 +1482,12 @@
       const dn = document.createElement('span'); dn.className = 'dn';
       dn.textContent = dt.getDate();
       b.append(wd, dn);
-      b.addEventListener('click', () => { if (!demoMode) { currentDate = ds; renderAll(); maybeAskMood(); } });
+      b.addEventListener('click', async () => {
+        if (demoMode) return;
+        currentDate = ds; renderAll();
+        await fetchCloudDay(ds);        // Day 20：切了日期就重新取那一天的云端数据（拿不到就显示本机）
+        maybeAskMood();
+      });
       strip.appendChild(b);
     }
     el('month-title').firstChild.textContent = y + ' 年 ' + m + ' 月 · 自律计划';
@@ -1685,20 +1837,23 @@
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
     renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
+    renderCloudHint();                                      // Day 20：数据来源 + 最后更新时间
     checkMemReminders();                                    // Day 21：提醒条随渲染刷新
   };
 
   // ===== 统一取数入口（打开 / 重试）=====
   const refreshDay = async () => {
     demoMode = false;
+    cloudState = { mode: 'pending', updatedAt: null, at: 0 };
     showState('loading');
-    try { data = await loadDayData(); }
+    try { data = await loadLocalData(); }      // ① 先读本机：秒开，不干等网络
     catch (e) { showState('error'); return; }
     if (localStorage.getItem(KEY) === null) saveData(data);
-    applyTheme(data.theme);                                  // v3.5：启动时应用已存主题
+    applyTheme(data.theme);                    // v3.5：启动时应用已存主题
     showState('content');
     renderAll();
-    maybeAskMood();
+    await fetchCloudDay(currentDate);          // ② 再拉云端：真库数据到了就覆盖重绘，拿不到就保持本机
+    maybeAskMood();                            // 放在取数之后：云端说"今天已选过心情"就不再弹（A6）
   };
 
   // ===== 心情自动弹窗（A6）：每次进入「今天」视图都检查当天是否已选/已问；
