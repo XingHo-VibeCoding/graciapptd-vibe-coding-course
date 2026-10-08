@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.9（2026-10-07 Day 20：**前端已接云接口**——首页/切日期读 `GET /api/day`、添加待办写 `POST /api/checkins`，并加「数据来源 + 最后更新时间」小字；跨域确认可用）
+- 版本：v3.10（2026-10-08 Day 20 补：**「我的」页新增「云端检查台」**——健康状态 / checkins 真数据 / 写入测试入口（`?debug=1` 才显示）；跨域补「无 `*` 通配符」实测；新增 A53 验收项）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -22,6 +22,8 @@
 | 添加待办 | ☁️ **云端真库**（`POST /api/checkins`） | 真写进数据库，刷新后还在；带客户端幂等键防重复 |
 | 勾选 / 取消勾选、删除、移动、选心情 | 💻 **仍是本机**（localStorage） | 这几项的后端接口还没写（`PATCH`/`DELETE`/`PUT /api/days/mood` 见契约 §四），所以刷新后会被云端数据覆盖 |
 | 思考页想法、专注记录、纪念日、肯定语、主题 | 💻 **仍是本机** | 对应接口未实现 |
+| 「我的」页 · **云端检查台**（Day 20 补） | ☁️ 云端真库（`GET /api/health` + `GET /api/checkins`） | 只读展示 + 一个写入测试入口（默认隐藏，`?debug=1` 才出现） |
+| 检查台的「写入一条测试数据」 | ☁️ 云端真库（`POST /api/checkins`） | 每个浏览器当天最多 3 条，防刷库 |
 
 > 网络不通 / 接口挂了时，页面**照常打开**（用本机数据），只是标题下的小字会变成「云端暂时联系不上」——
 > 这就是"本机兜底"的意思，不会白屏。
@@ -144,6 +146,12 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A52e 首页最后更新时间 | 看「今日待做」标题下那行小字 | 有云端数据时显示「云端数据 · 更新于 M月D日 HH:MM」（取自 `plan_days.updated_at`）；在库里改这一行的时间，刷新后小字跟着前进（余力加练 · Day 20） |
 | A52f 前端云模式自检 | `node test-home.js`（工作区里那份） | **374/374** 通过：原 360 条走"本机兜底"分支不变，新增 14 条把 `fetch` 换成假的、专测云端分支（读接口渲染 / 请求地址 / 幂等键 / 落盘 id / 切日期重取 / 断网兜底）（Day 20） |
 
+| A53 云端检查台 | 「我的」页拉到底部那张「云端检查台」 | ① 绿灯 + 「服务正常 · Self discipline plan」；② 「接口地址」是公网 `…/api`；③ 「数据最后一天」= **今天**；④ 「今天打卡项」= 库里今天的条数；⑤ 下方列出今天真实的几条（与 `SELECT text FROM checkins WHERE uid='seed-demo-user' AND date=CURRENT_DATE ORDER BY sort` 一致）（Day 20 补） |
+| A53b 写入测试入口 | 用 `…/?debug=1#me` 打开「我的」页 | ① 不带 `?debug=1` 时按钮**不存在**；② 带上后出现「写入一条测试数据」；③ 点一下 → toast「已写入云端（id=…）」，「今天打卡项」「库内总条数」当场 +1，库里多出一行「检查台写入测试 HH:MM:SS」；④ 同一浏览器当天第 4 次点击被拒（"今天已经写过 3 条啦"）（Day 20 补） |
+| A53c 跨域只放行自家域名（无 `*`） | `DEPLOY.md` §11.3 的命令 | 本环境前端域名 / `localhost:8765` 能拿到 `Access-Control-Allow-Origin`（**原样回显具体来源**，不是通配符）；陌生域名没有该头；三种来源里 `access-control-allow-origin: *` 出现次数**均为 0**（Day 20 补） |
+| A53d 检查台自检 | `node test-home.js`（工作区里那份） | **391/391** 通过（原 374 + 新增 17 条：`?debug=1` 显隐、健康绿灯/红灯、真数据三行、写入走 POST 与幂等键、离线兜底）（Day 20 补） |
+| A53e 数据日期锚定 | 部署/验收前跑 `tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"` | 幂等：第一次把种子数据平移到"今天"（本次 +1 天），再跑返回「跳过」；`plan_days 最后一天` = `checkins 最后一天` = 今天（Day 20 补） |
+
 > 报告（F4）还没做——按 R7 规则一天一块。思考（F3）卡片流 MVP（Day 14）与 AI 洞察（Day 15）已完成；应用页（F6）骨架与专注计时（Day 18）已完成；情绪表情已图片化（Day 19）；纪念&倒数日（Day 21）、肯定语（Day 22）、随即话题（精进 7）已开放；记账已按用户要求移除（2026-09-27）；剩小组件待做。
 
 ## 四、常见问题（FAQ）
@@ -157,11 +165,12 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | 改了 `frontend/index.html` 但线上没变 | 忘了重新部署，或 CDN 缓存 | 先 `tcb hosting deploy habit-tracker/frontend`，再 `Ctrl + F5` 强刷 |
 | 页面数据比数据库旧 | 云端那次请求失败，回落到了本机缓存 | 看标题下小字写的是不是「云端暂时联系不上」；是的话检查网络与接口地址 |
 | 勾选了待办、刷新又变回去了 | **预期行为**：勾选/删除还是本机操作，云端没有对应接口 | 说明见本文 §一 的表格（`PATCH`/`DELETE` 接口实现后才上云） |
+| 页面能打开，但「今日待做」是空的、检查台显示「今天打卡项 0 条」 | **种子数据的日期过期了**：它锚定在"跑 seed-shift 那天"，隔天就和"今天"脱节 | 在仓库根目录跑 `tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"`（幂等），再刷新页面 |
 
 ## 五、代码去哪看
 
-**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 3100 行）。
-结构分五段，从上到下：CSS 样式 → HTML 骨架 → **存储层（`loadData`/`saveData`）+ 云端接口客户端（`apiGet`/`apiPost`）** → 状态与渲染 → 事件绑定。
+**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 3280 行）。
+结构分五段，从上到下：CSS 样式 → HTML 骨架 → **存储层（`loadData`/`saveData`）+ 云端接口客户端（`apiGet`/`apiPost`/`apiHealth`）** → 状态与渲染 → 事件绑定。
 找任何功能先看注释里的 `Day 8` / `F1` / `Day 20` 标记，和 PRD 的编号一一对应。
 
 **两条"只走一个出口"的铁律**（将来换地址 / 换后端 / 换存储，只改这两处）：
@@ -169,7 +178,10 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | 出口 | 管什么 | 别处不许 |
 |---|---|---|
 | `loadData()` / `saveData()` | 本机 localStorage 的全部读写 | 直接写 `localStorage.getItem` |
-| `apiGet()` / `apiPost()` | 发往云端的全部网络请求（含超时、统一信封解析、断网判定） | 直接写 `fetch(...)` |
+| `apiGet()` / `apiPost()` / `apiHealth()` | 发往云端的全部网络请求（含超时、统一信封解析、断网判定） | 直接写 `fetch(...)` |
+
+> `apiHealth()` 是 Day 20 补单独加的：`/api/health` 是契约里**唯一的扁平响应**接口（回 `{ok,service}` 而不是 `{code,message,data}` 信封），
+> 套不进 `apiGet` 的解析逻辑，所以给它单独一个函数 —— 但仍然守"只走一个出口"的规矩。
 
 > Day 20 的接线就落在第二行：`loadDayData`（旧：只读本机）拆成 `loadLocalData`（本机秒开）
 > + `fetchCloudDay`（云端取数后覆盖重绘）。**渲染层与交互层一行都没改** —— 因为云端数据被映射进了

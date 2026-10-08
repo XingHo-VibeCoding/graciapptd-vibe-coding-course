@@ -1,6 +1,6 @@
 # 自律计划 · 部署手册（DEPLOY.md）
 
-- 版本：**v2.4（2026-10-07）** — 新增 §十一「跨域（CORS）」：实测矩阵 + 诊断方法 + 免费版套餐限制；§六 补「前端改动后重新部署与缓存」；§七 加 Day 20 验证方法；§九 把"配置跨域"移出"本期不做"。v2.3（2026-10-05）§五 补「上传的是整个函数目录」；v2.2（2026-10-05）§7.4 补「⑤ 读回验证」；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
+- 版本：**v2.5（2026-10-08）** — 新增 §7.6「我的页 · 云端检查台」、§十二「把链接发给同伴」、§十三「最可能的卡点」；§六 补「部署前先跑 seed-shift」；§11.3 补「无 `*` 通配符」实测。v2.4（2026-10-07）新增 §十一「跨域（CORS）」：实测矩阵 + 诊断方法 + 免费版套餐限制；§六 补「前端改动后重新部署与缓存」；§七 加 Day 20 验证方法；§九 把"配置跨域"移出"本期不做"。v2.3（2026-10-05）§五 补「上传的是整个函数目录」；v2.2（2026-10-05）§7.4 补「⑤ 读回验证」；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
 - 用途：把**云函数 `api`**、**数据库表**、**前端页面**推上公网的可复现步骤。以后每次重新部署照这份做。
 - 本版配套脚本：`db/schema.sql`、`db/schema-2.sql`（增量）、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
 
@@ -135,6 +135,13 @@ Cloud function HTTP access service link: https://<环境ID>.service.tcloudbase.c
 ---
 
 ## 六、部署前端到静态托管
+
+> **部署/重新部署前，先跑这一条**（把种子数据的日期锚定到"今天"，否则首页是空的）：
+> ```bash
+> tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"   # 幂等，可重复跑
+> ```
+> 为什么必须有这一步：种子数据的日期是固定的（2026-09-25 ~ 10-01），而首页只显示"今天"。
+> 隔一天不跑，首页就空了 —— 这是本项目**最常撞的卡点**（见 §十三 第 1 条）。
 
 ```bash
 # 在仓库根目录执行
@@ -320,6 +327,38 @@ tcb db execute --sql "UPDATE checkins SET text='整理下周计划' WHERE uid='s
 **验收标准**：刷新后页面内容跟着变 = 页面显示的**真就是数据库里的数据**。
 （再补一刀更直观：`UPDATE plan_days SET mood='joy', updated_at=now()` → 那行小字的时间会立刻前进。）
 
+### 7.6 「我的」页 · 云端检查台（Day 20 补）
+
+「我的」页最下面那张「云端检查台」卡片，是把"页面读的是真数据库"这件事**写成证据**的地方：
+
+| 卡片上的内容 | 数据从哪来 | 期望值 |
+|---|---|---|
+| 绿灯 + 「服务正常 · Self discipline plan」 | `GET /api/health` | 灯是绿的 |
+| 接口地址 | 前端常量 `API_BASE` | `https://…service.tcloudbase.com/api` |
+| 数据最后一天 | `GET /api/checkins?limit=100` 里最大的 `date` | = **今天** |
+| 今天打卡项 | 同上，按 `date` = 今天过滤 | ≥ 1 条 |
+| 库内总条数 | 接口返回的 `total` | 与库里 `count(*)` 一致 |
+| 下面那一小段列表 | 今天的条目（最多 3 条） | 内容与库里逐字一致 |
+
+**截图建议**：把整张卡片连同地址栏一起截，加上首页那张 —— 「页面 + 真数据 + 公网地址」三样齐了。
+
+**写入测试入口（默认隐藏）**：网页右下角链接里加 `?debug=1` 打开，卡片上会多出一个
+「写入一条测试数据」按钮；点一下会**真的往 `checkins` 表插一行**「检查台写入测试 HH:MM:SS」，
+同时卡片上的「今天打卡项」「库内总条数」当场 +1。
+
+```
+https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/?debug=1#me
+```
+
+**为什么默认藏起来**：这条链接是公开的，谁拿到都能打开；写入口藏起来，防止陌生人随手往库里塞数据。
+另外每个浏览器**当天最多写 3 条**（本机计数，见 `DIAG_WRITE_MAX`），防手滑刷库。
+
+**验完清理**（想把测试行删掉的话）：
+
+```bash
+tcb db execute --sql "DELETE FROM checkins WHERE text LIKE '检查台写入测试%'"
+```
+
 ---
 
 ## 八、控制台手动路线（CLI 不可用时的备选）
@@ -406,14 +445,28 @@ curl -s -i -X OPTIONS -H "Origin: https://habit-tracker-d9gh0mjel767ff0d2-149934
 
 `curl` 不受 CORS 限制，但它能**如实反映服务器的回答**——所以上面前两步的结果，就等于浏览器内部的判断依据。
 
-### 11.3 本项目实测结果（2026-10-07 Day 20）
+### 11.3 本项目实测结果（2026-10-07 Day 20；2026-10-08 复测）
 
 | 来源 | 是否返回 `Access-Control-Allow-Origin` | 结论 |
 |---|---|---|
-| `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com`（本项目前端） | ✅ 原样回显该来源 | 放行 |
+| `https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com`（本项目前端） | ✅ 原样回显该来源 + `access-control-allow-credentials: true` | 放行 |
 | `http://localhost:8765`、`http://127.0.0.1:8765` | ✅ 原样回显 | 放行（本地开发用） |
 | `https://evil.example.com`、`https://graciapptd.github.io`、别的环境的 `*.tcloudbaseapp.com` | ❌ 完全没有该响应头 | **会被浏览器拦** |
-| `OPTIONS` 预检（本环境前端来源 + `POST`） | ✅ `204` + `allow-methods: POST` + `allow-headers: content-type,idempotency-key` | 预检通过 |
+| `OPTIONS` 预检（本环境前端来源 + `POST`） | ✅ `204` + `allow-methods: POST` + `allow-headers: Content-Type` + `vary: Origin,…` | 预检通过 |
+
+**「只允许自己的域名、不用 `*` 通配符」这条已验证** —— 复测方式（三种来源各打一次，数 `*` 出现的次数）：
+
+```bash
+BASE=https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api
+for O in "https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com" "http://localhost:8765" "https://evil.example.com"; do
+  echo "$O -> 通配符 $(curl -s -i -H "Origin: $O" "$BASE/health" | grep -ci 'access-control-allow-origin: \*')"
+done
+# 实测三条都是 0；且放行时回的是**具体来源原样回显**（不是 *），
+# 加上 vary: Origin —— 说明网关是"按来源逐个判断"，不是"谁问都放行"。
+```
+
+> 注：放行时**不能用 `*`** —— 因为响应里带 `access-control-allow-credentials: true`，
+> 而按 CORS 规范，`*` 与 `credentials` **不允许同时出现**。网关回显具体来源是必然的，这也顺便保证了"只放行白名单里的来源"。
 
 ### 11.4 白名单怎么查、怎么加
 
@@ -432,6 +485,73 @@ tcb cors rm  <域名>      # 删除
 
 > **换到别的托管平台就会踩到**：如果哪天把前端放到 GitHub Pages（`*.github.io`）或自己的域名上，
 > 来源变了、白名单里没有 → 页面立刻 `fetch` 失败。那时要么把新域名加进白名单，要么把前端放回本环境托管。
+
+---
+
+## 十二、把链接发给同伴，让对方帮你看一眼（Day 20 补）
+
+**要发出去的链接（就这一条）**：
+
+```
+https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/
+```
+
+**照抄给同伴的话**（对方不需要懂技术）：
+
+> 帮我打开这条链接看看：
+> ① 上面「今日待做」里有没有几条待办（比如"晨跑 30 分钟""整理下周计划"）？
+> ② 标题下面有没有一行小字「云端数据 · 更新于 …」？
+> ③ 点底部「我的」，拉到底部看那张「云端检查台」：灯是不是**绿色**？「数据最后一天」是不是**今天**？
+> 把这三条结果告诉我就行。
+
+**对方看到的和你看到的一样**，就说明这个链接是"别人也能打开、而且读的是真数据库"的。
+
+**对方要点写入测试入口**（默认隐藏）时，把链接换成这条：
+
+```
+https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/?debug=1#me
+```
+
+点「写入一条测试数据」→ 会真的往库里的 `checkins` 表加一行，
+检查台上的「今天打卡项」「库内总条数」会当场 +1。**同一个浏览器当天最多写 3 条**。
+
+**发出去之前自己先过一遍（30 秒自检，三条都应通过）**：
+
+```bash
+# ① 线上产物是新的（期望 ≥ 1；0 说明还没部署 / CDN 没刷新）
+curl -s -H "Cache-Control: no-cache" \
+  "https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/index.html" | grep -c "diag-card"
+
+# ② 接口活着（期望 {"ok":true,"service":"Self discipline plan"}）
+curl -s "https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/health"
+
+# ③ 今天有数据（期望 code:0 且 items 非空 —— 空了就去跑 §六 里的 seed-shift）
+curl -s "https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/checkins?date=$(date +%F)&limit=100"
+```
+
+---
+
+## 十三、最可能的卡点（按"最容易撞到"排序）
+
+| # | 卡点 | 长什么样 | 怎么处理 |
+|---|---|---|---|
+| 1 | **数据过期 → 首页空的** | 页面打得开，但「今日待做」空、检查台「今天打卡项 0 条」 | 种子数据的日期锚定在"跑脚本那天"，隔天就脱节。跑 `tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"`（幂等）即可挪到今天。**这是本项目最常撞的一条** |
+| 2 | **跨域被拦** | F12 Console 红字 `blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present`；页面回落成「本机数据」 | 判据：响应里**有没有** `Access-Control-Allow-Origin`。用 `curl -H "Origin: <你的来源>"` 复现（§11.2）。本项目来源已在白名单；换成 GitHub Pages / 自定义域名就要先加白名单（免费版有额度限制，见 §11.4） |
+| 3 | **环境变量没配 / 失效** | 接口回 `{"code":500,…}`；云函数日志写 `数据库未配置：缺少环境变量 TCB_ENV 或 CLOUDBASE_API_KEY` | 控制台 → 云函数 `api` → 函数配置 → 环境变量，确认三个都在（`tcb fn detail api` 也能看）。改完**要重新部署函数**才生效 |
+| 4 | **密钥被写进代码 / 提交上去** | `git grep "eyJhbGciOi"` 搜到真值 | 本项目的做法：真值只存在于 `cloudbaserc.json`（已被 `.gitignore` 忽略）和云函数环境变量里；入库的只有无密钥模板 `cloudbaserc.example.json`。**提交前跑一次** `git grep "eyJhbGciOi" -- .`，期望只命中文档里的说明性文字 |
+| 5 | **改了前端忘了部署** | 本地预览是新的，公网还是旧的 | 前端**没有构建步骤**（零依赖单文件），所以不存在"构建报错"；唯一容易忘的是 `tcb hosting deploy habit-tracker/frontend`。部署后用 §十二 的 ① 号命令确认产物是新的 |
+| 6 | **CDN / 浏览器缓存** | 部署完页面没变 | `Ctrl + F5` 强刷；`curl -H "Cache-Control: no-cache"` 复核；CDN 通常几分钟内刷新 |
+| 7 | **把两个地址搞混** | 页面白屏、或返回 HTML 而不是 JSON | 前端是 `*.tcloudbaseapp.com`，接口是 `*.service.tcloudbase.com/api`。F12 Network 里看 Request URL 是不是 `/api/...` |
+| 8 | **写入被拒（409）** | `{"code":409,"message":"请勿重复提交…"}` | 这是**正常防护**。检查台的按钮每次都会生成新的幂等键，不会撞；手动 curl 复测时别复用同一个 `Idempotency-Key` |
+
+> **关于"构建报错"这类卡点**：本项目前端是**零依赖单文件**（没有 npm、没有打包器），云函数也是**零依赖**
+> （只用 Node 内置能力，`installDependency: false`）—— 所以**"构建/装包报错"这一整类问题在本项目不存在**。
+> 真正需要盯的是"**忘没忘部署**"和"**数据日期过没过期**"。
+>
+> **密钥怎么"走环境变量"**（任务里那条要求的落实方式）：
+> ① 数据库的 `service_role` API Key 只在云函数环境变量 `CLOUDBASE_API_KEY` 里；
+> ② 环境 ID 走 `TCB_ENV`；③ 演示身份走 `DEMO_UID`；
+> ④ 前端**只有公开的接口地址**（`API_BASE`，不含任何密钥）；⑤ 含真值的 `cloudbaserc.json` 从不入库。
 
 ---
 

@@ -144,6 +144,35 @@
     #cloud-hint{ margin:-8px 0 10px; color:var(--muted); font-size:12px; line-height:1.7; }
     #cloud-hint:empty{ display:none; }        /* 还没取到数据时不占位，避免出现空白一行 */
 
+    /* ===== 云端检查台（Day 20 补）：「我的」页那张诊断卡片 =====
+       一张卡片说清三件事：① 云端活着吗（打 GET /api/health）
+       ② 核心表 checkins 的真数据（总条数 / 数据最后一天 / 今天几条 / 最近几条）
+       ③ 一次真实写入测试（默认隐藏，URL 带 ?debug=1 才出现）
+       验收"页面展示的是数据库真实数据"时，这张卡片就是证据。 */
+    #diag-card .diag-row{ display:flex; align-items:center; gap:8px; padding:6px 0;
+                          font-size:13px; color:var(--ink); line-height:1.6; }
+    #diag-card .led{ width:9px; height:9px; border-radius:50%; flex:0 0 auto;
+                     background:var(--muted); transition:background .2s; }
+    #diag-card .led.ok{ background:#3fae6a; box-shadow:0 0 0 3px rgba(63,174,106,.18); }
+    #diag-card .led.bad{ background:#d9534f; box-shadow:0 0 0 3px rgba(217,83,79,.18); }
+    #diag-card .diag-kv{ display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+                         padding:5px 0; font-size:13px; color:var(--muted);
+                         border-bottom:1px dashed var(--line); }
+    #diag-card .diag-kv:last-of-type{ border-bottom:none; }
+    #diag-card .diag-kv b{ font-weight:600; color:var(--ink); font-variant-numeric:tabular-nums; }
+    #diag-card code{ font-size:11px; color:var(--muted); word-break:break-all; text-align:right; }
+    #diag-card .diag-list{ margin:8px 0 0; padding-left:18px; font-size:13px;
+                           color:var(--ink); line-height:1.8; }
+    #diag-card .diag-list:empty{ display:none; }
+    #diag-card .diag-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    #diag-card .diag-actions button{ border:1px solid var(--line); background:var(--card2);
+                                     color:var(--accent-deep); border-radius:10px;
+                                     padding:7px 14px; font-size:13px; cursor:pointer; }
+    #diag-card .diag-actions button:disabled{ opacity:.5; cursor:default; }
+    #diag-card .diag-actions button[hidden]{ display:none; }  /* 防 display:flex 盖掉 hidden */
+    #diag-card .diag-note{ margin:10px 0 0; font-size:12px; color:var(--muted); line-height:1.7; }
+    #diag-card .diag-note:empty{ display:none; }
+
     /* ===== Day 8 四状态：加载 / 错误（空与数据在 content 内部切换）===== */
     .state{ text-align:center; padding:44px 0; color:var(--muted); font-size:14px; }
     #state-error button{ display:block; margin:12px auto 0; padding:8px 24px;
@@ -823,6 +852,22 @@
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
         </ul>
       </div>
+
+      <!-- 云端检查台（Day 20 补）：健康状态 / checkins 核心表真数据 / 写入测试入口 -->
+      <div class="card" id="diag-card">
+        <h2>云端检查台 <span class="sub" id="diag-sub"></span></h2>
+        <div class="diag-row"><span class="led" id="diag-led"></span><span id="diag-health">正在检查云端…</span></div>
+        <div class="diag-kv"><span>接口地址</span><code id="diag-base"></code></div>
+        <div class="diag-kv"><span>数据最后一天</span><b id="diag-lastday">—</b></div>
+        <div class="diag-kv"><span>今天打卡项</span><b id="diag-today">—</b></div>
+        <div class="diag-kv"><span>库内总条数</span><b id="diag-total">—</b></div>
+        <ul class="diag-list" id="diag-list"></ul>
+        <div class="diag-actions">
+          <button type="button" id="diag-refresh">重新检查</button>
+          <button type="button" id="diag-write" hidden>写入一条测试数据</button>
+        </div>
+        <p class="diag-note" id="diag-note"></p>
+      </div>
     </section>
   </main>
 </div>
@@ -1184,6 +1229,25 @@
     ? crypto.randomUUID()
     : 'req-' + Date.now() + '-' + Math.floor(Math.random() * 1000000);
 
+  // 健康检查（Day 20 补，检查台用）：契约里**唯一的扁平响应**接口 —— 直接回 { ok, service }，
+  // 不套 { code, message, data } 信封。所以不能复用 apiFetch（它按 body.code 判成败，
+  // 会把一个完全健康的响应判成"失败"）。单独一个函数，别处别直接 fetch。
+  const apiHealth = async () => {
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT) : null;
+    try {
+      const res = await fetch(API_BASE + '/health',
+        Object.assign(ctrl ? { signal: ctrl.signal } : {}, { method: 'GET' }));
+      const body = await res.json();
+      if (body && body.ok === true) return { ok: true, service: body.service || '' };
+      return { ok: false, offline: false, message: '健康接口返回了预期之外的数据' };
+    } catch (e) {
+      return { ok: false, offline: true, message: '' };   // 断网 / 超时 / 被跨域拦
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
   // 云端取数状态，供首页那行小字显示（见 renderCloudHint）
   // pending=正在取 / cloud=云端数据 / offline=联系不上 / error=云端回了个错误 / local=环境没有 fetch
   let cloudState = { mode: 'pending', updatedAt: null, at: 0 };
@@ -1325,6 +1389,129 @@
       node.textContent = '';                      // pending：还没取到，空着不占位
     }
   };
+
+  // ===== 云端检查台（Day 20 补）=====
+  // 「我的」页那张卡片的全部逻辑：① 云端健康 ② checkins 真数据 ③ 一次写入测试。
+  // 写入按钮**默认隐藏**，只有 URL 带 ?debug=1 才出现 —— 公网链接谁都能打开，
+  // 不能让访客随手往库里写数据；再加"同一浏览器当日最多 3 条"兜一层，防手滑刷库。
+  const DIAG_WRITE_KEY = 'habit-tracker-diag-writes';    // 本机计数，形如 { date, n }
+  const DIAG_WRITE_MAX = 3;
+  const diagDebugOn = () => /(^|[?&])debug=1(&|$)/.test(location.search);
+  let diagBusy = false;                                   // 防连点：一次只跑一个检查/写入
+
+  // 本机当日已写条数（换天自动归零）
+  const diagWritesToday = () => {
+    try {
+      const rec = JSON.parse(localStorage.getItem(DIAG_WRITE_KEY) || 'null');
+      return (rec && rec.date === todayStr()) ? (Number(rec.n) || 0) : 0;
+    } catch (e) { return 0; }
+  };
+  const bumpDiagWrites = () => {
+    const n = diagWritesToday() + 1;
+    try { localStorage.setItem(DIAG_WRITE_KEY, JSON.stringify({ date: todayStr(), n: n })); } catch (e) {}
+    return n;
+  };
+
+  // 检查台主流程：健康 → 核心表数据 → 铺进 DOM
+  const refreshDiag = async () => {
+    if (diagBusy) return;
+    diagBusy = true;
+    const led = el('diag-led'), health = el('diag-health'), list = el('diag-list');
+    el('diag-base').textContent = API_BASE;
+    el('diag-sub').textContent = diagDebugOn() ? '（调试模式）' : '';
+    el('diag-write').hidden = !diagDebugOn();
+    el('diag-note').textContent = '';
+
+    // ① 健康状态
+    led.className = 'led';
+    health.textContent = '正在检查云端…';
+    if (!apiReady()) {
+      led.className = 'led bad';
+      health.textContent = '本机环境没有 fetch，无法检查（本地自测里属正常）';
+      diagBusy = false;
+      return;
+    }
+    const h = await apiHealth();
+    if (h.ok) {
+      led.className = 'led ok';
+      health.textContent = '服务正常 · ' + (h.service || '已响应');
+    } else {
+      led.className = 'led bad';
+      health.textContent = h.offline ? '云端联系不上（断网 / 超时 / 被跨域拦）'
+                                     : (h.message || '云端返回异常');
+    }
+
+    // ② 核心表 checkins 的真数据
+    const r = await apiGet('/checkins?limit=100');
+    if (!r.ok) {
+      el('diag-lastday').textContent = '—';
+      el('diag-today').textContent = '—';
+      el('diag-total').textContent = '—';
+      list.textContent = '';
+      el('diag-note').textContent = '核心表没读到：' + (r.offline ? '云端联系不上' : (r.message || '云端返回异常'));
+      diagBusy = false;
+      return;
+    }
+    const items = r.data.items || [];
+    const today = todayStr();
+    const dates = items.map(i => i.date).filter(Boolean).sort();
+    const todays = items.filter(i => i.date === today);
+    el('diag-total').textContent = r.data.total + ' 条';
+    el('diag-lastday').textContent = dates.length ? dates[dates.length - 1] : '（无数据）';
+    el('diag-today').textContent = todays.length + ' 条';
+
+    list.textContent = '';
+    // 优先列今天的；今天没有就列库里的最后几条（一眼看出"最新数据长什么样"）
+    const showItems = (todays.length ? todays : items).slice(-3).reverse();
+    showItems.forEach((it) => {
+      const li = document.createElement('li');
+      li.textContent = it.date + ' ' + (it.time ? it.time + ' ' : '') + it.text;
+      list.appendChild(li);
+    });
+    if (!showItems.length) {
+      const li = document.createElement('li');
+      li.textContent = 'checkins 表里还没有数据';
+      list.appendChild(li);
+    }
+    // 只取了 100 条：窗口之外的更晚数据不计入"最后一天"，写清楚免得误读
+    if (r.data.total > items.length) {
+      el('diag-note').textContent = '注：库内共 ' + r.data.total + ' 条，本次只统计返回的 ' + items.length + ' 条。';
+    }
+    diagBusy = false;
+  };
+
+  // 写入测试：往"今天"真的插一条（走 POST /api/checkins，带幂等键）
+  const diagWriteTest = async () => {
+    if (diagBusy) return;
+    if (!apiReady()) { showToast('本机环境没有 fetch，无法写入'); return; }
+    if (diagWritesToday() >= DIAG_WRITE_MAX) {
+      showToast('今天已经写过 ' + DIAG_WRITE_MAX + ' 条啦，明天再试');
+      return;
+    }
+    diagBusy = true;
+    el('diag-write').disabled = true;
+    try {
+      const now = new Date();
+      const text = '检查台写入测试 ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes())
+                 + ':' + pad2(now.getSeconds());
+      const r = await apiPost('/checkins', { date: todayStr(), text: text,
+                                             time: null, quad: null, clientReqId: newReqId() });
+      if (r.ok) {
+        bumpDiagWrites();
+        showToast('已写入云端（id=' + r.data.id + '）');
+      } else {
+        showToast('写入失败：' + (r.offline ? '云端联系不上' : (r.message || '云端返回异常')));
+      }
+    } finally {
+      el('diag-write').disabled = false;
+      diagBusy = false;
+    }
+    await refreshDiag();                                  // 重新点数，让"今天打卡项"跟着涨
+    if (currentDate === todayStr()) await fetchCloudDay(currentDate);   // 首页数据也同步刷新
+  };
+
+  el('diag-refresh').addEventListener('click', () => refreshDiag());
+  el('diag-write').addEventListener('click', () => diagWriteTest());
 
   // ===== 四状态切换：'loading' | 'error' | 'content' =====
   const showState = (state) => {
@@ -2017,6 +2204,7 @@
       currentView = btn.dataset.view;
       syncFab();
       if (currentView === 'today') maybeAskMood();
+      if (currentView === 'me') refreshDiag();     // Day 20 补：切到「我的」时顺手刷新检查台
     });
   });
 
