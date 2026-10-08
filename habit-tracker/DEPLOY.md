@@ -543,6 +543,7 @@ curl -s "https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/chec
 | 6 | **CDN / 浏览器缓存** | 部署完页面没变 | `Ctrl + F5` 强刷；`curl -H "Cache-Control: no-cache"` 复核；CDN 通常几分钟内刷新 |
 | 7 | **把两个地址搞混** | 页面白屏、或返回 HTML 而不是 JSON | 前端是 `*.tcloudbaseapp.com`，接口是 `*.service.tcloudbase.com/api`。F12 Network 里看 Request URL 是不是 `/api/...` |
 | 8 | **写入被拒（409）** | `{"code":409,"message":"请勿重复提交…"}` | 这是**正常防护**。检查台的按钮每次都会生成新的幂等键，不会撞；手动 curl 复测时别复用同一个 `Idempotency-Key` |
+| 9 | **首次打开偶发「云端暂时联系不上」** | 页面正常打开，但显示的是本机数据、检查台红灯 | 云函数**冷启动**（1–3 秒）+ 前端 5 秒超时的组合，首次访问偶发触发（本轮验证实测遇到 1 次，**刷新一次即恢复**）。这也是"本机兜底"的设计目的：宁可先显示缓存，也不让页面卡住或白屏 |
 
 > **关于"构建报错"这类卡点**：本项目前端是**零依赖单文件**（没有 npm、没有打包器），云函数也是**零依赖**
 > （只用 Node 内置能力，`installDependency: false`）—— 所以**"构建/装包报错"这一整类问题在本项目不存在**。
