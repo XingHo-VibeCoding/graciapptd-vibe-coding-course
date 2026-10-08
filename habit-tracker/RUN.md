@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.10（2026-10-08 Day 20 补：**「我的」页新增「云端检查台」**——健康状态 / checkins 真数据 / 写入测试入口（`?debug=1` 才显示）；跨域补「无 `*` 通配符」实测；新增 A53 验收项）
+- 版本：v3.11（2026-10-08 Day 21：周验收日——索引新增 `WEEK3-ACCEPT.md`（第 3 周验收表：21 条目逐项证据）与 `DEMO.md`（3 分钟演示提纲，已走通一遍）；补 A54；本日零代码改动。v3.10 于 2026-10-08 Day 20 补：云端检查台上线）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -149,6 +149,8 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A53 云端检查台 | 「我的」页拉到底部那张「云端检查台」 | ① 绿灯 + 「服务正常 · Self discipline plan」；② 「接口地址」是公网 `…/api`；③ 「数据最后一天」= **今天**；④ 「今天打卡项」= 库里今天的条数；⑤ 下方列出今天真实的几条（与 `SELECT text FROM checkins WHERE uid='seed-demo-user' AND date=CURRENT_DATE ORDER BY sort` 一致）（Day 20 补） |
 | A53b 写入测试入口 | 用 `…/?debug=1#me` 打开「我的」页 | ① 不带 `?debug=1` 时按钮**不存在**；② 带上后出现「写入一条测试数据」；③ 点一下 → toast「已写入云端（id=…）」，「今天打卡项」「库内总条数」当场 +1，库里多出一行「检查台写入测试 HH:MM:SS」；④ 同一浏览器当天第 4 次点击被拒（"今天已经写过 3 条啦"）（Day 20 补） |
 | A53c 跨域只放行自家域名（无 `*`） | `DEPLOY.md` §11.3 的命令 | 本环境前端域名 / `localhost:8765` 能拿到 `Access-Control-Allow-Origin`（**原样回显具体来源**，不是通配符）；陌生域名没有该头；三种来源里 `access-control-allow-origin: *` 出现次数**均为 0**（Day 20 补） |
+
+| A54 周验收闭环 | 打开 `habit-tracker/WEEK3-ACCEPT.md` | ① 21 个条目逐项有证据（commit 链接 / 公网 URL / 复现命令 / 文档章节），19 PASS；② 同伴交叉验证按 §四 的说明发给同伴，三行结论（可打开 / 可读写 / 无报错）回来后填进 §4.3，⏳ 改终态——**回填前验收表不生效**；③ 演示提纲 `habit-tracker/DEMO.md`（四段结构，主案例跨域排查）已按 §三 完整走通一遍；④ 演示视频如实标未执行（Day 21） |
 | A53d 检查台自检 | `node test-home.js`（工作区里那份） | **391/391** 通过（原 374 + 新增 17 条：`?debug=1` 显隐、健康绿灯/红灯、真数据三行、写入走 POST 与幂等键、离线兜底）（Day 20 补） |
 | A53e 数据日期锚定 | 部署/验收前跑 `tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"` | 幂等：第一次把种子数据平移到"今天"（本次 +1 天），再跑返回「跳过」；`plan_days 最后一天` = `checkins 最后一天` = 今天（Day 20 补） |
 
@@ -196,6 +198,7 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | `habit-tracker/cloudfunctions/api/selftest.js` | 测试 | 本地自测：不联网、stub 掉 `fetch`（162 条断言） |
 
 接口的路径与字段以 `habit-tracker/api-contract.md` 为准；部署步骤看 `habit-tracker/DEPLOY.md`；数据库脚本在 `habit-tracker/db/`。
+**验收与演示**（Day 21 起）：第 3 周的逐项验收表在 `habit-tracker/WEEK3-ACCEPT.md`（同伴交叉验证的说明与回填区也在里面）；要给别人演示这个项目时，照 `habit-tracker/DEMO.md` 的提纲和动作单讲（3 分钟版，已走通过一遍）。
 
 ---
 
