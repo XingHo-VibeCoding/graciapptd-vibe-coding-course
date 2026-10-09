@@ -1,9 +1,9 @@
 # 自律计划 · API 接口契约（api-contract.md）
 
-- 版本：v1.5（2026-10-08 Day 20 补：**契约正文零改动**——只在 §6 部署记录追加 §6.4「云端检查台 + 跨域收紧 + 密钥复核」验收记录；跨域实测补「放行时原样回显具体来源、`*` 通配符出现次数为 0」。v1.4 于 2026-10-07 Day 20：前端已接线——§1.1 跨域约定由「本期不配置」改为「已通并附实测」、新增 §6.3；v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
+- 版本：v1.6（2026-10-09 Day 22：**PATCH / DELETE 两个接口落地**——新增 §1.7「软删除约定」（删除不真删行，只置 `checkins.is_deleted`，查询默认跳过）、§三 追加 `PATCH /api/checkins/:id` 与 `DELETE /api/checkins/:id` 的完整定义、§四 两条接口标记 ✅ 已实现、§二 表清单与 §六 部署记录同步。**这是本项目第一次"改已有接口行为"**——`GET /api/day` 与 `GET /api/checkins` 新增了"跳过已删除项"的语义，按 §五 变更规则属**兼容性变更**（响应形状、字段名、错误码一个没动，只是不再返回已删行），故只升文档版本、不改信封。v1.5 于 2026-10-08 Day 20 补：**契约正文零改动**——只在 §6 部署记录追加 §6.4「云端检查台 + 跨域收紧 + 密钥复核」验收记录；跨域实测补「放行时原样回显具体来源、`*` 通配符出现次数为 0」。v1.4 于 2026-10-07 Day 20：前端已接线——§1.1 跨域约定由「本期不配置」改为「已通并附实测」、新增 §6.3；v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
 - 作用：**前端和云端之间的"合同"**。前端按这份文档发请求，后端按这份文档回数据；任何一方想改形状，先改这份文档，再改代码（R2 文档先行）。
 - **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。
-- **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）；其余仍为占位，按 Day 19–20 逐个实现。
+- **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）、**`PATCH /api/checkins/:id` + `DELETE /api/checkins/:id`（Day 22，增删改查四类操作在 `checkins` 上闭环）**；其余仍为占位，按后续每天逐个实现。
 - 依据：`TECH_DESIGN.md` §三 数据模型 / §四 API 列表；并按 `frontend/index.html` 的**实际功能面**补全（Day 15 新增：专注计时 / 纪念&倒数日 / 肯定语 / 主题换肤）。
 
 > **⚠️ 课程示例接口名与本项目的关系**（Day 17 与用户确认，勿再纠结）：
@@ -145,19 +145,40 @@
 > 按内容去重会把**合法的重复内容**也一起拒掉 —— 那是误伤。用动作 id 才能把
 > "同一个动作重发"和"两次不同的添加动作"分开。
 
+### 1.7 软删除约定（Day 22 建立）
+
+**为什么删除要额外小心**：新增出错，最坏是库里多一条垃圾数据 —— 用户看得见它、随手能删，
+代价可逆。删除出错是把一行数据**从所有界面里抹掉**，真删之后没有任何入口还能看到它，
+点错一下就是不可逆的丢失。所以本项目对打卡项的删除采取**软删除**：
+`DELETE` 接口**不真删行**，只把 `is_deleted` 置为 `true`。
+
+| 项 | 约定 |
+|---|---|
+| 标记列 | `checkins.is_deleted`（boolean，`NOT NULL DEFAULT false`，见 `db/schema-3.sql`） |
+| 删除语义 | `DELETE /api/checkins/:id` = 把该行 `is_deleted` 置 `true`（**不是物理删除**） |
+| 查询语义 | 面向用户的读取（`GET /api/day`、`GET /api/checkins`）**一律跳过已删除项**；用户看不到它们，效果与真删一致 |
+| 已删项再操作 | 对已删的 id 再 `PATCH` / `DELETE` → `404 这条待办不存在或已删除`（对外不区分"没这条"和"删过了"） |
+| 恢复 | 目前没有界面入口；需要时由维护者一条 SQL 改回：`UPDATE checkins SET is_deleted = false WHERE id = <id>;` |
+| 幂等键列 | 不受影响：唯一索引仍覆盖已删行 —— 同一个"添加动作"重发依旧 409（删掉再加应该是**两个动作、两个 id**） |
+| 排序位 `sort` | 计算"当天最大 sort"时**不跳过**已删行 —— 避免新条目复用已删条目的排序位，造成同 `sort` 撞车 |
+
+> **前端要知道的一件小事**：软删除下 `DELETE` 与 `PATCH` 都是"幂等的最终状态"语义 ——
+> 同一条重复删两次，第二次会得到 `404`（第一次已经删成功了），前端把它当"已经没了"处理即可，
+> 不要报成错误。
+
 ---
 
 ## 二、数据表清单（第 3 周 Day 16 建表依据）
 
 > 表格从**前端页面的实际字段**反推，不是凭空设计。TECH_DESIGN §三 是 v2.0 版本（只有 4 张表），本期按 Day 18–22 新增的板块补全为 7 张。
 >
-> **建表进度（Day 16 建、Day 18 增补）**：**核心两表 `plan_days` / `checkins` 已建**，脚本在 `db/schema.sql`（含字段说明与约束），种子在 `db/seed.sql`（可重复执行），验证语句 `db/verify.sql`，设计说明 `db/README.md`。Day 18 给 `checkins` 加了幂等键列 `client_req_id` + 唯一索引，写在 **`db/schema-2.sql`**（增量脚本，**不改 `schema.sql`**）。其余 5 张表在需要它们的接口开工那天，按同样方式追加到 `db/schema-2.sql`。
+> **建表进度（Day 16 建、Day 18 / Day 22 增补）**：**核心两表 `plan_days` / `checkins` 已建**，脚本在 `db/schema.sql`（含字段说明与约束），种子在 `db/seed.sql`（可重复执行），验证语句 `db/verify.sql`，设计说明 `db/README.md`。Day 18 给 `checkins` 加了幂等键列 `client_req_id` + 唯一索引，写在 **`db/schema-2.sql`**；Day 22 加了软删除标记列 `is_deleted`，写在 **`db/schema-3.sql`**（都是增量脚本，**不改 `schema.sql`**）。其余 5 张表在需要它们的接口开工那天，按同样方式追加新的增量脚本。
 
 | 表名 | 中文名 | 谁在用 | 说明 |
 |---|---|---|---|
 | `users` | 用户 | 我的页 | 匿名 uid 主键；姓名、主题偏好 |
 | `plan_days` | 计划日 | 今天页 | **一天一条**，记录当天心情；打卡应用里的"那一天" |
-| `checkins` | 打卡项 | 今天页 | **一天多条**，就是待办事项；含完成状态、时间、四象限 |
+| `checkins` | 打卡项 | 今天页 | **一天多条**，就是待办事项；含完成状态、时间、四象限、幂等键 `client_req_id`、软删除标记 `is_deleted` |
 | `notes` | 想法流 | 思考页 | 一条一条的记录卡片 |
 | `focus_sessions` | 专注记录 | 应用·专注计时 | 每次计时结束写一条 |
 | `anniversaries` | 纪念&倒数日 | 应用·纪念&倒数日 | 公历/农历、周期重复、置顶、背景 |
@@ -230,6 +251,7 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 - `checkins` 的排序固定为 `sort` 升序（同日内），再以 `id` 兜底 → 顺序稳定。
 - 数据库时间戳列（`created_at` / `updated_at` / `done_at`）在响应里统一是**毫秒数**；为空则为 `null`。
 - 日期在响应里原样回传字符串 `YYYY-MM-DD`（不是时间戳）。
+- **已软删除的打卡项不返回**（Day 22 起，见 §1.7）—— 用户删掉的那条在这里就看不见了，效果与真删一致。
 
 **错误返回**：
 
@@ -280,6 +302,8 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 | `done` 不是 `true`/`false` | `{"code":400,"message":"done 只能是 true 或 false","data":null}` |
 | `limit` 不是 1–100 的整数 | `{"code":400,"message":"limit 必须是 1~100 的整数","data":null}` |
 | 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+
+> **已软删除的打卡项不返回**（Day 22 起，见 §1.7）；`total` 也**不含**已删行（它是"能满足条件、且没被删掉的总条数"）。
 
 ---
 
@@ -339,10 +363,111 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 ---
 
-## 四、待实现接口（Day 19–20 逐个补；标 ✅ 的已在 §三 实现）
+### `PATCH /api/checkins/:id` —— 修改打卡项（**Day 22 已实现**）
+
+**用途**：打勾 / 取消打勾、改内容、改时间、改象限。**只传要改的字段**，其余原样不动（部分更新）。
+
+**路径参数**：
+
+| 参数 | 说明 |
+|---|---|
+| `:id` | 打卡项 id（就是 `checkins.id`，**正整数**）；不是正整数 → `400` |
+
+**请求头**：`Content-Type: application/json`。
+
+**请求体**（至少给一个字段，可以同时给多个）：
+
+```json
+{ "done": true }
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `done` | boolean | 打勾 / 取消打勾；**服务端同时写 `done_at`**（打勾写当前时刻，取消写 `null`）—— 数据库约束 `checkins_done_consistent` 要求两者一致，故这两列永远一起改 |
+| `text` | string | 改内容；**去首尾空白后** 1–60 字 |
+| `time` | string \| null | `HH:mm`；传 `null`（或空串）= 清空为"未安排" |
+| `quad` | string \| null | `q1`~`q4`；传 `null`（或空串）= 清空为"未分类" |
+
+> **服务端忽略的字段**：`uid`（永远取登录身份）、`id`（以路径参数为准）、`date` / `sort` / `is_deleted` / `created_at`
+> —— 今天**不支持**改归属日期（界面上的"移动到其他日期"仍是本机行为，契约里没有这个接口）。
+
+**响应**：返回改完之后的**完整对象**（与 `POST` 的 `data` 同形状）。
+
+```json
+{ "code": 0, "message": "已更新",
+  "data": { "id": 103, "date": "2026-10-01", "text": "写周报", "time": "14:00",
+            "quad": "q2", "done": true, "doneAt": 1759302600000, "sort": 5 } }
+```
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| `:id` 不是正整数（如 `/api/checkins/abc`） | `{"code":400,"message":"待办 id 不合法","data":null}` |
+| 请求体不是合法 JSON | `{"code":400,"message":"请求体不是合法的 JSON","data":null}` |
+| 请求体里**一个可改字段都没有** | `{"code":400,"message":"请至少指定一个要修改的字段（done / text / time / quad）","data":null}` |
+| `done` 不是布尔 | `{"code":400,"message":"done 只能是 true 或 false","data":null}` |
+| `text` 去空白后为空 / 超 60 字 / 不是字符串 | `{"code":400,"message":"内容不能为空，且不超过 60 字","data":null}` |
+| `time` 不是 `HH:mm`（且不是 `null`） | `{"code":400,"message":"时间格式不对，应为 HH:mm（24 小时制）","data":null}` |
+| `quad` 不在 q1~q4（且不是 `null`） | `{"code":400,"message":"象限只能是 q1 / q2 / q3 / q4","data":null}` |
+| id 不存在 **或已被软删除** | `{"code":404,"message":"这条待办不存在或已删除","data":null}` |
+| 存在但不是自己的数据 | `{"code":403,"message":"无权修改这条待办","data":null}` |
+| **给未来日期的待办打勾**（`done=true` 且该条 `date` 晚于今天） | `{"code":409,"message":"这一天还没到，先别急着打勾","data":null}` |
+| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+
+**服务端的判定顺序**（顺序本身就是防线，实现可依赖）：
+
+1. **身份**（`401`）→ 2. **参数与请求体校验**（各种 `400`，一个字段都不写库）→
+3. **查这一行**（按 id 查，**不按 uid 过滤**）→ 查不到 = `404`
+   —— 必须这样查，才能把"没这条"和"这条不是你的"分开；如果一上来就 `WHERE id=? AND uid=?`，
+   别人的数据永远只会得到 404，**越权尝试就查不出来了**（也测不出来）
+4. **归属**（`row.uid !== 当前身份` → `403`）—— 防越权的关键一步
+5. **已软删除**（`is_deleted = true` → `404`，对外不区分"没这条"和"删过了"）
+6. **A5 业务规则**（给未来打勾 → `409`）—— PRD A5 的硬规则，**必须服务端拦**，前端禁用只是体验层
+
+> ⚠️ 注意 6 只在 `done` 由假变真时触发；**取消打勾**（`done: false`）任何时候都允许。
+
+---
+
+### `DELETE /api/checkins/:id` —— 删除打卡项（**Day 22 已实现，软删除**）
+
+**用途**：用户在界面上删掉一条待办。
+
+**请求参数**：路径 `:id`（正整数）。无请求体。
+
+**语义**：**软删除** —— 不是 `DELETE FROM checkins`，而是把该行 `is_deleted` 置为 `true`（见 §1.7）。
+对用户而言效果与真删一致（`GET` 不再返回它），但数据还在库里，删错了能捞回来。
+
+**响应**：
+
+```json
+{ "code": 0, "message": "已删除", "data": { "id": 103 } }
+```
+
+> `data` 只回 `id`，不回整行 —— 因为它已经"不存在"了，回一整行反而像还在。
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| `:id` 不是正整数 | `{"code":400,"message":"待办 id 不合法","data":null}` |
+| id 不存在 **或已经被软删除** | `{"code":404,"message":"这条待办不存在或已删除","data":null}` |
+| 存在但不是自己的数据 | `{"code":403,"message":"无权删除这条待办","data":null}` |
+| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+
+**判定顺序**与 `PATCH` 相同：身份 → 参数 → 查行（404）→ 归属（403）→ 已删除（404）。
+**删除没有 `409`** —— 删除在任何日期都允许（A5 拦的是"提前打勾"，不是"提前清理"）。
+
+> **为什么删除也要查一遍归属**：只按 id 删的话，任何人拿到一个 id 就能删掉别人的记录。
+> `uid` 条件是"防越权的最后一道防线"（§二 建表注意 1），删除接口尤其不能省 ——
+> 新增错了只是多一条，删错了是**别人的数据没了**。
+
+---
+
+## 四、待实现接口（后续每天逐个补；标 ✅ 的已在 §三 实现）
 
 > 以下是第 3 周要落地的全部接口。**先定名字和形状，避免前端先写死后端再改。**
-> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；其余待做。
+> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；✅ `PATCH /api/checkins/:id`、✅ `DELETE /api/checkins/:id`（Day 22）；其余待做。
 
 ### 📌 先记住这条：别忘了「列表读取」接口
 
@@ -384,46 +509,18 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 **字段速查**：`date` ✅、`text` ✅（去首尾空白后 1–60 字）、`time` ⭕、`quad` ⭕、`clientReqId` ⭕（幂等键，见 1.6）。
 
-#### `PATCH /api/checkins/:id` —— 修改（打勾 / 改时间 / 改内容 / 改象限）
+#### `PATCH /api/checkins/:id` —— 修改（打勾 / 改时间 / 改内容 / 改象限）✅ **Day 22 已实现**
 
-**路径参数**：`:id` = 打卡项 id。
+> **完整定义见 §三**（字段规则、服务端判定顺序、全部错误码都在那里，此处不重复免得两边不一致）。
 
-**请求体**（只传要改的字段，其余不动）：
+**字段速查**：`done` ⭕、`text` ⭕、`time` ⭕（`null` = 清空）、`quad` ⭕（`null` = 清空）；**至少给一个**。
+成功文案 `已更新`；给未来日期的待办打勾 → `409`（PRD A5）。
 
-```json
-{ "done": true }
-```
+#### `DELETE /api/checkins/:id` —— 删除打卡项 ✅ **Day 22 已实现（软删除）**
 
-| 字段 | 说明 |
-|---|---|
-| `done` | 打勾 / 取消打勾；服务端同时写 `doneAt` |
-| `time` | 改时间，或传 `null` 清空 |
-| `text` | 改内容 |
-| `quad` | 改象限，或传 `null` 清空 |
+> **完整定义见 §三**；软删除语义（不真删行、只置 `is_deleted`）见 §1.7。
 
-**响应**：返回改完之后的完整对象（同 `POST` 的 `data`）。
-
-**错误返回**：
-
-| 情况 | 返回 |
-|---|---|
-| id 不存在 | `{"code":404,"message":"这条待办不存在或已删除","data":null}` |
-| 不是自己的数据 | `{"code":403,"message":"无权修改这条待办","data":null}` |
-| **给未来的待办打勾** | `{"code":409,"message":"这一天还没到，先别急着打勾","data":null}` |
-
-> ⚠️ 最后一条是 PRD A5 的硬规则，**必须服务端拦**（前端禁用只是体验层）。
-
-#### `DELETE /api/checkins/:id` —— 删除打卡项
-
-**请求参数**：路径 `:id`。
-
-**响应**：
-
-```json
-{ "code": 0, "message": "已删除", "data": { "id": 103 } }
-```
-
-**错误返回**：`404` 不存在 / `403` 非本人数据。
+**响应**：`{ "code": 0, "message": "已删除", "data": { "id": 103 } }` —— 错误：`404` 不存在或已删除 / `403` 非本人数据 / `400` id 不合法。
 
 #### `PUT /api/days/mood` —— 写当天心情（覆盖式）
 
@@ -768,13 +865,13 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 | 项 | 值 | 更新时间 |
 |---|---|---|
-| 云函数名 | `api`（内部路由 `/api/health`、`/api/day`、`/api/checkins`、**`POST /api/checkins`**） | 2026-10-04 |
+| 云函数名 | `api`（内部路由 `/api/health`、`/api/day`、`/api/checkins`、**`POST /api/checkins`**、**`PATCH /api/checkins/:id`**、**`DELETE /api/checkins/:id`**） | 2026-10-09 |
 | 环境 ID | **`habit-tracker-d9gh0mjel767ff0d2`**（2026-10-01 21:57 开通，免费体验版·上海） | 2026-10-03 |
 | 云函数公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api`** | 2026-10-03 |
 | 前端 mock 版公网地址 | **`https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/`** | 2026-10-03 |
-| 前端接线版公网地址 | **同上（同一地址）**——2026-10-07 Day 20 重新部署，页面开始 `fetch` 上表接口 | 2026-10-07 |
+| 前端接线版公网地址 | **同上（同一地址）**——2026-10-07 Day 20 重新部署，页面开始 `fetch` 上表接口；2026-10-09 Day 22 再次部署，勾选/删除改为调 `PATCH`/`DELETE` | 2026-10-09 |
 | 数据库 | CloudBase PostgreSQL 17.11；`plan_days`(7 行) + `checkins`(9 行)，均 `uid='seed-demo-user'`；**数据日期已于 Day 20 整体平移到「以今天为最后一天」**（见 `db/README.md` §4.3）；RLS 未开启 | 2026-10-07 |
-| 建表脚本 | `db/schema.sql`（Day 16 核心两表）+ `db/schema-2.sql`（Day 18 幂等键列 `client_req_id` 与唯一索引 `checkins_uid_reqid_uniq`）+ `db/seed-shift.sql`（Day 20 日期平移，幂等） | 2026-10-07 |
+| 建表脚本 | `db/schema.sql`（Day 16 核心两表）+ `db/schema-2.sql`**（Day 18 幂等键列 `client_req_id` 与唯一索引 `checkins_uid_reqid_uniq`）+ `db/schema-3.sql`（Day 22 软删除标记列 `is_deleted`）+ `db/seed-shift.sql`（Day 20 日期平移，幂等） | 2026-10-09 |
 | 部署方式 | CloudBase CLI 3.8.5（`tcb`）；配置见 `cloudbaserc.example.json`（真实文件 `cloudbaserc.json` 含密钥、已被 .gitignore 排除） | 2026-10-03 |
 
 > ⚠️ **更正记录（Day 17）**：本表此前登记的「环境 ID = `habit-tracker-d3ghf0mjer76ffo02`」是**错的**，
@@ -851,4 +948,33 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 | 前端行为自检 | `node test-home.js` | ✅ **391/391**（原 374 + 新增 17 条：`?debug=1` 显隐、健康绿灯/红灯、真数据三行、写入走 POST 且带幂等键、离线兜底） |
 | 云函数行为自检 | `node cloudfunctions/api/selftest.js` | ✅ **162/162**（后端代码本轮零改动，仅作回归） |
 | 线上产物已更新 | 下载线上 `index.html` 比对 | ✅ 与本地一致（检查台相关标记 19 处）；用**线上那份**在本地跑真网络端到端：首页 6 条真待办 + 检查台绿灯 + 数据最后一天 = 今天（11/11 通过） |
+
+### 6.5 Day 22 验收记录（PATCH / DELETE 上线 + 软删除 + 前端接线）
+
+**这次动的是"接口能力"本身** —— 新增两条路由（`PATCH`、`DELETE`），并给已存在的两条读取接口加了"跳过已删除项"的语义。
+这是本项目**第一次改已有接口的行为**：响应形状、字段名、错误码一个都没动（属 §五 说的**兼容性变更**），
+所以只升了文档版本，不动信封。
+
+| 验收项 | 怎么验的 | 结果 |
+|---|---|---|
+| 建表脚本幂等 | 真库连跑两遍 `db/schema-3.sql` | ✅ 第一遍「`checkins.is_deleted` 列已就绪 = 1」「现有行全部为未删除 = 9」；第二遍 `AffectedRows = 0`，数据不动 |
+| `PATCH` 真上线且生效 | 公网 `PATCH /api/checkins/8` 改 `text` + `time` + `done` | ✅ `{"code":0,"message":"已更新","data":{"id":8,…,"text":"整理下周计划（Day 22 改过）","time":"21:30","done":true,"doneAt":1791552591198,…}}`；再 `GET` 读回，四项值全变（`text` / `time` 09:00→21:30 / `done` false→true / `doneAt` null→时间戳） |
+| `DELETE` 真上线且生效 | 公网 `DELETE /api/checkins/5`，再 `GET` 同一天 | ✅ `{"code":0,"message":"已删除","data":{"id":5}}`；同一天的 `GET` 从 6 条变 5 条，**该条不再返回** |
+| 软删除真的"没删掉" | 删完直接查库 | ✅ 该行仍在表里、`is_deleted = true`；随后一条 `UPDATE … SET is_deleted=false` 它就回到 `GET` 里 —— **删错了能找回** |
+| A5 服务端硬拦 | 公网 `PATCH` 一行"明天"的待办 `{"done":true}` | ✅ `{"code":409,"message":"这一天还没到，先别急着打勾","data":null}`，且没有任何写入请求发出 |
+| 防越权（改） | 库里造一行 `uid='other-user'` 的待办，公网 `PATCH` 它 | ✅ `{"code":403,"message":"无权修改这条待办","data":null}`；库里那一行**一个字节都没变** |
+| 防越权（删） | 同上，公网 `DELETE` 它 | ✅ `{"code":403,"message":"无权删除这条待办","data":null}`；该行 `is_deleted` 仍是 `false`（没被删掉） |
+| 参数校验 | 公网依次打：`/api/checkins/abc`、空请求体 `{}`、`{"quad":"q9"}`、不存在的 `999999` | ✅ 依次回 `400 待办 id 不合法`、`400 请至少指定一个要修改的字段（done / text / time / quad）`、`400 象限只能是 q1 / q2 / q3 / q4`、`404 这条待办不存在或已删除` |
+| HTTP 状态码约定未破 | 观察上面每一条的 `HTTP` 行 | ✅ **全部 200**（含 400/403/404/409）—— 与本契约 §1.2「HTTP 恒 200，业务结果看 code」一致 |
+| 读取接口回归 | `GET /api/checkins?limit=2` | ✅ `code=0 total=9 items=2`（分页与总数口径未变） |
+| 前端真的接了云 | 线上 `index.html` 跑真网络端到端（jsdom + 真 fetch） | ✅ 首页渲染 6 条真待办；点勾选 → 库内该条 `done=true`、页面 6→…；点删除 → 库内该条 `is_deleted=true`、页面卡片 6→5；线上产物含 `apiPatch` / `apiDelete` / `isCloudId` 三处新标记 |
+| 云函数行为自检 | `node cloudfunctions/api/selftest.js` | ✅ **225/225**（162 → 新增第 10 节 63 条：改与删的校验、三态、A5、软删除走 PATCH 而非 HTTP DELETE、读取过滤的该带与不该带） |
+| 前端行为自检 | `node test-home.js` | ✅ **410/410**（391 → 新增 19 条云分支：勾选/删除的请求与请求体、云端拒绝不改状态、断网回落与不误删、本机字符串 id 不发云请求） |
+| 验收后数据复原 | 全流程结束查库 | ✅ **9 行 / 今天 6 条 / 已删 0 / `mood=calm`**，与 Day 21 终态完全一致；两行临时测试数据（A5 行、越权行）已物理清理 |
+
+> **今天要掌握的问题：删除为什么比新增更容易出事？在哪加了确认？** —— 本项目的答案写在三个地方：
+> `db/schema-3.sql` 开头（为什么删除要软）、`index.js` 的 `locateOwnCheckin()`（为什么要"先按 id 查、再判归属"）、
+> 以及契约 §三 的**服务端判定顺序**（身份 → 校验 → 查行 404 → 归属 403 → 已删除 404 → A5 409）。
+> 一句话：**新增错了是"多了一条"，删除错了是"少了一条"** —— 前者可逆、后者不可逆，所以删除在
+> 交互层（confirm）、服务层（uid 限定）、存储层（不真删）各要一道确认。
 

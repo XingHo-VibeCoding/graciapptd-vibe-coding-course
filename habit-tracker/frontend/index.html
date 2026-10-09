@@ -1187,9 +1187,9 @@
   };
   const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
-  // ===== 云端接口客户端（Day 20 接线）=====
+  // ===== 云端接口客户端（Day 20 接线；Day 22 补齐改与删）=====
   // 为什么要有这一段：从 Day 20 起，页面的数据来源从"只有浏览器本机"变成"云端优先、本机兜底"。
-  // 铁律：前端所有网络请求**只走这里**（apiGet / apiPost），别处不许直接 fetch —— 
+  // 铁律：前端所有网络请求**只走这里**（apiGet / apiPost / apiPatch / apiDelete），别处不许直接 fetch ——
   //      跟"localStorage 只走 loadData/saveData"是同一条规矩，将来换地址/换后端只改这一段。
   const API_BASE = 'https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api';  // 见 api-contract.md §1.1
   const API_TIMEOUT = 5000;      // 毫秒。超过就当"云端联系不上"，回落到本机数据，不让页面干等
@@ -1223,6 +1223,13 @@
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
   });
+  // Day 22 新增：改（打勾/改内容）与删。两个都返回同一个信封，所以复用 apiFetch 的解析。
+  const apiPatch = (path, body) => apiFetch(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const apiDelete = (path) => apiFetch(path, { method: 'DELETE' });
   // 幂等键：标识"一次添加动作"（不是"一份内容"），语义见 api-contract.md §1.6。
   // 优先用浏览器自带的 uuid；老环境退回时间戳+随机数（同样满足 1~64 位字母数字短横线的要求）。
   const newReqId = () => (window.crypto && crypto.randomUUID)
@@ -1378,7 +1385,7 @@
     if (demoMode) { node.textContent = ''; return; }
     if (cloudState.mode === 'cloud') {
       node.textContent = '云端数据 · 更新于 ' + fmtCloudTime(cloudState.updatedAt || cloudState.at)
-                       + ' · 勾选/删除暂存本机';
+                       + ' · 移动/心情暂存本机';
     } else if (cloudState.mode === 'offline') {
       node.textContent = '云端暂时联系不上 · 当前显示本机数据';
     } else if (cloudState.mode === 'error') {
@@ -1582,30 +1589,71 @@
                             window.__TOAST_MS || 1800);
   };
 
-  const toggleTodo = (id) => {
-    if (demoMode || currentDate !== todayStr()) return;   // 只能对今天打勾（A5 数据层防线）
-    const todo = getTodos(currentDate).find(t => t.id === id);
-    if (todo) {
-      todo.done = !todo.done; saveData(data); renderAll();
-      // Day 11 反馈：只给刚点的卡片加 .just 触发动效（重渲染不会波及其他卡片）
-      const row = document.querySelector('.todo[data-id="' + id + '"]');
-      if (row && todo.done) row.classList.add('just');
-      // Toast 文案：完成显示累计数，恢复单独一句（连续操作时合并为一条，不叠放）
-      const done = getTodos(currentDate).filter(t => t.done).length;
-      showToast(todo.done ? '✓ 已完成 · 今天 ' + done + ' 件事'
-                           : '已恢复为未完成');
-    }
+  // 云端记录的 id 是数字；本机兜底那几条的 id 是字符串（'local-…' / 演示数据 'm-a'）。
+  // 这个判断是"这次操作走云端还是走本机"的唯一分流依据 ——
+  // 字符串 id 云端根本不认识，发出去只会得到 400，所以绝不能发。
+  const isCloudId = (id) => typeof id === 'number' && Number.isFinite(id);
+
+  // 勾选/取消后的界面反馈（两条分支共用）：只给刚点的卡片加 .just 动效 + 合并式 Toast
+  const paintToggle = (id, done) => {
+    const row = document.querySelector('.todo[data-id="' + id + '"]');
+    if (row && done) row.classList.add('just');      // Day 11 反馈：重渲染不会波及其他卡片
+    const n = getTodos(currentDate).filter(t => t.done).length;
+    showToast(done ? '✓ 已完成 · 今天 ' + n + ' 件事' : '已恢复为未完成');
   };
 
-  const deleteTodoAt = (date, id) => {
+  // Day 22：勾选改为"云端优先"（PATCH /api/checkins/:id），刷新后状态还在。
+  // 前端这道"只能对今天打勾"的拦截是**体验层**；真正的承诺由服务端兑现
+  // （给未来日期的待办打勾，服务端会回 409）—— 两层都要有，因为前端拦不住手写的请求。
+  const toggleTodo = async (id) => {
+    if (demoMode || currentDate !== todayStr()) return;   // 只能对今天打勾（A5 的第一道防线）
+    const todo = getTodos(currentDate).find(t => t.id === id);
+    if (!todo) return;
+    const next = !todo.done;
+
+    // ① 云端记录（数字 id）→ 真写进库
+    if (apiReady() && isCloudId(id)) {
+      const r = await apiPatch('/checkins/' + id, { done: next });
+      if (r.ok) {
+        todo.done = !!r.data.done;              // 以服务端返回的值为准（别自己猜）
+        saveData(data); renderAll(); paintToggle(id, todo.done);
+        return;
+      }
+      if (!r.offline) {                          // 云端明确拒绝（如 409 未来日期）→ 状态保持不变
+        showToast(r.message || '云端没有接受这次修改');
+        return;
+      }
+    }
+
+    // ② 本机记录 / 云端联系不上 → 本机切换（页面照常可用，刷新后以云端为准）
+    todo.done = next; saveData(data); renderAll(); paintToggle(id, todo.done);
+  };
+
+  // Day 22：删除改为"云端优先"（DELETE /api/checkins/:id；服务端做的是**软删除**，见契约 §1.7）。
+  // 删除比新增更需要小心，所以这里**刻意不做"乐观删除"**：云端联系不上时**不删本机数据**，
+  // 直接告诉用户"这条没能删掉"—— 免得页面上一时消失、刷新后又冒出来，让人以为数据丢了或删除失灵。
+  const deleteTodoAt = async (date, id) => {
     if (demoMode || !data) return;
     if (!confirm('确定删除这条待办吗？')) return;          // A4：删除必须先弹确认
+
+    if (apiReady() && isCloudId(id)) {
+      const r = await apiDelete('/checkins/' + id);
+      // 404 = 云端已经没有这条了（可能是别处删过 / 重复点了删除）→ 按"删掉了"处理，不报错
+      if (!r.ok && r.code !== 404) {
+        showToast(r.offline ? '云端暂时联系不上，这条先没删掉'
+                            : (r.message || '云端没有接受这次删除'));
+        return;
+      }
+    }
     data.todos[date] = getTodos(date).filter(t => t.id !== id);
     saveData(data); renderAll();
     showToast('已删除');
   };
 
   // ===== 移动待办（Day 13）：把一条待办挪到其他日期，完成后原地消失 + Toast =====
+  // Day 22 说明：**移动仍是本机行为** —— 契约里没有"改归属日期"的接口
+  // （PATCH /api/checkins/:id 明确不接 date，见 api-contract.md §三），所以它不接云。
+  // 这也是首页小字写"移动/心情暂存本机"的原因，不是漏接线。
   const moveTodoTo = (id, from, to) => {
     if (demoMode || !data) return false;
     const todo = getTodos(from).find(t => t.id === id);

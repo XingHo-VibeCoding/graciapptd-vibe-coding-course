@@ -1,8 +1,8 @@
 # 自律计划 · 部署手册（DEPLOY.md）
 
-- 版本：**v2.5（2026-10-08）** — 新增 §7.6「我的页 · 云端检查台」、§十二「把链接发给同伴」、§十三「最可能的卡点」；§六 补「部署前先跑 seed-shift」；§11.3 补「无 `*` 通配符」实测。v2.4（2026-10-07）新增 §十一「跨域（CORS）」：实测矩阵 + 诊断方法 + 免费版套餐限制；§六 补「前端改动后重新部署与缓存」；§七 加 Day 20 验证方法；§九 把"配置跨域"移出"本期不做"。v2.3（2026-10-05）§五 补「上传的是整个函数目录」；v2.2（2026-10-05）§7.4 补「⑤ 读回验证」；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
+- 版本：**v2.6（2026-10-09）** — §二 补 `db/schema-3.sql`（Day 22 软删除标记列）；新增 §7.7「Day 22 的两张截图照这里截」（PATCH 改前改后对比 + DELETE 后不再返回）；§十三 补三条卡点（软删除忘了过滤已删行 / 前端 id 类型混淆 / 改完忘了重新 deploy）。v2.5（2026-10-08）— 新增 §7.6「我的页 · 云端检查台」、§十二「把链接发给同伴」、§十三「最可能的卡点」；§六 补「部署前先跑 seed-shift」；§11.3 补「无 `*` 通配符」实测。v2.4（2026-10-07）新增 §十一「跨域（CORS）」：实测矩阵 + 诊断方法 + 免费版套餐限制；§六 补「前端改动后重新部署与缓存」；§七 加 Day 20 验证方法；§九 把"配置跨域"移出"本期不做"。v2.3（2026-10-05）§五 补「上传的是整个函数目录」；v2.2（2026-10-05）§7.4 补「⑤ 读回验证」；v2.1（Day 18）增加写入接口部署与验证；v2.0（Day 17）基于实测跑通重写；v1.0（Day 15）按旧版 CloudBase 写，多处与实际不符（见文末「v1.0 订正表」）。
 - 用途：把**云函数 `api`**、**数据库表**、**前端页面**推上公网的可复现步骤。以后每次重新部署照这份做。
-- 本版配套脚本：`db/schema.sql`、`db/schema-2.sql`（增量）、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
+- 本版配套脚本：`db/schema.sql`、`db/schema-2.sql`、`db/schema-3.sql`（增量）、`db/seed.sql`、`db/verify.sql`；云函数 `cloudfunctions/api/index.js`（零依赖）；部署配置模板 `cloudbaserc.example.json`。
 
 > **两条重要前提**
 > 1. 前端是 **vanilla 单文件 HTML（零构建）**（TECH_DESIGN §二）→ **没有 `npm run build`**，`frontend/` 里的东西就是最终产物。
@@ -47,6 +47,7 @@ tcb db execute --sql "$(cat habit-tracker/db/schema.sql)"   # 建两张核心表
 tcb db execute --sql "$(cat habit-tracker/db/seed.sql)"     # 种子数据（可重复执行，应自报 7 / 8）
 tcb db execute --sql "$(cat habit-tracker/db/verify.sql)"   # 6 段验证，最后一段应回 7 / 8
 tcb db execute --sql "$(cat habit-tracker/db/schema-2.sql)" # 增量：Day 18 幂等键列 + 唯一索引（可重复执行）
+tcb db execute --sql "$(cat habit-tracker/db/schema-3.sql)" # 增量：Day 22 软删除标记列 is_deleted（可重复执行）
 ```
 
 查表与结果（`--json` 才看得到行）：
@@ -359,13 +360,110 @@ https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/?debug=1#me
 tcb db execute --sql "DELETE FROM checkins WHERE text LIKE '检查台写入测试%'"
 ```
 
+### 7.7 改与删（Day 22 的两张截图照这里截）
+
+今天要回答的问题是"**删除为什么比新增更容易出事**"，所以两张图分别证明：**改真的生效**、**删真的生效**（而且没真删行）。
+
+**先准备**（`BASE` 与 `D` 后面几步都要用）：
+
+```bash
+BASE=https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api
+D=$(date +%F)      # 今天（本机时区即东八区，与页面口径一致）
+```
+
+**① 先看这一天有什么 —— 截图 1 的"改之前"**
+
+```bash
+curl -s "$BASE/checkins?date=$D"
+```
+
+**应看到**：当天全部待办（本项目种子是 6 条）。记下要改的那条的 `id`，以及它的 `text` / `time` / `done`。
+
+**② 改它 —— 截图 1 的"改的动作"（记得把 `8` 换成你自己的 id）**
+
+```bash
+curl -s -X PATCH "$BASE/checkins/8" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"整理下周计划（Day 22 改过）","time":"21:30","done":true}'
+```
+
+**应看到**：`{"code":0,"message":"已更新","data":{"id":8,…,"done":true,"doneAt":1791552591198,…}}`
+—— `code:0` 是成功，`data` 是**改完之后的整条**（用它就能直接对比，不用再猜）。
+
+**③ 再读同一天 —— 截图 1 的"改之后"**
+
+```bash
+curl -s "$BASE/checkins?date=$D"
+```
+
+**图里必须有改前/改后的值对比**（四项）：
+
+| 字段 | 改之前 | 改之后 |
+|---|---|---|
+| `text` | 整理下周计划 | 整理下周计划（Day 22 改过） |
+| `time` | `09:00` | `21:30` |
+| `done` | `false` | `true` |
+| `doneAt` | `null` | 一个毫秒时间戳 |
+
+> `doneAt` 是毫秒数，看不懂就转换一下：`date -d @$((1791552591198/1000))`。
+> **挑一条还没打勾的来改**：拿已完成的行做演示，`done` 会是 `true → true`，看着像没生效。
+
+**④ 删一条 —— 截图 2 的"删的动作"**
+
+```bash
+curl -s -X DELETE "$BASE/checkins/5" -H "Content-Type: application/json"
+```
+
+**应看到**：`{"code":0,"message":"已删除","data":{"id":5}}` —— 只回 `id`，不回整行（它已经"不存在"了）。
+
+**⑤ 再读同一天 —— 截图 2 的"删之后"**
+
+```bash
+curl -s "$BASE/checkins?date=$D"
+```
+
+**图里要能看出**：④ 那条的 `id` **已经不在返回里了**（当天从 6 条变 5 条）。
+
+**⑥ 顺手证明"软删除"（余力加练，建议一起截）**
+
+```bash
+# 它其实还在库里，只是被打了标记
+tcb db execute --json --sql "SELECT id, text, done, is_deleted FROM checkins WHERE id=5"
+
+# 想找回就改回来 —— 这就是"删错了还能找回"
+tcb db execute --sql "UPDATE checkins SET is_deleted=false WHERE id=5"
+curl -s "$BASE/checkins?date=$D"      # 它又回到列表里了
+```
+
+**错误路径（建议再截一两张，证明"该拦的拦住了"）**
+
+```bash
+# a) 给未来日期的待办打勾 → 409（PRD A5 硬规则，服务端拦）
+curl -s -X PATCH "$BASE/checkins/<明天的id>" -H "Content-Type: application/json" -d '{"done":true}'
+# b) id 不是数字 → 400
+curl -s -X PATCH "$BASE/checkins/abc" -H "Content-Type: application/json" -d '{"done":true}'
+# c) 一个字段都没给 → 400
+curl -s -X PATCH "$BASE/checkins/8" -H "Content-Type: application/json" -d '{}'
+# d) 删不存在的 id → 404
+curl -s -X DELETE "$BASE/checkins/999999"
+```
+
+> **也能让脚本代跑**：本机工作区里的 `scratch-day22-verify.js` 会把上面的流程跑一遍并打印成
+> **排好版的对比表**（改前/改后逐字段对照 + 错误路径逐条），截图比 curl 输出清楚：
+> ```bash
+> NODE_PATH=<工作区>/node_modules node scratch-day22-verify.js main
+> ```
+
+> ⚠️ **验完记得复原**：② 改过的字段、④ 删掉的那条都要还回去 ——
+> 否则第二天再看首页，示范数据就少了一条。复原语句见 ⑥ 与本文 §10 的排错对照表。
+
 ---
 
 ## 八、控制台手动路线（CLI 不可用时的备选）
 
-1. **建表**：环境 → 数据库 → PostgreSQL → SQL 编辑器，依次粘贴 `schema.sql` → `seed.sql` → `verify.sql` → `schema-2.sql`。
+1. **建表**：环境 → 数据库 → PostgreSQL → SQL 编辑器，依次粘贴 `schema.sql` → `seed.sql` → `verify.sql` → `schema-2.sql` → `schema-3.sql`（都是幂等的，顺序不要颠倒）。
 2. **API Key**：环境 → API Key → 新建，复制 token。
-3. **云函数**：云函数 → 新建（名称必须 `api`，运行时 Node.js 20）→ 粘贴 `cloudfunctions/api/index.js` → 保存并部署 →
+3. **云函数**：云函数 → 新建（名称必须 `api`，运行时 Node.js 20）→ 把 `cloudfunctions/api/` 里的 **两个代码文件都贴进去**（`index.js` 是路由层、`db.js` 是数据访问层，缺一个都跑不起来）→ 保存并部署 →
    在「函数配置 → 环境变量」里补上 §四 那三个变量（**这一步别忘，否则接口会回 500**）。
 4. **HTTP 访问**：HTTP 网关 → 路由管理 → 新建 → 关联资源选「云函数 / api」→ 域名选**默认域名** → 触发路径填 `/api`。
 5. **前端**：静态网站托管 → 文件管理 → 上传 `frontend/` 里的**内容**到根目录。
@@ -518,9 +616,9 @@ https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/?debug=1#me
 **发出去之前自己先过一遍（30 秒自检，三条都应通过）**：
 
 ```bash
-# ① 线上产物是新的（期望 ≥ 1；0 说明还没部署 / CDN 没刷新）
+# ① 线上产物是新的（期望 ≥ 2：检查台标记 + Day 22 的改/删出口；0 说明还没部署 / CDN 没刷新）
 curl -s -H "Cache-Control: no-cache" \
-  "https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/index.html" | grep -c "diag-card"
+  "https://habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com/index.html" | grep -cE "diag-card|const apiPatch"
 
 # ② 接口活着（期望 {"ok":true,"service":"Self discipline plan"}）
 curl -s "https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/health"
@@ -544,6 +642,9 @@ curl -s "https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api/chec
 | 7 | **把两个地址搞混** | 页面白屏、或返回 HTML 而不是 JSON | 前端是 `*.tcloudbaseapp.com`，接口是 `*.service.tcloudbase.com/api`。F12 Network 里看 Request URL 是不是 `/api/...` |
 | 8 | **写入被拒（409）** | `{"code":409,"message":"请勿重复提交…"}` | 这是**正常防护**。检查台的按钮每次都会生成新的幂等键，不会撞；手动 curl 复测时别复用同一个 `Idempotency-Key` |
 | 9 | **首次打开偶发「云端暂时联系不上」** | 页面正常打开，但显示的是本机数据、检查台红灯 | 云函数**冷启动**（1–3 秒）+ 前端 5 秒超时的组合，首次访问偶发触发（本轮验证实测遇到 1 次，**刷新一次即恢复**）。这也是"本机兜底"的设计目的：宁可先显示缓存，也不让页面卡住或白屏 |
+| 10 | **删掉的待办又冒出来了** | `DELETE` 回 `{"code":0,"message":"已删除"}`，但刷新后它还在列表里 | **九成是"软删除只做了一半"**：`DELETE` 把 `is_deleted` 置成了 `true`，但某个读取没带 `is_deleted = false` 条件。查法：`tcb db execute --json --sql "SELECT id, text, is_deleted FROM checkins WHERE id=<id>"` —— 若是 `true`，说明删除成功、是**读取漏过滤**。本项目为此把过滤条件抽成常量 `NOT_DELETED`（`db.js`），全文件搜一下就知道该带的地方有没有带 |
+| 11 | **勾选/删除点了没反应，或回 `400 待办 id 不合法`** | 页面点了，Toast 说云端没接受 | 前端按 **id 的类型**分流：云端记录的 id 是数字、本机兜底记录是 `'local-…'` 字符串（`isCloudId()`）。字符串 id 发到云端必然 400 —— 这是**设计如此**（本地记录云端不认识）。若整页的勾选都发不出请求，先确认线上是 Day 22 之后的版本（§十二 ①） |
+| 12 | **改/删成功了，但刷新后又变回去** | 操作当下生效，刷新恢复原样 | 与第 5 条同源：**线上那份前端还是旧版**（还走着"勾选/删除暂存本机"的老代码）。判据：页面标题下的小字写的是「云端数据 · 更新于 … · **移动/心情暂存本机**」（新版）还是「…**勾选/删除暂存本机**」（旧版）。重跑 `tcb hosting deploy habit-tracker/frontend` 再 `Ctrl + F5` |
 
 > **关于"构建报错"这类卡点**：本项目前端是**零依赖单文件**（没有 npm、没有打包器），云函数也是**零依赖**
 > （只用 Node 内置能力，`installDependency: false`）—— 所以**"构建/装包报错"这一整类问题在本项目不存在**。

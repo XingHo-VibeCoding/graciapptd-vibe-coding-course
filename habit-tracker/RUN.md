@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.12（2026-10-08 Day 21：周验收日——`WEEK3-ACCEPT.md` 改为**按 5 项产出逐项验收**（每项写明验证方法 + 实测输出，PASS/FAIL/未执行：6 / 0 / 2）、`DEMO.md` 扩为 **3–5 分钟五段**（含真实写入 + 刷新持久化、本周未完成项）；补 A54；本日零代码改动。v3.10 于 2026-10-08 Day 20 补：云端检查台上线）
+- 版本：v3.13（2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -12,18 +12,24 @@
 一个纯网页版的自律助手：时间轴待办 + 心情五选一 + 无压力思考 + 周月报。
 **前端无安装依赖**——它的数据来源在 Day 20 变成了 **云端优先、本机兜底**。
 **第 3 周起加了云端**：CloudBase 云函数 `api` + PostgreSQL 核心表，提供真库读写接口
-（Day 17 起：`GET /api/health`、`GET /api/day`、`GET /api/checkins`；Day 18 起：`POST /api/checkins`）。
+（Day 17 起：`GET /api/health`、`GET /api/day`、`GET /api/checkins`；Day 18 起：`POST /api/checkins`；
+**Day 22 起：`PATCH` / `DELETE /api/checkins/:id`** —— 到这天为止，`checkins` 上的**增删改查四类操作全部闭环**）。
 
-**Day 20 接线后的准确状态**：
+**Day 22 接线后的准确状态**：
 
 | 能力 | 走哪里 | 说明 |
 |---|---|---|
 | 打开首页、切换日期看到的待办与心情 | ☁️ **云端真库**（`GET /api/day`） | 标题下那行小字会写「云端数据 · 更新于 …」 |
 | 添加待办 | ☁️ **云端真库**（`POST /api/checkins`） | 真写进数据库，刷新后还在；带客户端幂等键防重复 |
-| 勾选 / 取消勾选、删除、移动、选心情 | 💻 **仍是本机**（localStorage） | 这几项的后端接口还没写（`PATCH`/`DELETE`/`PUT /api/days/mood` 见契约 §四），所以刷新后会被云端数据覆盖 |
+| **勾选 / 取消勾选** | ☁️ **云端真库**（`PATCH /api/checkins/:id`，Day 22） | 刷新后状态还在；给**未来日期**打勾会被服务端拦（409） |
+| **删除** | ☁️ **云端真库**（`DELETE /api/checkins/:id`，Day 22） | 服务端做的是**软删除**（只打标记、行还在库里），界面效果与真删一致 |
+| 移动、选心情 | 💻 **仍是本机**（localStorage） | 这两项的后端接口还没写（`PUT /api/days/mood` 见契约 §四；"改归属日期"契约里没定义），刷新后会被云端数据覆盖 |
 | 思考页想法、专注记录、纪念日、肯定语、主题 | 💻 **仍是本机** | 对应接口未实现 |
 | 「我的」页 · **云端检查台**（Day 20 补） | ☁️ 云端真库（`GET /api/health` + `GET /api/checkins`） | 只读展示 + 一个写入测试入口（默认隐藏，`?debug=1` 才出现） |
 | 检查台的「写入一条测试数据」 | ☁️ 云端真库（`POST /api/checkins`） | 每个浏览器当天最多 3 条，防刷库 |
+
+> 页面上的小字提示就是这个表的口径：云端可用时写「云端数据 · 更新于 … · **移动/心情暂存本机**」，
+> 断网时写「云端暂时联系不上 · 当前显示本机数据」—— 让人一眼看出"哪些改动是存下来的、哪些不是"。
 
 > 网络不通 / 接口挂了时，页面**照常打开**（用本机数据），只是标题下的小字会变成「云端暂时联系不上」——
 > 这就是"本机兜底"的意思，不会白屏。
@@ -156,6 +162,15 @@ http://localhost:8765/habit-tracker/frontend/index.html
 
 > 报告（F4）还没做——按 R7 规则一天一块。思考（F3）卡片流 MVP（Day 14）与 AI 洞察（Day 15）已完成；应用页（F6）骨架与专注计时（Day 18）已完成；情绪表情已图片化（Day 19）；纪念&倒数日（Day 21）、肯定语（Day 22）、随即话题（精进 7）已开放；记账已按用户要求移除（2026-09-27）；剩小组件待做。
 
+| A55 改与删上线（PATCH / DELETE） | 终端执行（改与删不能用地址栏测）：<br>`curl -s -X PATCH "$BASE/checkins/<id>" -H "Content-Type: application/json" -d '{"text":"改过的内容","time":"21:30","done":true}'`<br>`curl -s -X DELETE "$BASE/checkins/<id>"` | ① PATCH 回 `{"code":0,"message":"已更新","data":{改完的完整对象}}`，再 `GET` 读回能看到 `text`/`time`/`done`/`doneAt` **四项都变了**；② DELETE 回 `{"code":0,"message":"已删除","data":{"id":…}}`，再 `GET` 同一天**该条不再返回**（Day 22） |
+| A55b 软删除（删错了能找回） | 删完后查库 + 改回来 | ① `SELECT id, is_deleted FROM checkins WHERE id=<id>` → `is_deleted = true`（**行还在库里，没真删**）；② `UPDATE checkins SET is_deleted=false WHERE id=<id>` 之后，`GET` 里**它又回来了**（Day 22） |
+| A55c A5 服务端硬拦 | `curl -s -X PATCH "$BASE/checkins/<明天那条的id>" -H "Content-Type: application/json" -d '{"done":true}'` | 回 `{"code":409,"message":"这一天还没到，先别急着打勾","data":null}`，且**库里没有任何变化** —— 前端禁用圆圈只是体验层，这里才是承诺（Day 22） |
+| A55d 防越权（改 / 删都拦） | 库里造一行别人的待办，`PATCH` / `DELETE` 它 | 回 `{"code":403,"message":"无权修改这条待办"}` / `{"code":403,"message":"无权删除这条待办"}`，且**那行一个字节都没动**（Day 22） |
+| A55e 参数校验与错误码 | 依次打 `/api/checkins/abc`、空 body `{}`、`{"quad":"q9"}`、不存在的 id | 依次回 `400 待办 id 不合法` / `400 请至少指定一个要修改的字段（done / text / time / quad）` / `400 象限只能是 q1 / q2 / q3 / q4` / `404 这条待办不存在或已删除`；**HTTP 一律 200**（业务结果看 `code`，契约 §1.2）（Day 22） |
+| A55f 前端勾选/删除真的上云 | 打开线上首页，勾一条待办、再删一条 | ① 勾选后刷新，**状态还在**（`PATCH` 写进库了）；② 删除后刷新，**它不再出现**；③ 页面小字写的是「移动/心情暂存本机」（不再是"勾选/删除暂存本机"）（Day 22） |
+| A55g 云函数自检 | `node habit-tracker/cloudfunctions/api/selftest.js` | **225/225** 通过（162 → 新增第 10 节 63 条：改与删的校验、404/403/已删除三态、A5 409、软删除走 PATCH 而不是 HTTP DELETE、读取过滤该带与不该带 `is_deleted` 的区分）（Day 22） |
+| A55h 前端自检 | `node test-home.js`（工作区里那份） | **410/410** 通过（391 → 新增 19 条云分支：勾选/删除的 URL 与请求体、云端拒绝时状态不变、断网回落本机、断网删除不误删、本机字符串 id 不发云请求）（Day 22） |
+
 ## 四、常见问题（FAQ）
 
 | 症状 | 原因 | 解法 |
@@ -166,21 +181,24 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | 想清空所有数据重来 | 数据在 localStorage 里 | 浏览器按 F12 → Application（应用）→ Local Storage → 删除 `habit-tracker-v1` |
 | 改了 `frontend/index.html` 但线上没变 | 忘了重新部署，或 CDN 缓存 | 先 `tcb hosting deploy habit-tracker/frontend`，再 `Ctrl + F5` 强刷 |
 | 页面数据比数据库旧 | 云端那次请求失败，回落到了本机缓存 | 看标题下小字写的是不是「云端暂时联系不上」；是的话检查网络与接口地址 |
-| 勾选了待办、刷新又变回去了 | **预期行为**：勾选/删除还是本机操作，云端没有对应接口 | 说明见本文 §一 的表格（`PATCH`/`DELETE` 接口实现后才上云） |
+| 勾选了待办、刷新又变回去了 | （Day 22 起）勾选已经上云，正常不会发生 —— 出现多半是**线上还是旧版前端** | 看标题下小字写的是「**勾选/删除暂存本机**」还是「**移动/心情暂存本机**」：写前者就是旧版，重跑 `tcb hosting deploy habit-tracker/frontend` 再 `Ctrl + F5`。若小字已是新版，检查勾选时是不是断网了（断网时勾选回落本机，会提示"云端暂时联系不上"） |
+| 删掉的待办刷新后又出现了 | 服务端的软删除**只做了一半**：行被标记了，但某个读取漏了过滤 | `tcb db execute --json --sql "SELECT id, text, is_deleted FROM checkins WHERE id=<id>"`：若是 `true`，说明删除成功、是读取没带 `is_deleted = false`。本项目把这个条件抽成了 `db.js` 里的常量 `NOT_DELETED`，搜一下就排查完 |
+| 点勾选/删除提示「云端没有接受这次删除（400 待办 id 不合法）」 | 把**本机的临时记录**（id 形如 `local-…`）发到了云端 | 正常分流逻辑不会这样（前端按 id 类型判断）。若真的出现，说明这条记录的 id 被写成了数字却不是云端 id —— 看 `data.todos` 里那条的内容，重开页面让云端数据覆盖一次 |
+| 断网时点了删除没反应 | **设计如此**：删除是破坏性操作，不做"乐观删除" | 断网时页面会提示「云端暂时联系不上，这条先没删掉」，本机数据**故意不动** —— 免得一时消失、联网后又冒出来。联网后重试即可 |
 | 页面能打开，但「今日待做」是空的、检查台显示「今天打卡项 0 条」 | **种子数据的日期过期了**：它锚定在"跑 seed-shift 那天"，隔天就和"今天"脱节 | 在仓库根目录跑 `tcb db execute --sql "$(cat habit-tracker/db/seed-shift.sql)"`（幂等），再刷新页面 |
 
 ## 五、代码去哪看
 
-**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 3280 行）。
-结构分五段，从上到下：CSS 样式 → HTML 骨架 → **存储层（`loadData`/`saveData`）+ 云端接口客户端（`apiGet`/`apiPost`/`apiHealth`）** → 状态与渲染 → 事件绑定。
-找任何功能先看注释里的 `Day 8` / `F1` / `Day 20` 标记，和 PRD 的编号一一对应。
+**前端**：全部代码在一个文件里 —— `habit-tracker/frontend/index.html`（约 3330 行）。
+结构分五段，从上到下：CSS 样式 → HTML 骨架 → **存储层（`loadData`/`saveData`）+ 云端接口客户端（`apiGet`/`apiPost`/`apiPatch`/`apiDelete`/`apiHealth`）** → 状态与渲染 → 事件绑定。
+找任何功能先看注释里的 `Day 8` / `F1` / `Day 20` / `Day 22` 标记，和 PRD 的编号一一对应。
 
 **两条"只走一个出口"的铁律**（将来换地址 / 换后端 / 换存储，只改这两处）：
 
 | 出口 | 管什么 | 别处不许 |
 |---|---|---|
 | `loadData()` / `saveData()` | 本机 localStorage 的全部读写 | 直接写 `localStorage.getItem` |
-| `apiGet()` / `apiPost()` / `apiHealth()` | 发往云端的全部网络请求（含超时、统一信封解析、断网判定） | 直接写 `fetch(...)` |
+| `apiGet()` / `apiPost()` / `apiPatch()` / `apiDelete()` / `apiHealth()` | 发往云端的全部网络请求（含超时、统一信封解析、断网判定） | 直接写 `fetch(...)` |
 
 > `apiHealth()` 是 Day 20 补单独加的：`/api/health` 是契约里**唯一的扁平响应**接口（回 `{ok,service}` 而不是 `{code,message,data}` 信封），
 > 套不进 `apiGet` 的解析逻辑，所以给它单独一个函数 —— 但仍然守"只走一个出口"的规矩。
@@ -193,9 +211,10 @@ http://localhost:8765/habit-tracker/frontend/index.html
 
 | 文件 | 属于哪一层 | 管什么 |
 |---|---|---|
-| `habit-tracker/cloudfunctions/api/index.js` | 路由层 | HTTP 解析（`pickXxx`）、参数校验、业务规则（幂等预检 / 排序位 / 写后读回）、路由表 |
-| `habit-tracker/cloudfunctions/api/db.js` | 数据访问层 | 连接配置、PostgREST 查询拼装、`fetch`、错误码识别、行映射（Day 19 拆出） |
-| `habit-tracker/cloudfunctions/api/selftest.js` | 测试 | 本地自测：不联网、stub 掉 `fetch`（162 条断言） |
+| `habit-tracker/cloudfunctions/api/index.js` | 路由层 | HTTP 解析（`pickXxx`）、参数校验、业务规则（幂等预检 / 排序位 / 写后读回 / 改删前的归属判定 `locateOwnCheckin`）、路由表（固定路径 `routes` + 带 id 的 `idRoutes`） |
+| `habit-tracker/cloudfunctions/api/db.js` | 数据访问层 | 连接配置、PostgREST 查询拼装、`fetch`、错误码识别、行映射、软删除与 `NOT_DELETED` 过滤（Day 19 拆出，Day 22 增补 `update` 管道） |
+| `habit-tracker/cloudfunctions/api/selftest.js` | 测试 | 本地自测：不联网、stub 掉 `fetch`（225 条断言） |
+| `habit-tracker/db/schema.sql` / `schema-2.sql` / `schema-3.sql` | 建表脚本 | Day 16 两张核心表 / Day 18 幂等键列 + 唯一索引 / Day 22 软删除标记列 |
 
 接口的路径与字段以 `habit-tracker/api-contract.md` 为准；部署步骤看 `habit-tracker/DEPLOY.md`；数据库脚本在 `habit-tracker/db/`。
 **验收与演示**（Day 21 起）：第 3 周的逐项验收表在 `habit-tracker/WEEK3-ACCEPT.md`（同伴交叉验证的说明与回填区也在里面）；要给别人演示这个项目时，照 `habit-tracker/DEMO.md` 的提纲和动作单讲（3 分钟版，已走通过一遍）。

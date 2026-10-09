@@ -590,8 +590,9 @@ const writeResponder = (opt) => {
   eq('数据访问层对外暴露的函数名单',
      Object.keys(db).sort().join(','),
      ['createCheckin', 'dbConfig', 'existsCheckinWithReqId', 'findCheckinByContent',
-      'findCheckinByReqId', 'findLastSort', 'findPlanDay', 'insert', 'isDuplicateError',
-      'listCheckins', 'listCheckinsByDay', 'mapCheckin', 'mapPlanDay', 'pickTotal', 'select']
+      'findCheckinByReqId', 'findCheckinRowById', 'findLastSort', 'findPlanDay', 'insert',
+      'isDuplicateError', 'listCheckins', 'listCheckinsByDay', 'mapCheckin', 'mapPlanDay',
+      'pickTotal', 'select', 'softDeleteCheckin', 'update', 'updateCheckin']
        .sort().join(','));
 
   // —— 9.3 数据访问层能脱离路由独立工作（这才是"拆干净了"的证明）——
@@ -676,6 +677,242 @@ const writeResponder = (opt) => {
      db.isDuplicateError(dupErr) === true && dupErr.pgCode === '23505');
   ok('isDuplicateError 不把别的数据库错误当重复',
      db.isDuplicateError({ pgCode: '42601' }) === false && db.isDuplicateError(null) === false);
+
+  // =========================================================================
+  // 十、改与删（Day 22：PATCH / DELETE + 软删除）
+  // =========================================================================
+  // 这一节的假数据库要同时应付三种请求，所以按「方法」分开返回：
+  //   GET    → 路由层用来"查这一行是谁的、删过没"（findCheckinRowById）
+  //   PATCH  → 路由层用来改（updateCheckin）或软删除（softDeleteCheckin）
+  //   DELETE → **本项目不该出现**：出现就说明软删除被写成了真删，测试会当场失败
+  const OWN_ROW = { id: 101, uid: 'seed-demo-user', date: '2026-10-01', is_deleted: false };
+  const PATCHED_ROW = {
+    id: 101, date: '2026-10-01', text: '晨跑 30 分钟', time: '07:30', quad: 'q2',
+    done: true, done_at: '2026-10-09T02:00:00+00:00', sort: 0,
+  };
+
+  /** 明天（按东八区算，和 todayLocal 同一套口径）：A5 测试用 */
+  const plusDays = (ds, n) => {
+    const [y, m, d] = ds.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+  };
+  const TODAY = api.todayLocal();
+  const TOMORROW = plusDays(TODAY, 1);
+
+  // —— 10.1 路径参数解析（:id 是这一节新增的"路由能力"）——
+  eq('parseId：正常数字转成 number', api.parseId('13'), 13);
+  eq('parseId：0 不合法（id 从 1 开始）', api.parseId('0'), null);
+  eq('parseId：非数字不合法', api.parseId('abc'), null);
+  eq('parseId：小数不合法', api.parseId('1.5'), null);
+  eq('parseId：空值不合法', api.parseId(undefined), null);
+
+  // —— 10.2 带参数路由：能命中，方法/路径不对要 404，id 不合法要 400 ——
+  installFakeFetch();
+  responder = () => ({ rows: [OWN_ROW] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  ok('PATCH /api/checkins/:id 命中路由（不是 404）', r.code !== 404, JSON.stringify(r));
+
+  installFakeFetch();
+  responder = () => ({ rows: [OWN_ROW] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/checkins/101' });
+  ok('DELETE /api/checkins/:id 命中路由（不是 404）', r.code !== 404, JSON.stringify(r));
+
+  r = await call({ httpMethod: 'PUT', path: '/api/checkins/101' });
+  eq('没实现的方法：仍回 404（不悄悄当成别的接口）', r.code, 404);
+  ok('404 的可用路由里带出带参数的接口',
+     r.data.availableRoutes.indexOf('PATCH /api/checkins/:id') > -1 &&
+     r.data.availableRoutes.indexOf('DELETE /api/checkins/:id') > -1,
+     JSON.stringify(r.data.availableRoutes));
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/abc', body: { done: true } });
+  eq('id 不是数字：回 400（不是 404）', r.code, 400);
+  eq('id 不是数字：提示"待办 id 不合法"', r.message, '待办 id 不合法');
+  eq('id 不合法时一个字都不查库', captured.length, 0);
+
+  // —— 10.3 PATCH 的字段校验：错就早退，绝不写库 ——
+  const patchChecks = [
+    [{},                                 '一个字段都没给', '请至少指定一个要修改的字段（done / text / time / quad）'],
+    [{ done: 'yes' },                    'done 不是布尔',  'done 只能是 true 或 false'],
+    [{ text: '   ' },                    'text 全是空白',  '内容不能为空，且不超过 60 字'],
+    [{ text: 123 },                      'text 不是字符串','内容不能为空，且不超过 60 字'],
+    [{ time: '9:00' },                   'time 不是 HH:mm','时间格式不对，应为 HH:mm（24 小时制）'],
+    [{ quad: 'q9' },                     'quad 不在枚举',  '象限只能是 q1 / q2 / q3 / q4'],
+  ];
+  let idx = 0;
+  for (const [body, why, msg] of patchChecks) {
+    installFakeFetch();
+    responder = () => ({ rows: [OWN_ROW] });
+    r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: body });
+    eq('PATCH 校验 · ' + why + ' → 400', [r.code, r.message], [400, msg]);
+    eq('PATCH 校验 · ' + why + ' → 不写库', captured.length, 0);
+    idx++;
+  }
+  ok('PATCH 字段校验覆盖了 ' + idx + ' 种非法输入', idx === patchChecks.length);
+
+  installFakeFetch();
+  responder = () => ({ rows: [OWN_ROW] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: 'not-json{' });
+  eq('PATCH 请求体不是合法 JSON → 400', [r.code, r.message], [400, '请求体不是合法的 JSON']);
+
+  installFakeFetch();
+  responder = () => ({ rows: [OWN_ROW] });
+  delete process.env.DEMO_UID;
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  eq('PATCH 拿不到身份 → 401', r.code, 401);
+  process.env.DEMO_UID = 'seed-demo-user';
+
+  // —— 10.4 PATCH 正常路径：只改传了的字段，done 与 done_at 一起改 ——
+  installFakeFetch();
+  responder = (u, table, init) =>
+    (String(init.method).toUpperCase() === 'PATCH' ? { rows: [PATCHED_ROW] } : { rows: [OWN_ROW] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  eq('PATCH 成功：走信封 + 文案"已更新"', [r.code, r.message], [0, '已更新']);
+  eq('PATCH 成功后回传改完的完整对象（字段与 POST 同形状）', r.data, {
+    id: 101, date: '2026-10-01', text: '晨跑 30 分钟', time: '07:30', quad: 'q2',
+    done: true, doneAt: Date.parse(PATCHED_ROW.done_at), sort: 0,
+  });
+  eq('PATCH 前先按 id 查了这一行（查的是 id 列）', paramsOf(0).id, 'eq.101');
+  eq('查这一行时**不带 uid 条件**（否则越权尝试永远只能得到 404）',
+     paramsOf(0).uid, undefined);
+  eq('PATCH 请求打在 /api/checkins 上（不是别的路径）', captured[1].url.indexOf('/checkins') > -1, true);
+  eq('PATCH 的筛选条件带 uid（只改自己的数据）',
+     [paramsOf(1).id, paramsOf(1).uid], ['eq.101', 'eq.seed-demo-user']);
+  ok('PATCH 的写入体只带 done 与 done_at（没传的字段一个字都不碰）',
+     JSON.stringify(Object.keys(bodyOf(1)).sort()) === JSON.stringify(['done', 'done_at']),
+     JSON.stringify(bodyOf(1)));
+  eq('打勾时写 done=true', bodyOf(1).done, true);
+  ok('打勾时同时写 done_at（数据库 CHECK 约束要求两者一致）',
+     typeof bodyOf(1).done_at === 'string' && bodyOf(1).done_at.length > 10, JSON.stringify(bodyOf(1)));
+
+  installFakeFetch();
+  responder = (u, table, init) =>
+    (String(init.method).toUpperCase() === 'PATCH' ? { rows: [PATCHED_ROW] } : { rows: [OWN_ROW] });
+  await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: false } });
+  eq('取消打勾时把 done_at 写成 null（不能只改 done）', [bodyOf(1).done, bodyOf(1).done_at], [false, null]);
+
+  installFakeFetch();
+  responder = (u, table, init) =>
+    (String(init.method).toUpperCase() === 'PATCH' ? { rows: [PATCHED_ROW] } : { rows: [OWN_ROW] });
+  await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { time: null, quad: 'q3', text: ' 改过的内容 ' } });
+  eq('传 null 是"清空"、传字符串是"改值"、内容去了首尾空白',
+     [bodyOf(1).time, bodyOf(1).quad, bodyOf(1).text], [null, 'q3', '改过的内容']);
+
+  // —— 10.5 404 / 403 / 已删除：三种"不能动"要分得清 ——
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/999', body: { done: true } });
+  eq('PATCH 不存在的 id → 404', [r.code, r.message], [404, '这条待办不存在或已删除']);
+  eq('PATCH 不存在时没有任何写入请求', captured.length, 1);
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ id: 101, uid: 'someone-else', date: '2026-10-01', is_deleted: false }] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  eq('PATCH 别人的数据 → 403（而不是含糊的 404）', [r.code, r.message], [403, '无权修改这条待办']);
+  eq('PATCH 别人的数据：一个字节都没往库里写', captured.length, 1);
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ id: 101, uid: 'seed-demo-user', date: '2026-10-01', is_deleted: true }] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  eq('PATCH 已软删除的那条 → 404（对外不区分"没这条"和"删过了"）', r.code, 404);
+
+  // —— 10.6 A5：给未来日期的待办打勾，服务端必须拦（409）——
+  installFakeFetch();
+  responder = () => ({ rows: [{ id: 101, uid: 'seed-demo-user', date: TOMORROW, is_deleted: false }] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  eq('给明天打勾 → 409 + 中文原因', [r.code, r.message], [409, '这一天还没到，先别急着打勾']);
+  eq('被 A5 拦下时没有任何写入请求', captured.length, 1);
+
+  installFakeFetch();
+  responder = (u, table, init) =>
+    (String(init.method).toUpperCase() === 'PATCH' ? { rows: [PATCHED_ROW] } : { rows: [{ id: 101, uid: 'seed-demo-user', date: TOMORROW, is_deleted: false }] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: false } });
+  eq('明天的待办"取消打勾"不拦（A5 只拦提前打勾）', r.code, 0);
+
+  installFakeFetch();
+  responder = (u, table, init) =>
+    (String(init.method).toUpperCase() === 'PATCH' ? { rows: [PATCHED_ROW] } : { rows: [{ id: 101, uid: 'seed-demo-user', date: TODAY, is_deleted: false }] });
+  r = await call({ httpMethod: 'PATCH', path: '/api/checkins/101', body: { done: true } });
+  eq('给今天打勾：正常放行', r.code, 0);
+
+  // —— 10.7 DELETE：是"打标记"，不是"真删" ——
+  installFakeFetch();
+  responder = (u, table, init) =>
+    (String(init.method).toUpperCase() === 'PATCH' ? { rows: [{ id: 101 }] } : { rows: [OWN_ROW] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/checkins/101' });
+  eq('DELETE 成功：回 id（不回整行——它已经"不存在"了）',
+     [r.code, r.message, JSON.stringify(r.data)], [0, '已删除', '{"id":101}']);
+  eq('DELETE 只发了两条请求：先查行、再改行', captured.length, 2);
+  eq('软删除用的是 PATCH 方法（**不是** HTTP DELETE）', captured[1].method, 'PATCH');
+  eq('软删除的筛选条件带 uid + 只挑没删过的行',
+     [paramsOf(1).uid, paramsOf(1).is_deleted], ['eq.seed-demo-user', 'is.false']);
+  eq('软删除写的是 is_deleted = true（物理行留在库里）', bodyOf(1), { is_deleted: true });
+  ok('整个过程没有发出任何 HTTP DELETE（真删就从这里漏出去了）',
+     captured.every((c) => c.method !== 'DELETE'), JSON.stringify(captured.map((c) => c.method)));
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ id: 101, uid: 'someone-else', date: '2026-10-01', is_deleted: false }] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/checkins/101' });
+  eq('删别人的数据 → 403（删除比新增更危险，这道防线尤其不能省）',
+     [r.code, r.message], [403, '无权删除这条待办']);
+  eq('删别人的数据：一个字节都没写', captured.length, 1);
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ id: 101, uid: 'seed-demo-user', date: '2026-10-01', is_deleted: true }] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/checkins/101' });
+  eq('重复删除同一条 → 404（前端应把它当"已经没了"，不是错误）', r.code, 404);
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/checkins/404' });
+  eq('删不存在的 id → 404', r.code, 404);
+
+  // —— 10.8 读取接口必须跳过已删除（软删除的连带影响，最容易漏的一处）——
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  await db.listCheckinsByDay('seed-demo-user', '2026-10-01');
+  eq('listCheckinsByDay 带上了 is_deleted = false 条件', paramsOf(0).is_deleted, 'is.false');
+
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  await db.listCheckins('seed-demo-user', { date: '2026-10-01', limit: 20 });
+  eq('listCheckins 带上了 is_deleted = false 条件', paramsOf(0).is_deleted, 'is.false');
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ sort: 3 }], total: 1 });
+  await db.findLastSort('seed-demo-user', '2026-10-01');
+  eq('findLastSort **刻意不带** is_deleted 条件（避免新条目复用已删条目的排序位）',
+     paramsOf(0).is_deleted, undefined);
+
+  installFakeFetch();
+  responder = () => ({ rows: [], total: 0 });
+  await db.existsCheckinWithReqId('seed-demo-user', 'req-1');
+  eq('幂等预检**刻意不带** is_deleted（要和数据库唯一索引覆盖的范围一致）',
+     paramsOf(0).is_deleted, undefined);
+
+  // —— 10.9 通用管道 update：拒绝"无条件改全表" ——
+  installFakeFetch();
+  let noWhereErr = null;
+  try {
+    await db.update('checkins', {}, { is_deleted: true });
+  } catch (e) {
+    noWhereErr = e;
+  }
+  ok('update 拒绝无条件修改（没有筛选条件就抛错，防止误改全表）',
+     !!noWhereErr && noWhereErr.message.indexOf('筛选条件') > -1,
+     noWhereErr && noWhereErr.message);
+
+  installFakeFetch();
+  responder = () => ({ status: 400, body: { code: '23514', message: 'check constraint violated' } });
+  let checkErr = null;
+  try {
+    await db.updateCheckin('seed-demo-user', 101, { done: true });
+  } catch (e) {
+    checkErr = e;
+  }
+  ok('update 遇到 CHECK 约束冲突会把 SQLSTATE 带回来（不是静默成功）',
+     !!checkErr && checkErr.pgCode === '23514', checkErr && checkErr.pgCode);
 
   global.fetch = realFetch;
   console.log = realLog;

@@ -1,5 +1,5 @@
 /**
- * 自律计划 · 数据访问层（db.js）—— Day 19 从 index.js 拆出来
+ * 自律计划 · 数据访问层（db.js）—— Day 19 从 index.js 拆出来；Day 22 增补 update 管道与软删除
  * ---------------------------------------------------------------------------
  * 【这一层是什么】整个云函数里**唯一知道"数据库长什么样、怎么读写"的文件**：
  *   · 连接配置（函数环境变量 → REST 基址）
@@ -28,10 +28,17 @@
  *        findPlanDay / listCheckinsByDay / listCheckins
  *        existsCheckinWithReqId / findCheckinByReqId / findCheckinByContent
  *        findLastSort / createCheckin
+ *        ★ Day 22：findCheckinRowById / updateCheckin / softDeleteCheckin
  *   ② 通用管道（将来加新表时复用）
- *        select / insert
+ *        select / insert / ★ Day 22：update
  *   ③ 小工具（自测与排查用）
  *        mapPlanDay / mapCheckin / isDuplicateError / dbConfig / pickTotal
+ *
+ * 【Day 22 的两个要点】
+ *   · `update()` = PostgREST 的 PATCH：只改传进来的那几列，没传的列一动不动。
+ *   · **软删除**：`softDeleteCheckin()` 不是一个"DELETE 语句"，而是 `update({ is_deleted: true })`。
+ *     删除在本项目里是"打标记"，不是"抹掉行"——为什么这么设计见 api-contract.md §1.7 与 db/schema-3.sql。
+ *     连带后果：所有**面向用户的读取**都要带上 `is_deleted = false`，否则删掉的东西还会冒出来。
  */
 
 'use strict';
@@ -184,6 +191,57 @@ const insert = async (table, row) => {
   return Array.isArray(body) && body.length ? body[0] : null;
 };
 
+/**
+ * 改一张表里符合条件的行（PostgREST 的 PATCH 语义）—— Day 22 新增。
+ *   · `query`：筛选条件（**一定要带 uid**，删除/修改的防越权全靠它）
+ *   · `patch`：要改的列（键名用**数据库列名** snake_case）；**没出现在这里的列不会被碰**
+ *   · Prefer: return=representation —— 让数据库把改完的整行回传，
+ *     这样响应里能直接给出"改之后的值"，不用再查一次（也是"改完读回确认"这一步的替代）
+ *
+ * ⚠️ 为什么不做"先查再改"的两步式：两步之间别的请求可能插进来（并发），
+ *    而 PATCH 的筛选条件本身就是原子生效的 —— 把条件写进语句里，比先查后改更安全。
+ *
+ * 返回：改完后的那些行（数组）；一行都没匹配到时返回 **空数组**（不是错误，
+ *       调用处要自己判断"是不是要改的那条不存在/不是自己的"）。
+ * 失败时抛的错误对象上带 `pgCode`（PostgreSQL SQLSTATE，如 '23514' 违反 CHECK 约束）。
+ */
+const update = async (table, query, patch) => {
+  const { apiKey, base } = connection();
+
+  const search = buildSearch(query);
+  if (!search.toString()) {
+    throw new Error('修改数据必须带筛选条件（拒绝无条件 UPDATE）');
+  }
+
+  const res = await fetch(base + '/' + table + '?' + search.toString(), {
+    method: 'PATCH',
+    headers: {
+      Authorization: 'Bearer ' + apiKey,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Prefer: 'return=representation',
+    },
+    body: JSON.stringify(patch),
+  });
+
+  const text = await res.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch (e) {
+    body = null; // 失败响应也可能不是 JSON，下面统一按状态码处理
+  }
+
+  if (!res.ok) {
+    const detail = body && (body.message || body.details || body.error);
+    const err = new Error('数据库修改失败（HTTP ' + res.status + '）：' + (detail || String(text).slice(0, 200)));
+    err.pgCode = body && body.code ? String(body.code) : '';
+    throw err;
+  }
+
+  return Array.isArray(body) ? body : [];
+};
+
 // ===========================================================================
 // 三、行 → 契约形状的映射（数据库 snake_case → 契约 camelCase）
 // ===========================================================================
@@ -220,6 +278,18 @@ const mapCheckin = (r) => ({
 /** 取列清单（放这里而不是路由层：「这张表有哪些列」是数据库知识） */
 const CHECKIN_COLS = 'id,date,text,time,quad,done,done_at,sort';
 const PLANDAY_COLS = 'date,mood,created_at,updated_at';
+/**
+ * Day 22：查"这一行是谁的、删过没"时要用的列。
+ * 比 CHECKIN_COLS 多了 `uid` 与 `is_deleted` —— 这两列**只给服务端判断用**，
+ * 绝不能出现在契约响应里（`mapCheckin` 的产出里就没有它们，前端永远看不到 uid）。
+ */
+const CHECKIN_OWNER_COLS = 'id,uid,date,is_deleted';
+
+/**
+ * 软删除的过滤条件（Day 22）：面向用户的读取一律带上它。
+ * 写成常量而不是到处手打，是为了"漏加一处"这种事一眼可查 —— 全文件搜索 `NOT_DELETED` 即可。
+ */
+const NOT_DELETED = { is_deleted: 'is.false' };
 
 /** 是不是"唯一键冲突"（PostgreSQL SQLSTATE 23505）—— 并发下的重复提交靠它识别 */
 const isDuplicateError = (err) => Boolean(err && err.pgCode === '23505');
@@ -251,12 +321,12 @@ const findPlanDay = async (uid, date) => {
  * 返回：契约形状的数组（可能就是空数组）。
  */
 const listCheckinsByDay = async (uid, date) => {
-  const res = await select('checkins', {
+  const res = await select('checkins', Object.assign({
     uid: 'eq.' + uid,
     date: 'eq.' + date,
     select: CHECKIN_COLS,
     order: 'sort.asc,id.asc',
-  });
+  }, NOT_DELETED));                       // Day 22：已删除的不返回（否则删掉的东西又冒出来）
   return res.rows.map(mapCheckin);
 };
 
@@ -274,6 +344,7 @@ const listCheckins = async (uid, filter) => {
     select: CHECKIN_COLS,
     order: 'date.asc,sort.asc,id.asc',
     limit: f.limit,
+    is_deleted: 'is.false',        // Day 22：已删除的不返回；total 也不含已删行
   };
   if (f.date) {
     query.date = 'eq.' + f.date;
@@ -293,6 +364,13 @@ const listCheckins = async (uid, filter) => {
 /**
  * 这个幂等键（clientReqId）在这位用户名下是不是已经用过了？
  * 只取 id 一列、只要一行 —— 预检只关心"有没有"，不需要把整行读回来。
+ *
+ * Day 22 注意：这里**故意不过滤已删除的行**（下面的 findCheckinByReqId 同理）。
+ *   因为数据库唯一索引 `checkins_uid_reqid_uniq` **也覆盖已删行** ——
+ *   预检的"看到的东西"必须和数据库约束的"拦的范围"一致，否则预检放过、
+ *   数据库再拦，用户拿到的道理是一样的 409，但日志会多一层"怎么回事"的困惑。
+ *   语义上也对：把一条删掉再加同样的动作，本来就是两个动作、两个 uuid，
+ *   若客户端真复用了同一个 uuid，那确实是"同一个动作重发"。
  */
 const existsCheckinWithReqId = async (uid, reqId) => {
   const res = await select('checkins', {
@@ -331,6 +409,11 @@ const findCheckinByContent = async (uid, date, text) => {
 /**
  * 某天现有的最大排序位；这天一条都没有时返回 **null**。
  * （为什么返回 null 而不是 0：路由层要能区分"这天是空的"，新条目的 sort 才算得对。）
+ *
+ * Day 22 注意：这里**故意不过滤已删除的行**（与其它读取相反）。
+ *   理由：已删行的 `sort` 还占着那个位置，若跳过它，新建的条目会拿到同一个 sort，
+ *   同一天内两条 sort 相同就只能靠 id 兜底排序 —— 顺序会变得"看着随机"。
+ *   宁可让 sort 单调增长，也不要排序撞车。（契约 §1.7 记了这条）
  */
 const findLastSort = async (uid, date) => {
   const res = await select('checkins', {
@@ -367,6 +450,72 @@ const createCheckin = async (fields) => {
   return inserted ? mapCheckin(inserted) : null;
 };
 
+// —— Day 22：改与删（PATCH / DELETE 接口的数据访问） ——
+
+/**
+ * 按 id 查"这一行是谁的、删过没"——**刻意不按 uid 过滤，也刻意不过滤已删除**。
+ *
+ * 为什么不能一上来就 `WHERE id=? AND uid=?`：
+ *   那样"别人的数据"永远只会得到"查不到"，路由层就没法把
+ *   **404（没这条）** 和 **403（有这条但不是你的）** 分开 —— 越权尝试就永远不会被发现、也测不出来。
+ *   所以这里要"先看见整行"，由路由层判断归属（契约 §三 的判定顺序第 3–5 步）。
+ *
+ * 返回：{ id, uid, date, is_deleted } 或 **null**（没有这一行）。
+ * 《注意》返回的 uid 只给服务端比对用，绝不进响应（契约 §1.4）。
+ */
+const findCheckinRowById = async (id) => {
+  const res = await select('checkins', {
+    id: 'eq.' + id,
+    select: CHECKIN_OWNER_COLS,
+    limit: 1,
+  });
+  return res.rows.length ? res.rows[0] : null;
+};
+
+/**
+ * 改一条打卡项，返回改完之后的契约对象（改完没匹配到行时返回 null）。
+ *
+ * @param uid   当前身份（作为筛选条件的一部分 = 只改自己的数据）
+ * @param id    打卡项 id
+ * @param patch 业务字段：{ done?, text?, time?, quad? }（路由层已校验过值与格式）
+ *
+ * 两个容易写错的地方：
+ *   · `done` 与 `done_at` **必须一起改**：数据库约束 `checkins_done_consistent` 要求
+ *     "打勾必有完成时刻、没打勾必无完成时刻"，只改一个必然被 CHECK 约束拒绝（SQLSTATE 23514）。
+ *   · `time` / `quad` 传 `null` 是"清空"，语义与"没传这个字段"完全不同 ——
+ *     所以路由层用 `hasOwnProperty` 判断"有没有传"，本函数只负责把 null 原样写下去。
+ */
+const updateCheckin = async (uid, id, patch) => {
+  const row = {};
+  if (patch.done !== undefined) {
+    row.done = patch.done;
+    row.done_at = patch.done ? new Date().toISOString() : null;
+  }
+  if (patch.text !== undefined) row.text = patch.text;
+  if (patch.time !== undefined) row.time = patch.time;
+  if (patch.quad !== undefined) row.quad = patch.quad;
+
+  const rows = await update('checkins', { id: 'eq.' + id, uid: 'eq.' + uid }, row);
+  return rows.length ? mapCheckin(rows[0]) : null;
+};
+
+/**
+ * 软删除一条打卡项（Day 22）：把 `is_deleted` 置 true，**行还在库里**。
+ * 为什么不是 `DELETE` 语句 —— 见 api-contract.md §1.7 与 db/schema-3.sql 的开头。
+ *
+ * 返回 true = 改到了（该行存在、是自己的、这次标记成功）；false = 一行都没匹配到。
+ * 注意：重复删同一条，第二次会返回 **false**（筛选条件里带 `is_deleted = false`，
+ * 已经删过的行不再匹配）—— 路由层不会走到这里，因为它在那之前就按 404 返回了。
+ */
+const softDeleteCheckin = async (uid, id) => {
+  const rows = await update('checkins', {
+    id: 'eq.' + id,
+    uid: 'eq.' + uid,
+    is_deleted: 'is.false',          // 只标记"还没删过"的那一行（重复删不产生第二次写入）
+  }, { is_deleted: true });
+  return rows.length > 0;
+};
+
 module.exports = {
   // ① 表级函数
   findPlanDay: findPlanDay,
@@ -377,9 +526,14 @@ module.exports = {
   findCheckinByContent: findCheckinByContent,
   findLastSort: findLastSort,
   createCheckin: createCheckin,
+  // ① 表级函数 · Day 22 增补（改与删）
+  findCheckinRowById: findCheckinRowById,
+  updateCheckin: updateCheckin,
+  softDeleteCheckin: softDeleteCheckin,
   // ② 通用管道
   select: select,
   insert: insert,
+  update: update,
   // ③ 小工具
   mapPlanDay: mapPlanDay,
   mapCheckin: mapCheckin,

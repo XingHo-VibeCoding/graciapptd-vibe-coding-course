@@ -1,5 +1,5 @@
 /**
- * 自律计划 · 云函数 api（Day 15 建立 v0.1.0 → Day 17 v0.2.0 → Day 18 v0.3.0 → Day 19 v0.4.0）
+ * 自律计划 · 云函数 api（Day 15 建立 v0.1.0 → Day 17 v0.2.0 → Day 18 v0.3.0 → Day 19 v0.4.0 → Day 22 v0.5.0）
  * ---------------------------------------------------------------------------
  * 这个函数是「前端的唯一后端入口」：所有接口都从这里进，内部再按路径分发给具体处理函数。
  * 为什么一个函数承载所有接口，而不是一个接口一个函数？
@@ -11,7 +11,10 @@
  *   Day 17  GET  /api/checkins      打卡项列表读取（支持单日/区间/完成状态/条数限制）
  *   Day 18  POST /api/checkins      新建打卡项（全字段校验 + 重复提交防护）
  *   Day 19  结构重构：数据库操作拆到 db.js（数据访问层），接口行为与契约零变化
- *   Day 20+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
+ *   Day 22  PATCH  /api/checkins/:id  修改打卡项（打勾 / 改内容 / 改时间 / 改象限）
+ *   Day 22  DELETE /api/checkins/:id  删除打卡项（**软删除**：只打标记，行仍在库里）
+ *           → 到这一天，checkins 上的"增删改查"四类操作在公网全部闭环
+ *   Day 23+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
  *
  * 【Day 19 分层】本文件**不再直接读写数据库** —— 那是 db.js（数据访问层）的活。
  *   现在这个文件只管三件事：
@@ -38,7 +41,7 @@ const db = require('./db.js');
 
 // —— 服务身份：写进健康检查响应里，用来确认"公网地址返回的是我自己的服务" ——
 const SERVICE = 'Self discipline plan';
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 
 /**
  * 业务接口的统一响应形状（见 api-contract.md 1.2）：
@@ -175,6 +178,18 @@ const QUADS = ['q1', 'q2', 'q3', 'q4'];
 
 /** 幂等键格式：1~64 位的字母/数字/下划线/短横线（uuid 天然满足） */
 const isReqId = (s) => /^[A-Za-z0-9_-]{1,64}$/.test(s);
+
+/**
+ * 路径参数 `:id` 必须是正整数（Day 22）。返回数字；不合法返回 **null**。
+ * 为什么要单独校验：`/api/checkins/abc` 这种请求不该被当成"找不到这条"（404），
+ * 而是"你给我的 id 本身就不对"（400）—— 两种情况的错在谁身上完全不同。
+ */
+const parseId = (raw) => {
+  const s = String(raw === undefined || raw === null ? '' : raw);
+  if (!/^\d{1,15}$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+};
 
 // ===========================================================================
 // 三、业务规则用的小工具
@@ -393,15 +408,169 @@ const createCheckin = async (event, context) => {
   return reply(0, '已添加', created);
 };
 
+// ---------------------------------------------------------------------------
+// Day 22：改与删（PATCH / DELETE）
+// ---------------------------------------------------------------------------
+
+/**
+ * 修改 / 删除共同的前置步骤：按 id 把这一行查出来，替调用方判定三种"不能动"。
+ *
+ * 判定顺序（**顺序本身就是防线**，见 api-contract.md §三）：
+ *   ① 查不到这一行            → 404「不存在或已删除」
+ *   ② 查到了但 uid 不是本人    → 403「无权修改/删除这条待办」
+ *   ③ 是自己的、但已被软删除过 → 404（对外不区分"没这条"和"删过了"）
+ *
+ * 为什么第 ① 步要"不带 uid 查"：见 db.js `findCheckinRowById` 的注释 ——
+ *   一上来就 `WHERE id AND uid` 的话，越权尝试永远只会得到 404，
+ *   既看不见、也测不出"有人正在试图动别人的数据"。
+ *
+ * @param action '修改' | '删除'，只用来拼 403 的中文提示
+ * @returns { row } 或 { err }（`err` 非空就直接 return 它，那是给前端的完整响应）
+ */
+const locateOwnCheckin = async (uid, id, action) => {
+  const row = await db.findCheckinRowById(id);
+  if (!row) return { err: reply(404, '这条待办不存在或已删除', null) };
+  if (String(row.uid) !== uid) {
+    return { err: reply(403, '无权' + action + '这条待办', null) };
+  }
+  if (row.is_deleted === true) {
+    return { err: reply(404, '这条待办不存在或已删除', null) };
+  }
+  return { row: row };
+};
+
+/**
+ * PATCH /api/checkins/:id —— 修改打卡项（契约 4.1 / §三）
+ *
+ * 只传要改的字段（部分更新），至少给一个：done / text / time / quad。
+ * 处理顺序：① 身份 → ② id 与请求体校验（错就早退，一个字都不写库）
+ *          → ③ 查出这一行并判 404/403/已删除 → ④ A5 业务规则 → ⑤ 写入 → ⑥ 日志
+ *
+ * ④ 是 PRD A5 的硬规则：**给未来日期的待办打勾**要 409。
+ *   为什么必须服务端拦：前端把圆圈禁用只是"体验层"，直接发一个请求就绕过去了；
+ *   而这条规则是产品承诺（"明天的待办今天不能打勾"），承诺必须在服务端兑现。
+ *   注意只在「由假变真」时拦：取消打勾任何时候都允许。
+ */
+const updateCheckin = async (event, context, idRaw) => {
+  const startedAt = Date.now();
+
+  // ① 身份
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  // ② id 与请求体
+  const id = parseId(idRaw);
+  if (id === null) return reply(400, '待办 id 不合法', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+
+  // 哪些字段"传了"？—— 用 hasOwnProperty 而不是 truthy 判断：
+  //   { time: null } 是"清空时间"（有效指令），truthy 判断会把它当成"没传"。
+  const PATCHABLE = ['done', 'text', 'time', 'quad'];
+  const touched = PATCHABLE.filter((k) => Object.prototype.hasOwnProperty.call(body, k));
+  if (!touched.length) {
+    return reply(400, '请至少指定一个要修改的字段（done / text / time / quad）', null);
+  }
+
+  const patch = {};
+  if (touched.indexOf('done') > -1) {
+    if (typeof body.done !== 'boolean') return reply(400, 'done 只能是 true 或 false', null);
+    patch.done = body.done;
+  }
+  if (touched.indexOf('text') > -1) {
+    if (typeof body.text !== 'string') return reply(400, '内容不能为空，且不超过 60 字', null);
+    const text = body.text.trim();
+    if (!text || text.length > MAX_TEXT) return reply(400, '内容不能为空，且不超过 60 字', null);
+    patch.text = text;
+  }
+  if (touched.indexOf('time') > -1) {
+    const v = body.time;
+    if (v === null || v === '') {
+      patch.time = null;                                        // 清空 = 未安排
+    } else if (typeof v !== 'string' || !isTime(v)) {
+      return reply(400, '时间格式不对，应为 HH:mm（24 小时制）', null);
+    } else {
+      patch.time = v;
+    }
+  }
+  if (touched.indexOf('quad') > -1) {
+    const v = body.quad;
+    if (v === null || v === '') {
+      patch.quad = null;                                        // 清空 = 未分类
+    } else if (typeof v !== 'string' || QUADS.indexOf(v) < 0) {
+      return reply(400, '象限只能是 q1 / q2 / q3 / q4', null);
+    } else {
+      patch.quad = v;
+    }
+  }
+
+  // ③ 查出这一行：404 / 403 / 已删除
+  const located = await locateOwnCheckin(uid, id, '修改');
+  if (located.err) return located.err;
+
+  // ④ A5：给未来日期的待办打勾 → 409（服务端硬拦）
+  if (patch.done === true && String(located.row.date) > todayLocal()) {
+    logWrite('给未来待办打勾被拒', {
+      uid: uid, id: id, date: String(located.row.date), code: 409, ms: Date.now() - startedAt,
+    });
+    return reply(409, '这一天还没到，先别急着打勾', null);
+  }
+
+  // ⑤ 写入（条件里带 uid：只改自己的数据）
+  const updated = await db.updateCheckin(uid, id, patch);
+  if (!updated) throw new Error('修改未返回也无法读回改后的行，结果不可确认');
+
+  // ⑥ 日志（只记"改了哪些字段"，不记内容正文）
+  logWrite('修改成功', {
+    uid: uid, id: id, fields: touched.join('+'), code: 0, ms: Date.now() - startedAt,
+  });
+
+  return reply(0, '已更新', updated);
+};
+
+/**
+ * DELETE /api/checkins/:id —— 删除打卡项（契约 4.1 / §三）
+ *
+ * ⚠️ 这是**软删除**：不是 `DELETE FROM checkins`，而是把该行 `is_deleted` 置 true。
+ *    为什么、以及它对读取接口的影响 —— 见 api-contract.md §1.7 与 db/schema-3.sql 开头。
+ *
+ * 为什么删除也要先查一遍、判 uid：新增错了只是多一条（可逆），
+ * 删错了是**别人的数据没了**（不可逆）。所以删除的每一道防线都不能省：
+ * 前端 confirm → 服务端按 uid 限定范围 → 存储层只打标记。
+ *
+ * 删除**没有 409**：任何日期都允许删（A5 拦的是"提前打勾"，不是"提前清理"）。
+ */
+const deleteCheckin = async (event, context, idRaw) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const id = parseId(idRaw);
+  if (id === null) return reply(400, '待办 id 不合法', null);
+
+  const located = await locateOwnCheckin(uid, id, '删除');
+  if (located.err) return located.err;
+
+  const done = await db.softDeleteCheckin(uid, id);
+  if (!done) throw new Error('标记删除时一行都没匹配到，结果不可确认');
+
+  logWrite('软删除成功', {
+    uid: uid, id: id, date: String(located.row.date), code: 0, ms: Date.now() - startedAt,
+  });
+
+  return reply(0, '已删除', { id: id });
+};
+
 // ===========================================================================
 // 五、路由表
 // ===========================================================================
-
 /**
  * 路由表：键 = 「方法 + 路径」，值 = 处理函数。
- * 加接口就往这张表里加一行（第 4 周的 PATCH / DELETE 也加在这里）：
- *   'PATCH /api/checkins/:id': updateCheckin
  * 处理函数签名统一是 async (event, context) => 响应对象。
+ * **固定路径**写在这张表里（精确匹配，一眼看得出有哪些接口）；
+ * 带路径参数的路由（`:id`）在下面另一张表 `idRoutes` 里，用正则匹配。
  */
 const routes = {
   /**
@@ -424,8 +593,31 @@ const routes = {
 };
 
 /**
+ * 带路径参数的路由（Day 22 新增）—— 精确匹配的 routes 表装不下 `:id`。
+ *
+ * 为什么要单开一张表而不是塞进 routes：
+ *   routes 的键是死字符串，`/api/checkins/13` 里那个 13 每次都不一样，键是拼不出来的。
+ *   所以这里用**正则**把 id 抽出来，再作为第三个参数交给处理函数 `(event, context, idRaw)`。
+ *
+ * 正则用 `([^/]+)` 而不是 `(\d+)`：这样 `/api/checkins/abc` 也能命中路由，
+ * 由处理函数回一个精准的 `400 待办 id 不合法`，而不是笼统的"接口不存在 404"——
+ * 两种错在谁身上完全不同（前者是请求参数错，后者是路径根本没这个接口）。
+ */
+const idRoutes = [
+  { method: 'PATCH', re: /^\/api\/checkins\/([^/]+)$/, handler: updateCheckin },
+  { method: 'DELETE', re: /^\/api\/checkins\/([^/]+)$/, handler: deleteCheckin },
+];
+
+/** 全部可用路由（固定 + 带参数的），只用于 404 提示与调试时列出 */
+const allRoutes = () => Object.keys(routes).concat([
+  'PATCH /api/checkins/:id',
+  'DELETE /api/checkins/:id',
+]);
+
+/**
  * 云函数入口：平台每次请求都会调用这个 main。
- * 流程：取方法/路径 → 查路由 → 命中就执行，没命中回 404 → 任何异常都兜成 500，绝不让函数崩溃。
+ * 流程：取方法/路径 → 先查固定路由 → 再试带参数的路由 → 都没命中回 404
+ *      → 任何异常都兜成 500，绝不让函数崩溃。
  * （服务端必须始终返回"结构化 JSON"，前端才好处理——这是 api-contract.md 的约定。）
  */
 exports.main = async (event = {}, context = {}) => {
@@ -433,18 +625,30 @@ exports.main = async (event = {}, context = {}) => {
   const path = pickPath(event);
 
   try {
-    const handler = routes[method + ' ' + path];
+    // ① 固定路径：精确命中
+    let handler = routes[method + ' ' + path];
+    let idRaw = null;
+
+    // ② 带参数路径：正则命中，把 id 从路径里抽出来
+    if (!handler) {
+      const hit = idRoutes.find((r) => r.method === method && r.re.test(path));
+      if (hit) {
+        handler = hit.handler;
+        idRaw = path.match(hit.re)[1];
+      }
+    }
+
     if (!handler) {
       // 404 的 message 里带上可用路由，调试时一眼看出是路径写错了还是接口还没做
       return reply(404, '接口不存在：' + method + ' ' + path, {
-        availableRoutes: Object.keys(routes),
+        availableRoutes: allRoutes(),
         version: VERSION,
       });
     }
     // 顺手打一行日志：出错时在 CloudBase 控制台"日志"里能看到每次请求的方法和路径
     console.log('[api] ' + method + ' ' + path + ' 命中路由，uid=' +
                 (resolveUid(context) || '匿名未注入'));
-    return await handler(event, context);
+    return await handler(event, context, idRaw);
   } catch (err) {
     // 兜底：不把原始错误抛给前端（可能含内部信息），只在服务端日志里留全貌
     console.error('[api] 未捕获异常：', err && err.stack ? err.stack : err);
@@ -458,8 +662,11 @@ exports.main = async (event = {}, context = {}) => {
 exports.SERVICE = SERVICE;
 exports.VERSION = VERSION;
 exports.routes = routes;
+exports.idRoutes = idRoutes;
+exports.allRoutes = allRoutes;
 exports.pickBody = pickBody;
 exports.isDate = isDate;
 exports.isTime = isTime;
 exports.isReqId = isReqId;
+exports.parseId = parseId;
 exports.todayLocal = todayLocal;
