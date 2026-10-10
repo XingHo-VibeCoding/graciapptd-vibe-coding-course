@@ -1192,27 +1192,66 @@
   // 铁律：前端所有网络请求**只走这里**（apiGet / apiPost / apiPatch / apiDelete），别处不许直接 fetch ——
   //      跟"localStorage 只走 loadData/saveData"是同一条规矩，将来换地址/换后端只改这一段。
   const API_BASE = 'https://habit-tracker-d9gh0mjel767ff0d2.service.tcloudbase.com/api';  // 见 api-contract.md §1.1
-  const API_TIMEOUT = 5000;      // 毫秒。超过就当"云端联系不上"，回落到本机数据，不让页面干等
+  const API_TIMEOUT = 5000;      // 毫秒。超时归为"网络层失败"（契约 §1.8），回落到本机数据，不让页面干等
   // 有些环境没有 fetch（老浏览器；本地自测用的 jsdom 也没有）→ 直接走本机数据，一条网络请求都不发
   const apiReady = () => typeof fetch === 'function';
 
-  // 统一请求：返回 { ok, data } 或 { ok:false, message, code, offline }
-  // 契约保证"HTTP 状态码恒为 200，业务结果看 code"，所以这里不判断 res.ok，只判断 body.code
+  // ===== 错误分级（Day 23，契约 §1.8）=====
+  // 用户不需要知道 fetch 抛了什么异常，他需要知道**这是谁的锅、我该怎么办**。
+  // 把三件不同的事分清楚，是今天要解决的核心问题 —— 以前它们被糊成同一句"云端联系不上"：
+  //   offline  网络层    —— 断网 / 超时 / 跨域被浏览器拦（请求根本没走通）
+  //   server   服务端故障 —— 网关 5xx（冷启动超时 / 502）、响应不是 JSON、业务码 ≥500
+  //   business 业务拒绝  —— HTTP 200 但 code≠0（400/401/403/404/409），服务端已给出中文原因
+  // 判据与文案口径写在 api-contract.md §1.8 —— 要改文案先改那份文档（R2 文档先行）。
+  const ERR_FALLBACK = '出了点小问题，稍后再试';
+  const errKindText = (r) => {
+    if (!r) return ERR_FALLBACK;
+    if (r.kind === 'offline') return '网络连不上';
+    if (r.kind === 'server') {
+      return '服务器开小差了' + (r.status ? '（HTTP ' + r.status + '）' : '') + '，过一会儿再试';
+    }
+    return r.message || ERR_FALLBACK;      // business：直接转述服务端原话，不二次改写
+  };
+
+  // 统一请求：成功回 { ok:true, data }；失败回 { ok:false, kind, status, code, message, offline }
+  // 契约保证"HTTP 状态码恒为 200、业务结果看 code"，但**网关自己**出错时不遵守这条
+  // （502/504、返回 HTML 错误页）—— 所以这里 status 和 code 都要看，
+  // 否则就会把"服务端挂了"误报成"你网络不好"，用户会白折腾半天路由器。
   const apiFetch = async (path, options) => {
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT) : null;
+    let res;
     try {
-      const res = await fetch(API_BASE + path,
+      res = await fetch(API_BASE + path,
         Object.assign(ctrl ? { signal: ctrl.signal } : {}, options));
+    } catch (e) {
+      // 第一类：请求本身就没走通 —— 断网 / 超时 / 跨域被浏览器拦
+      if (timer) clearTimeout(timer);
+      return { ok: false, kind: 'offline', offline: true, status: 0, code: 0, message: '' };
+    }
+    try {
       const body = await res.json();
+      const code = (body && body.code) || 0;
+      // 第二类：网关自报 5xx，或函数自报 code≥500 —— 都是服务端的事
+      // status 只记**真实的 HTTP 状态码**：函数自报 code=500 时 HTTP 仍是 200，
+      // 报出一个"HTTP 200 出错"会让人更糊涂，这种就没有数字，只说是服务端故障。
+      if (res.status >= 500 || code >= 500) {
+        return { ok: false, kind: 'server', offline: false,
+                 status: res.status >= 500 ? res.status : 0,
+                 code: code || res.status,
+                 message: (body && body.message) || '' };
+      }
       if (!body || body.code !== 0) {
-        return { ok: false, code: (body && body.code) || 0,
-                 message: (body && body.message) || '云端返回了预期之外的数据' };
+        // 第三类：业务拒绝 —— 服务端的中文原因原样带出去
+        return { ok: false, kind: 'business', offline: false, status: res.status,
+                 code: code, message: (body && body.message) || ERR_FALLBACK };
       }
       return { ok: true, data: body.data };
     } catch (e) {
-      // 断网 / 超时 / 跨域被浏览器拦 / 返回的不是 JSON —— 一律归为"云端暂时用不了"
-      return { ok: false, code: 0, message: '', offline: true };
+      // 第二类（另一种表现）：有响应，但读不出 JSON —— 网关错误页 / 冷启动超时返回的 HTML
+      return { ok: false, kind: 'server', offline: false,
+               status: res.status >= 500 ? res.status : 0,
+               code: res.status, message: '' };
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -1242,14 +1281,29 @@
   const apiHealth = async () => {
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT) : null;
+    let res;
     try {
-      const res = await fetch(API_BASE + '/health',
+      res = await fetch(API_BASE + '/health',
         Object.assign(ctrl ? { signal: ctrl.signal } : {}, { method: 'GET' }));
-      const body = await res.json();
-      if (body && body.ok === true) return { ok: true, service: body.service || '' };
-      return { ok: false, offline: false, message: '健康接口返回了预期之外的数据' };
     } catch (e) {
-      return { ok: false, offline: true, message: '' };   // 断网 / 超时 / 被跨域拦
+      if (timer) clearTimeout(timer);
+      return { ok: false, kind: 'offline', offline: true, status: 0, message: '' };
+    }
+    try {
+      const body = await res.json();
+      // 健康检查只有"通"和"不通"两种结果；不通的原因要分清（网关挂了 vs 回了个怪东西）
+      // 判据写成 !(res.status >= 500) 而不是 res.status < 500：有些环境（含自测里的极简 stub）
+      // 给不出 status，undefined >= 500 是 false，正好当作"不是网关故障"，不会把健康响应误判成故障。
+      const gatewayDown = res.status >= 500;
+      if (!gatewayDown && body && body.ok === true) {
+        return { ok: true, service: body.service || '' };
+      }
+      // 同上：只有真实的 5xx 才报数字，否则"HTTP 200 出错"会让人更糊涂
+      return { ok: false, kind: 'server', offline: false,
+               status: res.status >= 500 ? res.status : 0, message: '' };
+    } catch (e) {
+      return { ok: false, kind: 'server', offline: false,
+               status: res.status >= 500 ? res.status : 0, message: '' };
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -1363,7 +1417,10 @@
     const r = await apiGet('/day?date=' + encodeURIComponent(date));
     if (seq !== cloudSeq) return;                 // 期间又切了日期 → 这次结果作废
     if (!r.ok) {
-      cloudState = { mode: r.offline ? 'offline' : 'error', updatedAt: null, at: Date.now() };
+      // 三类错误在首页小字上的表现不同：网络层说"连不上"，服务端故障带上真实的 HTTP 数字。
+      // 把整个 r 存进 cloudState，好让那行小字也能用上 errKindText（含 502 这类状态码）。
+      cloudState = { mode: r.offline ? 'offline' : (r.kind === 'server' ? 'server' : 'error'),
+                     err: r, updatedAt: null, at: Date.now() };
       renderCloudHint();                          // 数据没变，只需更新那行小字（不必整页重绘）
       return;
     }
@@ -1387,9 +1444,11 @@
       node.textContent = '云端数据 · 更新于 ' + fmtCloudTime(cloudState.updatedAt || cloudState.at)
                        + ' · 移动/心情暂存本机';
     } else if (cloudState.mode === 'offline') {
-      node.textContent = '云端暂时联系不上 · 当前显示本机数据';
+      node.textContent = errKindText(cloudState.err) + ' · 当前显示本机数据';
+    } else if (cloudState.mode === 'server') {
+      node.textContent = errKindText(cloudState.err) + ' · 当前显示本机数据';
     } else if (cloudState.mode === 'error') {
-      node.textContent = '云端返回异常 · 当前显示本机数据';
+      node.textContent = '这次没读成功 · 当前显示本机数据';
     } else if (cloudState.mode === 'local') {
       node.textContent = '本机数据（未连云端）';
     } else {
@@ -1444,8 +1503,9 @@
       health.textContent = '服务正常 · ' + (h.service || '已响应');
     } else {
       led.className = 'led bad';
-      health.textContent = h.offline ? '云端联系不上（断网 / 超时 / 被跨域拦）'
-                                     : (h.message || '云端返回异常');
+      // 检查台是"排查用"界面，所以在统一基础句后面补一句可能的原因（普通提示里不带这层）
+      health.textContent = errKindText(h)
+        + (h.kind === 'offline' ? '（断网 / 超时 / 被跨域拦）' : '（服务端没能正常响应）');
     }
 
     // ② 核心表 checkins 的真数据
@@ -1455,7 +1515,7 @@
       el('diag-today').textContent = '—';
       el('diag-total').textContent = '—';
       list.textContent = '';
-      el('diag-note').textContent = '核心表没读到：' + (r.offline ? '云端联系不上' : (r.message || '云端返回异常'));
+      el('diag-note').textContent = '核心表没读到：' + errKindText(r);
       diagBusy = false;
       return;
     }
@@ -1507,7 +1567,7 @@
         bumpDiagWrites();
         showToast('已写入云端（id=' + r.data.id + '）');
       } else {
-        showToast('写入失败：' + (r.offline ? '云端联系不上' : (r.message || '云端返回异常')));
+        showToast('写入失败：' + errKindText(r));
       }
     } finally {
       el('diag-write').disabled = false;
@@ -1545,6 +1605,7 @@
     if (!item.text) return false;
 
     // ① 有云端可用 → 真写进数据库（刷新后还在）。重复提交由幂等键 + 唯一索引兜底。
+    let netErr = null;                              // 落到 ② 时用它回答"为什么没走云端"
     if (apiReady()) {
       adding = true;
       try {
@@ -1560,20 +1621,24 @@
           showToast('已添加到云端');
           return true;
         }
-        if (!r.offline) {                           // 云端明确拒绝（参数/幂等冲突）→ 不入库也不落本机
-          showToast('这条没被云端接受：' + (r.message || ''));
+        // 云端明确拒绝（参数错 / 幂等冲突）→ 不入库也不落本机，原样转述服务端原因
+        // 判据用 kind === 'business' 而不是 kind !== 'offline'：服务端故障不走这条，
+        // 它和网络层一样"先存本机"（保持 Day 20 起的既有行为，今天只统一文案、不动逻辑）
+        if (r.kind === 'business') {
+          showToast(errKindText(r));
           return false;
         }
+        netErr = r;                                 // 基础设施故障 —— 记住原因，下面如实告诉用户
       } finally { adding = false; }
     }
 
-    // ② 云端联系不上（断网/超时/被拦）→ 先存本机，页面照常能用
+    // ② 网络连不上（断网/超时/被拦）→ 先存本机，页面照常能用
     (data.todos[date] = data.todos[date] || []).push({
       id: 'local-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       text: item.text, time: item.time, done: false, quad: item.quad,
     });
     saveData(data); renderAll();
-    if (apiReady()) showToast('云端暂时联系不上，已先存本机');
+    if (apiReady()) showToast(errKindText(netErr) + '，已先存本机');
     return true;
   };
 
@@ -1619,18 +1684,19 @@
         saveData(data); renderAll(); paintToggle(id, todo.done);
         return;
       }
-      if (!r.offline) {                          // 云端明确拒绝（如 409 未来日期）→ 状态保持不变
-        showToast(r.message || '云端没有接受这次修改');
+      // 云端明确拒绝（如 409 未来日期）→ 状态保持不变；服务端故障则照旧回落本机（行为不变）
+      if (r.kind === 'business') {
+        showToast(errKindText(r));
         return;
       }
     }
 
-    // ② 本机记录 / 云端联系不上 → 本机切换（页面照常可用，刷新后以云端为准）
+    // ② 本机记录 / 基础设施故障 → 本机切换（页面照常可用，刷新后以云端为准）
     todo.done = next; saveData(data); renderAll(); paintToggle(id, todo.done);
   };
 
   // Day 22：删除改为"云端优先"（DELETE /api/checkins/:id；服务端做的是**软删除**，见契约 §1.7）。
-  // 删除比新增更需要小心，所以这里**刻意不做"乐观删除"**：云端联系不上时**不删本机数据**，
+  // 删除比新增更需要小心，所以这里**刻意不做"乐观删除"**：基础设施故障时**不删本机数据**，
   // 直接告诉用户"这条没能删掉"—— 免得页面上一时消失、刷新后又冒出来，让人以为数据丢了或删除失灵。
   const deleteTodoAt = async (date, id) => {
     if (demoMode || !data) return;
@@ -1640,8 +1706,7 @@
       const r = await apiDelete('/checkins/' + id);
       // 404 = 云端已经没有这条了（可能是别处删过 / 重复点了删除）→ 按"删掉了"处理，不报错
       if (!r.ok && r.code !== 404) {
-        showToast(r.offline ? '云端暂时联系不上，这条先没删掉'
-                            : (r.message || '云端没有接受这次删除'));
+        showToast(errKindText(r) + '，这条先没删掉');
         return;
       }
     }
