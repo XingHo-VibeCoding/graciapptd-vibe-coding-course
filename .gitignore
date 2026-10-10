@@ -2,8 +2,22 @@
 # .env 以后用来存数据库密码、API 密钥等本地私密配置
 # 第 23 天才会用到，但规则今天就要立好 —— 绝不能把密钥传上 GitHub
 .env
-.env.local
-.env.*.local
+# Day 24 安全审计补：原规则只写了 .env.local / .env.*.local，
+# 结果 .env.production、.env.staging、.env.test 这些**点号后缀但不是 local** 的写法会漏网。
+# 放宽成 .env.* 一次盖住，再用 ! 把占位符模板捞回来（否则 .env.example 会被一起吞掉）。
+.env.*
+!.env.example
+
+# Day 24 安全审计补：密钥/凭据类文件的常见后缀。
+# 这类文件一旦提交就是**不可逆**的泄露（Git 历史会一直留着），必须在源头拦住。
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+credentials.json
+serviceAccountKey.json
 
 # CloudBase CLI 的部署配置里含**函数环境变量**（其中有环境 API Key），
 # 所以真实文件不入库；入库的是不含密钥的模板 cloudbaserc.example.json。

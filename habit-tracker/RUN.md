@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.14（2026-10-10 Day 23：**密钥排查过红线 + `.env` 规则落地 + 三类错误提示统一**——新增 `scripts/check-secrets.sh`（一条命令扫 8 类密钥特征，被跟踪文件里 **0 命中**）与只有占位符的 `.env.example`；前端错误提示拆成**网络层 / 服务端故障 / 业务拒绝**三类、统一走 `errKindText()`，**网关 502 不再被说成"云端联系不上"**；补 A56 系列；FAQ 改口径。v3.13 于 2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
+- 版本：v3.15（2026-10-10 Day 24：**错误处理与安全审计**——`scripts/check-secrets.sh` 新增【四】**Git 全历史扫描**（`git rev-list --all` 遍历每个提交的每个文件版本，**61 个提交 × 9 类特征全 0 命中**；`cloudbaserc.json` 与 `.env` 从未进过任何一棵树）并修掉**自命中误报**的真 bug；`.gitignore` 补掉 2 处真实缝隙（`.env.production` 等变体 + 密钥文件后缀）；新增 `SECURITY.md` 安全自查清单；**结论：未发现真实密钥泄露，无需作废或重新生成任何密钥**；后端零改动。v3.14 于 2026-10-10 Day 23：**密钥排查过红线 + `.env` 规则落地 + 三类错误提示统一**——新增 `scripts/check-secrets.sh`（一条命令扫 8 类密钥特征，被跟踪文件里 **0 命中**）与只有占位符的 `.env.example`；前端错误提示拆成**网络层 / 服务端故障 / 业务拒绝**三类、统一走 `errKindText()`，**网关 502 不再被说成"云端联系不上"**；补 A56 系列；FAQ 改口径。v3.13 于 2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -29,10 +29,12 @@
 | 检查台的「写入一条测试数据」 | ☁️ 云端真库（`POST /api/checkins`） | 每个浏览器当天最多 3 条，防刷库 |
 
 > 页面上的小字提示就是这个表的口径：云端可用时写「云端数据 · 更新于 … · **移动/心情暂存本机**」，
-> 断网时写「云端暂时联系不上 · 当前显示本机数据」—— 让人一眼看出"哪些改动是存下来的、哪些不是"。
+> 连不上网时写「网络连不上 · 当前显示本机数据」，**服务器出故障时写「服务器开小差了（HTTP 502），
+> 过一会儿再试 · 当前显示本机数据」**—— 让人一眼看出"哪些改动是存下来的、哪些不是"，
+> 也一眼看出**是他自己的网络问题、还是服务端的问题**（Day 23 起按"谁的锅"分三类）。
 
-> 网络不通 / 接口挂了时，页面**照常打开**（用本机数据），只是标题下的小字会变成「云端暂时联系不上」——
-> 这就是"本机兜底"的意思，不会白屏。
+> 网络不通 / 接口挂了时，页面**照常打开**（用本机数据），只是标题下的小字会换成对应的那句人话——
+> 这就是"本机兜底"的意思，不会白屏。（文案的唯一出口是前端 `errKindText()`，契约 §1.8。）
 
 ## 二、怎么跑起来（3 步）
 
@@ -148,7 +150,7 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A52 前端接线上云 | 打开线上首页；F12 → Network 看 `day?date=` 这条请求 | ① 请求地址是**公网接口地址**（不是 localhost、也不是静态托管地址）；② 「今日待做」里是**数据库里真实存在的待办**（与 `tcb db execute --json --sql "SELECT text FROM checkins WHERE uid='seed-demo-user' AND date=CURRENT_DATE ORDER BY sort"` 一致）；③ 标题下小字写「云端数据 · 更新于 …」；④ **在控制台改一行再刷新，页面内容跟着变**（Day 20） |
 | A52b 跨域可用 | 带 `Origin` 头 `curl` 接口（命令见 `DEPLOY.md` §11.2） | 本环境前端来源与 `localhost:8765` 能拿到 `Access-Control-Allow-Origin`；陌生来源**没有**该响应头（= 会被浏览器拦）；`OPTIONS` 预检回 204 + `allow-methods: POST`（Day 20） |
 | A52c 新增待办真的入库 | 首页输入一条待办并提交 | ① 卡片立刻出现在今日列表；② toast 提示「已添加到云端」；③ `tcb db execute --json --sql "SELECT id,text,client_req_id FROM checkins WHERE date=CURRENT_DATE ORDER BY id DESC LIMIT 1"` 能看到这行（`client_req_id` 是新生成的 uuid）；④ **刷新后它还在**（Day 20） |
-| A52d 断网兜底不白屏 | 断网后打开页面 | 页面照常进入内容区（用本机数据），标题下小字提示「云端暂时联系不上」；不会卡在"加载中"或报错页（Day 20） |
+| A52d 断网兜底不白屏 | 断网后打开页面 | 页面照常进入内容区（用本机数据），标题下小字提示**「网络连不上 · 当前显示本机数据」**（Day 23 起由 `errKindText()` 统一出口给文案；旧口径「云端暂时联系不上」已废）；不会卡在"加载中"或报错页（Day 20 建，Day 23 改口径） |
 | A52e 首页最后更新时间 | 看「今日待做」标题下那行小字 | 有云端数据时显示「云端数据 · 更新于 M月D日 HH:MM」（取自 `plan_days.updated_at`）；在库里改这一行的时间，刷新后小字跟着前进（余力加练 · Day 20） |
 | A52f 前端云模式自检 | `node test-home.js`（工作区里那份） | **374/374** 通过：原 360 条走"本机兜底"分支不变，新增 14 条把 `fetch` 换成假的、专测云端分支（读接口渲染 / 请求地址 / 幂等键 / 落盘 id / 切日期重取 / 断网兜底）（Day 20） |
 
@@ -176,6 +178,12 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A56d 三类错误都返回中文提示 | 打开线上首页，制造三种失败：断网 / 让接口 5xx / 打一个未来日期 | ① **断网** → 小字「网络连不上 · 当前显示本机数据」；② **服务端故障（网关 502）** → 「服务器开小差了（HTTP 502），过一会儿再试 · 当前显示本机数据」——**不再说成"云端联系不上"**；③ **业务拒绝（给未来日期打勾）** → Toast 原样显示服务端那句「这一天还没到，先别急着打勾」。三类都是中文，没有英文异常名（Day 23） |
 | A56e 前端自检（错误分级） | `node test-home.js`（工作区里那份） | **417/417** 通过（410 → 新增 TF 节 7 条：网关 502 指向服务端且**不再**报成网络问题、`code=500` 也归服务端、**不虚报 HTTP 数字**、409 原样转述、业务拒绝时状态不乐观更新、不把业务规则说成网络故障）（Day 23） |
 | A56f 云函数自检回归 | `node habit-tracker/cloudfunctions/api/selftest.js` | **225/225** 通过（后端 21 条 `reply()` 提示本就全中文，本日**未改动**后端；这里只做回归）（Day 23） |
+| A57 在 Git 历史里搜不到密钥 | 仓库根目录跑 `bash habit-tracker/scripts/check-secrets.sh` | 【四】**Git 全历史扫描**：`git rev-list --all` 遍历 **61 个提交的全部文件版本**，9 类特征（JWT / `AKID` / `sk-` / `ghp_` / 私钥 / 真值 API Key / 明文密码 / PG 连接串 / 32 位随机串）**每项都是 0 命中**（Day 24） |
+| A57b 敏感文件从未进过任何一棵树 | `git log --all --oneline --name-only -- habit-tracker/cloudbaserc.json habit-tracker/.env` | 输出**为空** —— 这两个文件从未被任何一次提交记录过（用 `git log --all --name-only --diff-filter=A` 列全部历史文件名也看不到它们）（Day 24） |
+| A57c `.gitignore` 缝隙已补 | 见 `SECURITY.md` 第四节；或跑脚本的【二】B 节 | `git check-ignore` 实测 **12 个敏感文件名全部「已忽略 ✓」**：`.env` / `.env.local` / `.env.production` / `.env.staging` / `.env.test` / `.env.development` + `deploy.pem` / `server.key` / `id_rsa` / `id_ed25519` / `credentials.json` / `serviceAccountKey.json`；**反向断言**：`.env.example` 仍是「未被忽略 ✓」（不能误伤模板）（Day 24） |
+| A57d 排查脚本不再自己命中自己 | `bash habit-tracker/scripts/check-secrets.sh; echo $?` | 退出码 **0**（Day 23 提交后曾误报 1：脚本第 8 条特征被它自己的分隔线命中。修法：所有扫描统一排除脚本自身 `SELF_REL`）（Day 24） |
+| A57e 安全自查清单 | 打开 `habit-tracker/SECURITY.md` | 六节 20+ 项，**每项含「检查什么 / 可直接粘贴的验证命令 / 期望输出 / 不通过怎么办」**；含"真发现泄露怎么办"的**顺序不可颠倒**五步（先作废重建密钥 → 更新环境变量 → 修根因 → 最后清历史 → 复盘补特征表）（Day 24） |
+| A57f 两套自检回归 | `node test-home.js`（工作区那份）+ `node habit-tracker/cloudfunctions/api/selftest.js` | 前端 **417/417**、云函数 **225/225** 全绿（本日未改前端与云函数代码，只做回归）（Day 24） |
 
 ## 四、常见问题（FAQ）
 
