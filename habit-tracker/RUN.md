@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.15（2026-10-10 Day 24：**错误处理与安全审计**——`scripts/check-secrets.sh` 新增【四】**Git 全历史扫描**（`git rev-list --all` 遍历每个提交的每个文件版本，**61 个提交 × 9 类特征全 0 命中**；`cloudbaserc.json` 与 `.env` 从未进过任何一棵树）并修掉**自命中误报**的真 bug；`.gitignore` 补掉 2 处真实缝隙（`.env.production` 等变体 + 密钥文件后缀）；新增 `SECURITY.md` 安全自查清单；**结论：未发现真实密钥泄露，无需作废或重新生成任何密钥**；后端零改动。v3.14 于 2026-10-10 Day 23：**密钥排查过红线 + `.env` 规则落地 + 三类错误提示统一**——新增 `scripts/check-secrets.sh`（一条命令扫 8 类密钥特征，被跟踪文件里 **0 命中**）与只有占位符的 `.env.example`；前端错误提示拆成**网络层 / 服务端故障 / 业务拒绝**三类、统一走 `errKindText()`，**网关 502 不再被说成"云端联系不上"**；补 A56 系列；FAQ 改口径。v3.13 于 2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
+- 版本：v3.16（2026-10-10 Day 24 二修：**favicon 404 修复**——控制台那条「Failed to load resource: 404」每个访客都看得到；根因是 head 无 icon 声明 + 仓库无 favicon 文件，浏览器按标准约定自动请求 /favicon.ico 落空。修复 = `assets/favicon.png` + head 一行 `<link rel="icon">`；新增 A58 系列。v3.15 于 2026-10-10 Day 24：**错误处理与安全审计**——`scripts/check-secrets.sh` 新增【四】**Git 全历史扫描**（`git rev-list --all` 遍历每个提交的每个文件版本，**61 个提交 × 9 类特征全 0 命中**；`cloudbaserc.json` 与 `.env` 从未进过任何一棵树）并修掉**自命中误报**的真 bug；`.gitignore` 补掉 2 处真实缝隙（`.env.production` 等变体 + 密钥文件后缀）；新增 `SECURITY.md` 安全自查清单；**结论：未发现真实密钥泄露，无需作废或重新生成任何密钥**；后端零改动。v3.14 于 2026-10-10 Day 23：**密钥排查过红线 + `.env` 规则落地 + 三类错误提示统一**——新增 `scripts/check-secrets.sh`（一条命令扫 8 类密钥特征，被跟踪文件里 **0 命中**）与只有占位符的 `.env.example`；前端错误提示拆成**网络层 / 服务端故障 / 业务拒绝**三类、统一走 `errKindText()`，**网关 502 不再被说成"云端联系不上"**；补 A56 系列；FAQ 改口径。v3.13 于 2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -184,6 +184,9 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A57d 排查脚本不再自己命中自己 | `bash habit-tracker/scripts/check-secrets.sh; echo $?` | 退出码 **0**（Day 23 提交后曾误报 1：脚本第 8 条特征被它自己的分隔线命中。修法：所有扫描统一排除脚本自身 `SELF_REL`）（Day 24） |
 | A57e 安全自查清单 | 打开 `habit-tracker/SECURITY.md` | 六节 20+ 项，**每项含「检查什么 / 可直接粘贴的验证命令 / 期望输出 / 不通过怎么办」**；含"真发现泄露怎么办"的**顺序不可颠倒**五步（先作废重建密钥 → 更新环境变量 → 修根因 → 最后清历史 → 复盘补特征表）（Day 24） |
 | A57f 两套自检回归 | `node test-home.js`（工作区那份）+ `node habit-tracker/cloudfunctions/api/selftest.js` | 前端 **417/417**、云函数 **225/225** 全绿（本日未改前端与云函数代码，只做回归）（Day 24） |
+| A58 复现 favicon 404 | 打开页面 → F12 Console；或 `curl -s -o /dev/null -w "%{http_code}" https://habit-tracker-….tcloudbaseapp.com/favicon.ico` | 修复前：Console 第一条红字 `Failed to load resource: the server responded with a status of 404 ()`，Network 面板对应 `/favicon.ico`；curl 实测**本地与线上均 404**（Day 24） |
+| A58b 修复后图标可访问 | `curl -s -o /dev/null -w "%{http_code} %{size_download}" <线上>/assets/favicon.png`；线上首页源码 grep `rel="icon"` | 资源 **200 / 1304 字节**；`<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon.png">` 已在线上 HTML 里——声明后浏览器不再请求 /favicon.ico，404 消失（Day 24） |
+| A58c 修复回归 | `node test-home.js` | **417/417** 全绿（head 加了一行 link，页面行为零变化；另记录一次偶发 416/1，重跑即绿，疑似时序抖动）（Day 24） |
 
 ## 四、常见问题（FAQ）
 

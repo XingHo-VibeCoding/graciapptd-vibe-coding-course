@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>自律计划</title>
+  <!-- Day 24 修复：站点图标。此前 head 无任何 icon 声明、仓库无 favicon 文件，
+       浏览器按标准约定自动请求 /favicon.ico → 托管上没有 → 每个访客的控制台都有一条
+       「Failed to load resource: 404」红字（还会淹没以后真正的报错）。
+       声明后浏览器改取这张图，不再请求 /favicon.ico。 -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon.png" />
   <style>
     /* ===== 主题：深色 + 落日 hero（Day 12 改版，弃用浅绿）=====
        可复用组件约束（Day 9 固化，新增样式必须遵守，Day 12 随深色主题更新基准）：
