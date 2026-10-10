@@ -1,6 +1,6 @@
 # 自律计划 · 运行说明（RUN.md）
 
-- 版本：v3.16（2026-10-10 Day 24 二修：**favicon 404 修复**——控制台那条「Failed to load resource: 404」每个访客都看得到；根因是 head 无 icon 声明 + 仓库无 favicon 文件，浏览器按标准约定自动请求 /favicon.ico 落空。修复 = `assets/favicon.png` + head 一行 `<link rel="icon">`；新增 A58 系列。v3.15 于 2026-10-10 Day 24：**错误处理与安全审计**——`scripts/check-secrets.sh` 新增【四】**Git 全历史扫描**（`git rev-list --all` 遍历每个提交的每个文件版本，**61 个提交 × 9 类特征全 0 命中**；`cloudbaserc.json` 与 `.env` 从未进过任何一棵树）并修掉**自命中误报**的真 bug；`.gitignore` 补掉 2 处真实缝隙（`.env.production` 等变体 + 密钥文件后缀）；新增 `SECURITY.md` 安全自查清单；**结论：未发现真实密钥泄露，无需作废或重新生成任何密钥**；后端零改动。v3.14 于 2026-10-10 Day 23：**密钥排查过红线 + `.env` 规则落地 + 三类错误提示统一**——新增 `scripts/check-secrets.sh`（一条命令扫 8 类密钥特征，被跟踪文件里 **0 命中**）与只有占位符的 `.env.example`；前端错误提示拆成**网络层 / 服务端故障 / 业务拒绝**三类、统一走 `errKindText()`，**网关 502 不再被说成"云端联系不上"**；补 A56 系列；FAQ 改口径。v3.13 于 2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
+- 版本：v3.17（2026-10-10 Day 24 补：**核心流程测试清单**——新增 `FLOW-TEST.md`（六环逐条清单 + 问题反馈格式 + 四步诊断协议 + 9 组现象 30 条原因候选池 + 证据留存规范 + 7 条已知边界）与 `scripts/core-flow-check.sh`（一条命令走完「打开检查台 → 读 plan_days/checkins → 写入 → 刷新确认 → 修改 → 删除」，逐环 ✓/✗ 并写证据文件供前后 diff；**自己造数据自己清理，终态与跑之前一致**）；补 A59 系列。首批实测 **22 项通过 / 1 项跳过 / 0 失败**（跳过项 = 种子日期落后一天，属已知第 1 号卡点）。**前端、云函数、数据库本日零改动**。v3.16 于 2026-10-10 Day 24 二修：**favicon 404 修复**——控制台那条「Failed to load resource: 404」每个访客都看得到；根因是 head 无 icon 声明 + 仓库无 favicon 文件，浏览器按标准约定自动请求 /favicon.ico 落空。修复 = `assets/favicon.png` + head 一行 `<link rel="icon">`；新增 A58 系列。v3.15 于 2026-10-10 Day 24：**错误处理与安全审计**——`scripts/check-secrets.sh` 新增【四】**Git 全历史扫描**（`git rev-list --all` 遍历每个提交的每个文件版本，**61 个提交 × 9 类特征全 0 命中**；`cloudbaserc.json` 与 `.env` 从未进过任何一棵树）并修掉**自命中误报**的真 bug；`.gitignore` 补掉 2 处真实缝隙（`.env.production` 等变体 + 密钥文件后缀）；新增 `SECURITY.md` 安全自查清单；**结论：未发现真实密钥泄露，无需作废或重新生成任何密钥**；后端零改动。v3.14 于 2026-10-10 Day 23：**密钥排查过红线 + `.env` 规则落地 + 三类错误提示统一**——新增 `scripts/check-secrets.sh`（一条命令扫 8 类密钥特征，被跟踪文件里 **0 命中**）与只有占位符的 `.env.example`；前端错误提示拆成**网络层 / 服务端故障 / 业务拒绝**三类、统一走 `errKindText()`，**网关 502 不再被说成"云端联系不上"**；补 A56 系列；FAQ 改口径。v3.13 于 2026-10-09 Day 22：**改与删上线**——云函数新增 `PATCH` / `DELETE /api/checkins/:id`，删除做成**软删除**（`db/schema-3.sql` 加 `is_deleted` 标记列，查询默认跳过，删错能找回）；前端**勾选与删除改为走云接口**（本机只剩"移动/心情"）；补 A55 系列；FAQ 改口径。v3.12 于 2026-10-08 Day 21：周验收日）
 - 撰写日期：2026-09-23
 - 依据：TECH_DESIGN.md v2.0（vanilla 单文件路线）
 - 作用：任何人（包括半年后的自己）拿到仓库，照着做就能把页面跑起来
@@ -187,6 +187,11 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | A58 复现 favicon 404 | 打开页面 → F12 Console；或 `curl -s -o /dev/null -w "%{http_code}" https://habit-tracker-….tcloudbaseapp.com/favicon.ico` | 修复前：Console 第一条红字 `Failed to load resource: the server responded with a status of 404 ()`，Network 面板对应 `/favicon.ico`；curl 实测**本地与线上均 404**（Day 24） |
 | A58b 修复后图标可访问 | `curl -s -o /dev/null -w "%{http_code} %{size_download}" <线上>/assets/favicon.png`；线上首页源码 grep `rel="icon"` | 资源 **200 / 1304 字节**；`<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon.png">` 已在线上 HTML 里——声明后浏览器不再请求 /favicon.ico，404 消失（Day 24） |
 | A58c 修复回归 | `node test-home.js` | **417/417** 全绿（head 加了一行 link，页面行为零变化；另记录一次偶发 416/1，重跑即绿，疑似时序抖动）（Day 24） |
+| A59 六环全链路一条命令跑完 | 仓库根目录跑 `bash habit-tracker/scripts/core-flow-check.sh` | 走完「① 打开检查台 → ② 读 plan_days/checkins → ③ 写入打卡 → ④ 刷新确认 → ⑤ 修改 → ⑥ 删除」，逐环打印 ✓/✗，并**同时写出一份证据文件**。当前实测：**22 项通过 · 1 项跳过 · 0 失败**，退出码 0。**这是核心流程的总验收入口**（详见 `FLOW-TEST.md`） |
+| A59b 自检不留痕迹（可反复跑） | 跑完再查库：`tcb db execute --json --sql "SELECT count(*) FROM checkins WHERE client_req_id LIKE 'flowcheck-%'"` | 结果 **0 行** —— 脚本只用自己创建的那一条测试行（专属 `client_req_id` 标记），结束时物理删掉，**终态与跑之前完全一致**；所以前后可以跑无数次 |
+| A59c 六环的每一环都有真库对照 | 看脚本输出里标「真库对照」的行 | ② 接口条数 = 库里今天未删行数；③ `id=…` 真的落库；⑤ `text` 已更新且 `done_at` 已写入；⑥ **行还在、`is_deleted=true`**（软删除的硬证据）。两边对不上就说明问题在"接口层"而不是"数据库层" |
+| A59d 核心流程测试清单 | 打开 `habit-tracker/FLOW-TEST.md` | 六环逐条清单（每环含页面口径 + 命令口径 + 期望 + 取证 + 该看哪条原因）；§四 问题反馈格式（现象 / 复现步骤 / 报错原文 / 已尝试动作）；**§五 四步诊断协议**（原因排序 → 每个原因的验证方法 → 修复方案 → 回归验证清单）；§六 **9 组现象 × 30 条原因候选池**（每条带现成验证命令）；§七 前后证据如何留存与 diff；§八 7 条已知边界 |
+| A59e 失败时给的是中文人话 | 看脚本【附加】错误路径抽样 | 四条全过：非法 id → `400 待办 id 不合法`；不存在的 id → `404 这条待办不存在或已删除`；非法日期 → `400 日期格式不对，应为 YYYY-MM-DD`；删不存在的 id → `404 这条待办不存在或已删除`（无英文堆栈、无 SQLSTATE） |
 
 ## 四、常见问题（FAQ）
 
@@ -240,6 +245,8 @@ http://localhost:8765/habit-tracker/frontend/index.html
 | `habit-tracker/cloudfunctions/api/selftest.js` | 测试 | 本地自测：不联网、stub 掉 `fetch`（225 条断言） |
 | `habit-tracker/db/schema.sql` / `schema-2.sql` / `schema-3.sql` | 建表脚本 | Day 16 两张核心表 / Day 18 幂等键列 + 唯一索引 / Day 22 软删除标记列 |
 | `habit-tracker/scripts/check-secrets.sh` | 上线前检查（Day 23） | 只扫**被 git 跟踪**的文件，查 8 类密钥特征 + 敏感文件跟踪状态；退出码 0/1，可接 CI 或 pre-commit |
+| `habit-tracker/scripts/core-flow-check.sh` | 核心流程自检 | 一条命令走完**六环全链路**（检查台 → 读两张表 → 写入 → 刷新 → 修改 → 删除），逐环 ✓/✗ + 真库对照，并写出证据文件供前后 diff。**自己造数据、自己清理**，可反复跑 |
+| `habit-tracker/FLOW-TEST.md` | 核心流程测试清单 | 六环逐条清单 + 问题反馈格式 + **四步诊断协议** + 30 条原因候选池 + 证据留存规范 + 已知边界。**报 Bug 与修 Bug 都从这份开始** |
 | `habit-tracker/.env.example` | 配置模板（Day 23） | **只有占位符**、可以入库；真实的 `.env` 被 `.gitignore` 忽略。本项目真值走 `cloudbaserc.json` 与云端环境变量，不走 `.env` |
 
 接口的路径与字段以 `habit-tracker/api-contract.md` 为准；部署步骤看 `habit-tracker/DEPLOY.md`；数据库脚本在 `habit-tracker/db/`。
