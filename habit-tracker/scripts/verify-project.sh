@@ -150,7 +150,9 @@ else
     ok "前端 jsdom：${FE_SUM:-通过}（退出码 0）"
   else
     no "前端 jsdom 失败（退出码 $FE_RC）：${FE_SUM:-没有汇总行}"
-    dump "$(printf '%s\n' "$FE_OUT" | grep -iE '失败|✗|Error' | head -10)"
+    # Day 26 修正：失败条目的标记是 ❌（U+274C），此前只 grep「失败|✗|Error」
+    # 会把真正的失败行滤掉、只剩汇总行 —— 排错时看不到挂的是哪条（今日实miss两次）
+    dump "$(printf '%s\n' "$FE_OUT" | grep -iE '失败|✗|Error|❌' | head -10)"
   fi
 fi
 
