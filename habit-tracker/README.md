@@ -16,7 +16,7 @@
 | `frontend/` | 前端（`index.html` 单文件 + `assets/`）。**没有构建步骤**，这里的东西就是最终产物 |
 | `cloudfunctions/api/` | 云函数 `api`：`index.js`（路由层）/ `db.js`（唯一碰库的地方）/ `selftest.js`（自测） |
 | `db/` | 建表与种子 SQL（`schema.sql` / `schema-2.sql` / `schema-3.sql` / `seed.sql` / `seed-shift.sql` / `verify.sql`） |
-| `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `make-favicon.py` |
+| `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `rollback-drill.sh` / `make-favicon.py` |
 | `skills/` | 可复用的检查 Skill：`verify-project` / `filter-interaction-check` |
 | 根目录 `*.md` | 文档（见下面的索引） |
 
@@ -31,6 +31,7 @@
 | `DEPLOY.md` | 部署手册（怎么推上公网）+ §十三 卡点表 |
 | `SECURITY.md` | 安全自查清单（每项含验证方法） |
 | `FLOW-TEST.md` | 核心链路测试清单 + 四步诊断协议 + 原因候选池 |
+| `ROLLBACK.md` | 回滚手册（什么情况必须回滚的判断表 + 已演练的回退四步 + 耗时记录） |
 
 ## 质量与验证
 
@@ -87,3 +88,16 @@ bash habit-tracker/scripts/core-flow-check.sh
 它自己造数据、自己物理删掉，可以反复跑不脏库。
 
 诊断流程（拿到失败项之后怎么办）见 `FLOW-TEST.md` §五。
+
+### 4. 发布 / 回滚（Day 26 起）
+
+正式发布：改 `frontend/index.html` 底部的版本标识（`#app-ver`）→ 部署 → 跑第 1 节全量验证 → `git tag` 记锚点。
+
+回滚演练 / 真实回退：
+
+```bash
+bash habit-tracker/scripts/rollback-drill.sh drill-evidence.txt
+```
+
+真实走一遍「回退到上一版 → 验证 → 恢复 v1.0 → 验证」，逐步计时（首跑实测：回退 4s + 恢复 5s）。
+**什么情况该回滚、什么情况不该**：先看 `ROLLBACK.md` §一 的判断表 —— 数据问题回滚版本没用。

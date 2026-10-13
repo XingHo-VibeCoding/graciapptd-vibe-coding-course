@@ -149,6 +149,17 @@
     #cloud-hint{ margin:-8px 0 10px; color:var(--muted); font-size:12px; line-height:1.7; }
     #cloud-hint:empty{ display:none; }        /* 还没取到数据时不占位，避免出现空白一行 */
 
+    /* ===== 页脚版本标识（Day 26：v1.0 正式发布）=====
+       一行 muted 小字，写给两拨人看：
+       ① 用户/同伴 —— 一眼知道线上跑的是哪一版（DEPLOY.md §十三 卡点第 12 条
+          就是靠这类可见标记区分「线上还是旧版」）；
+       ② 发布/回滚 —— 它是**回滚演练的观测点**：部署旧版后这一行消失，
+          部署回 v1.0 后这一行回来，肉眼即可判定回退是否真的生效。
+       样式遵守 C1（辅助文字用 --muted）与 C2（强调文字=纯色+加粗，不铺色块底）。 */
+    .app-ver{ margin:22px 0 0; text-align:center; font-size:12px;
+              color:var(--muted); line-height:1.7; }
+    .app-ver b{ font-weight:600; color:var(--accent-deep); }
+
     /* ===== 云端检查台（Day 20 补）：「我的」页那张诊断卡片 =====
        一张卡片说清三件事：① 云端活着吗（打 GET /api/health）
        ② 核心表 checkins 的真数据（总条数 / 数据最后一天 / 今天几条 / 最近几条）
@@ -875,6 +886,9 @@
       </div>
     </section>
   </main>
+
+  <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.0</b> · 2026-10-13</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
