@@ -37,7 +37,7 @@
 | A2 | 云端检查台 | 同域名 `/?debug=1#me` | **PASS** | HTTP 200 · 健康灯绿 · 可写测试数据 |
 | A3 | 健康接口 | `…/api/health` | **PASS** | `{"ok":true,"service":"Self discipline plan"}` |
 | A4 | 真库读接口 | `…/api/day` | **PASS** | `code=0`，返回当天 6 条（**打的是真库，不是硬编码**） |
-| A5 | 站点图标 | 同域名 `/favicon.png` | **PASS** | HTTP 200 · 1304 字节（Day 24 修掉的那个 404 红字） |
+| A5 | 站点图标 | 同域名 `/assets/favicon.png`（**注意是 assets 子目录**，`/favicon.png` 会 404） | **PASS** | HTTP 200 · 1304 字节 = 本地字节数（Day 24 修掉的那个 404 红字） |
 
 ### B. 能当场复现（命令可粘贴重跑）
 
