@@ -842,7 +842,12 @@
 
       <div class="card">
         <h2>通用设置</h2>
-        <div class="set-row"><span>数据存储</span><span class="sv">仅本机浏览器，不上传</span></div>
+        <!-- Day 28（v1.1 · 独立盲审 P2）：原先这一行说的是"数据只保存在本机浏览器里、不同步出去"，
+             与首页每张卡片上方的「云端数据 · 更新于 …」**直接矛盾** —— 用户会以为自己的
+             待办根本没被保存。改成与真实数据流一致的两行（首页小字也已写「移动/心情暂存本机」）。
+             注：这里刻意不照抄旧文案，免得以后用 grep 检查线上时把注释也算成"没修干净"。 -->
+        <div class="set-row"><span>待办与打卡</span><span class="sv">同步到云端</span></div>
+        <div class="set-row"><span>移动与心情</span><span class="sv">暂存本机</span></div>
         <div class="theme-block">
           <div class="tb-label">主题（深浅与背景图各自独立设置）</div>
           <div class="theme-mode" id="theme-mode" role="group" aria-label="深浅主题">
@@ -888,7 +893,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.0</b> · 2026-10-13</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.1</b> · 2026-10-15</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
@@ -2242,6 +2247,11 @@
   });
   el('tm-cancel').addEventListener('click', () => { el('tm-modal').hidden = true; });
   const submitToday = () => {
+    // Day 28（v1.1 · 独立盲审 P1）：空内容先拦在这里。
+    // 原先 addTodo 遇到空文本会**静默 return false**，而弹窗照样关掉 —— 用户以为加上了，
+    // 回去列表里找不到，还没有任何提示。同文件的「移动待办」（先选一个日期）与
+    // 「记想法」（写点什么再保存吧）两个弹窗都是"toast + 不关窗"的写法，只有这个最高频入口漏了。
+    if (!el('tm-text').value.trim()) { showToast('写点什么再添加吧'); el('tm-text').focus(); return; }
     addTodo(el('tm-text').value, el('tm-time').value, el('tm-quad').value);
     el('tm-modal').hidden = true;
   };

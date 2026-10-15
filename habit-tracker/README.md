@@ -16,9 +16,9 @@
 | `frontend/` | 前端（`index.html` 单文件 + `assets/`）。**没有构建步骤**，这里的东西就是最终产物 |
 | `cloudfunctions/api/` | 云函数 `api`：`index.js`（路由层）/ `db.js`（唯一碰库的地方）/ `selftest.js`（自测） |
 | `db/` | 建表与种子 SQL（`schema.sql` / `schema-2.sql` / `schema-3.sql` / `seed.sql` / `seed-shift.sql` / `verify.sql`）；`db/backups/` 放数据快照（**不入库**，见 `RELEASE.md` §5.2） |
-| `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `rollback-drill.sh` / `db-snapshot.sh` / `drive-user-flow.js` / `make-favicon.py` |
+| `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `repeat-check.sh` / `rollback-drill.sh` / `db-snapshot.sh` / `drive-user-flow.js` / `make-favicon.py` |
 | `skills/` | 可复用的检查 Skill：`verify-project` / `filter-interaction-check` |
-| `releases/` | 发布与演练的记录（`v1.0-rollback-drill-record.md` / `v1.0-quota-20261015.txt`） |
+| `releases/` | 发布与演练的记录（`v1.0-rollback-drill-record.md` / `v1.0-quota-20261015.txt` / `v1.0-repeat-check-20261015.txt`） |
 | `trial/` | 第三方试用材料：任务脚本（`task-card.md`）/ 观察员记录表（`record-sheet.md`）/ 反馈收集表 / 分诊与复验（`triage.md`）/ 自测预演记录 |
 | 根目录 `*.md` | 文档（见下面的索引） |
 
@@ -36,6 +36,9 @@
 | `RELEASE.md` | **发布清单**（版本标记 / 发布前验证 / 发布步骤 / 发布后验证 / 代码与数据备份） |
 | `ROLLBACK.md` | **回滚手册**（什么情况必须回滚的判断表 + 已演练的回退四步 + 云函数回退 + 演练记录模板） |
 | `RESOURCES.md` | **资源与到期说明**（当前用量 / 怎么看 / 导出数据三步 / 到期倒排清单；**不含任何密钥**） |
+| `FINAL-ACCEPT.md` | **结营验收表 v1.1**（交付物总清单逐项能当场打开 / 重复执行检测 / 独立盲审结论 / **学员指定 10 项逐条检查**） |
+| `RETRO.md` | **28 天结营复盘**（最大的认知改变 + 数据 + 诚实清单） |
+| `DEMO-FINAL.md` | **终期演示提纲 3–5 分钟**（六段：用户问题 / 核心流程 / 提示词改写 / 验证方式 / 平台限制 / 后续优化） |
 
 ## 质量与验证
 
@@ -93,6 +96,22 @@ bash habit-tracker/scripts/core-flow-check.sh
 
 诊断流程（拿到失败项之后怎么办）见 `FLOW-TEST.md` §五。
 
+#### 3.1 反复跑会不会留下痕迹？（Day 28 新增）
+
+```bash
+bash habit-tracker/scripts/repeat-check.sh
+```
+
+`core-flow-check.sh` 回答"**这一遍**对不对"，`repeat-check.sh` 回答"**连着跑两遍**会不会变"：
+两遍逐环结论逐字比对 + 残留检查 + 库内总条数是否回到基线 + 幂等键是否真的在
+**数据库层**挡住重复（同键第 2 次必须 409，且物理行数只能是 1）。
+
+它开头有一组**「判据自证」**：先拿"必然命中"的样本证明自己的判据没写坏
+（包括反向验证"全绿时不许报失败"），**再**去检查项目。加这组的原因见
+`releases/v1.0-repeat-check-20261015.txt` 里第一轮的误报对照：
+判据里 `grep -c` 无匹配会打印 `0` 但退出码为 1，多接一个 `|| echo 0` 就会把
+"全绿"读成"有失败"。**判据错了，后面每一栏 ✓ 都不算数。**
+
 ### 4. 发布 / 回滚（Day 26 起）
 
 **发布**：照 **`RELEASE.md`** 从上往下走 —— 版本标记 → 发布前门禁（第 1 节那条命令）→ 打 tag → 部署 → 发布后验证 → 记录。
@@ -141,3 +160,18 @@ node habit-tracker/scripts/drive-user-flow.js --width=430 --out=ev  # 指定宽�
 
 每步截图 + 逐项 ✓/✗，退出码 0/1；自造数据跑完自删。与 jsdom 测试（`test-home.js`，
 400+ 行为断言）的分工：那边快而细，这边慢但**所见即真人所见**。
+
+### 6. 结营验收（Day 28）
+
+交付当天要"一条条点给验收人看"时，直接翻这三份：
+
+- **`FINAL-ACCEPT.md`** —— 交付物总清单，按 **能当场打开 / 能当场复现 / 能当场查阅** 三类排好，
+  每项都带 `线上:` 地址或 `复现:` 命令；另含重复执行检测结论、**独立盲审**（未参与项目的外部代理）
+  提出的问题清单及逐条复核，以及**学员指定 10 项逐条检查**（结论只有"可当场展示 / 部分完成 / 未完成"）。
+- **`DEMO-FINAL.md`** —— 3–5 分钟演示提纲（六段结构 + 现场动作单 + 两张截图要求）。
+- **`RETRO.md`** —— 28 天结营复盘。
+
+盲审的价值在于**它是外部视角**：它抓到的第一条问题（「添加待办」弹窗空输入静默失败）
+是本项目自查 8 个脚本、400+ 断言都没覆盖到的——因为那些检查都在验"我实现了什么"，
+而它验的是"用户以为发生了什么"。**这两条（P1 / P2）已在 v1.1 修掉并补了断言**：
+产物指纹变了，所以页脚版本、tag、`RELEASE.md` 发布记录三处一起改，见 `FINAL-ACCEPT.md` §三.1。
