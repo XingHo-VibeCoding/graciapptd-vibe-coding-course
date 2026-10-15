@@ -577,9 +577,10 @@ grep -n "^\.env" .gitignore
 | 命令静默被杀 / 无输出 | 沙箱拦了外网 | 部署类命令需在放行网络的环境下执行 |
 | 接口回 `{"code":500,...}` | 云函数里环境变量没配 / API Key 失效 / 表不存在 | 看云函数日志：`tcb fn log api`；再核对 §四 三个变量 |
 | 接口回 `{"code":401,...}` | 没取到身份（`DEMO_UID` 没配，且没有登录上下文） | 补 `DEMO_UID` 环境变量 |
-| 接口回 `{"code":404,...,"availableRoutes":[...]}` | 路由没命中 | 看 `availableRoutes` 里真实有哪些路径，核对 URL |
+| 接口回 `{"code":404,"message":"接口不存在","data":null}` | 路由没命中（Day 27 起不再回路由清单——那是信息泄露） | 路由清单看 `api-contract.md`；`tcb fn log api` 里有 `[api] 未命中路由：…` 可核对实际收到的方法和路径 |
 | 返回 HTML 而不是 JSON | 打开的是静态托管地址，不是云函数地址 | 云函数域名是 `*.service.tcloudbase.com`，别搞混 |
 | 静态页面白屏 / 图片全裂 | 上传时多带了一层目录，或 `assets/` 没传 | 只传 `frontend/` 里的**内容** |
+| `tcb fn deploy` 报成功，线上行为却没变（Day 27 实测） | **在仓库根跑的部署**——CLI 没读到 `habit-tracker/cloudbaserc.json`，只做了"推断配置更新"，**代码根本没上传**（修改时间会更新，极具迷惑性） | **进 `habit-tracker/` 目录再跑** `tcb fn deploy api --force`；部署后用 `tcb fn invoke api --params '{"httpMethod":"GET","path":"/api/健康检查以外的路径"}'` 直接调用核对，别信"部署成功"三个字 |
 | 页面打开是旧版本 | 浏览器 / CDN 缓存 | `Ctrl + F5`；CDN 通常几分钟刷新 |
 | 控制台「测试」正常但公网访问失败 | 没配 HTTP 访问路径 | 见 §五 |
 | 接口 `curl` 能通，但页面上还是本机数据 | 跨域被浏览器拦（或页面没接上接口） | F12 → Console 找 `blocked by CORS policy`；再按 §十一 一条命令验证来源 |
@@ -789,6 +790,36 @@ bash habit-tracker/scripts/check-secrets.sh
 4. 最后才轮到 `git filter-repo` + 强推，且**必须通知所有协作者重新 clone** ——
    否则他本地那份历史会把密钥随下一次 push 带回来。
 5. 复盘：把这次漏网的特征补进 `scripts/check-secrets.sh` 的特征表。
+
+---
+
+## 十五、资源额度与到期（Day 27 起：发布前必查）
+
+**为什么**：额度耗尽或环境到期时，功能检查可能全绿（接口"还能通"），但那是
+超额前的最后窗口 —— 等发现就是线上停服。所以额度与到期进 `verify-project.sh`
+的 E2 检查项（≥80% 警告 / ≥95% 阻断 / 到期前 30 天警告）。
+
+```bash
+# 资源用量（资源点：本计费周期用了多少 / 套餐总量）
+MSYS_NO_PATHCONV=1 tcb env usage --env-id habit-tracker-d9gh0mjel767ff0d2
+# 到期时间 / 套餐版本（体验版不自动续费，看 Expiration time）
+MSYS_NO_PATHCONV=1 tcb env list --json
+```
+
+**v1.0 基线（2026-10-15 采集，全文见 `releases/v1.0-quota-20261015.txt`）**：
+
+| 项 | 值 |
+|---|---|
+| 套餐 | 体验版（baas_trial），**不自动续费** |
+| 本计费周期 | 2026-10-01 ~ 2026-11-01 |
+| 资源点 | **10.00 / 3000.00（0.33%）**，大头：API 调用 4.59、云函数 3.66、HTTP 网关 1.43 |
+| 到期 | **2027-04-01 23:59:59**，状态 Normal |
+
+**超额/到期怎么办**：超额 → 看 usage 明细里涨得最快的模块（一般是 API 调用，
+查一下是不是有脚本在刷）；到期 → 续费（`tcb env renew`）或提前把数据快照导出
+（`scripts/db-snapshot.sh`）迁移走。**体验版默认域名还有风控条款**：仅建议开发
+测试，流量异常可能被限制访问，正式分发前必须换自定义域名（需 ICP 备案，见
+Day 27 发现的「风险提醒」中间页）。
 
 ---
 

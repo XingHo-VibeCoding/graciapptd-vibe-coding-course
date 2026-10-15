@@ -15,9 +15,11 @@
 |---|---|
 | `frontend/` | 前端（`index.html` 单文件 + `assets/`）。**没有构建步骤**，这里的东西就是最终产物 |
 | `cloudfunctions/api/` | 云函数 `api`：`index.js`（路由层）/ `db.js`（唯一碰库的地方）/ `selftest.js`（自测） |
-| `db/` | 建表与种子 SQL（`schema.sql` / `schema-2.sql` / `schema-3.sql` / `seed.sql` / `seed-shift.sql` / `verify.sql`） |
-| `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `rollback-drill.sh` / `make-favicon.py` |
+| `db/` | 建表与种子 SQL（`schema.sql` / `schema-2.sql` / `schema-3.sql` / `seed.sql` / `seed-shift.sql` / `verify.sql`）；`db/backups/` 放数据快照（**不入库**，见 `RELEASE.md` §5.2） |
+| `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `rollback-drill.sh` / `db-snapshot.sh` / `drive-user-flow.js` / `make-favicon.py` |
 | `skills/` | 可复用的检查 Skill：`verify-project` / `filter-interaction-check` |
+| `releases/` | 发布与演练的记录（`v1.0-rollback-drill-record.md` / `v1.0-quota-20261015.txt`） |
+| `trial/` | 第三方试用材料：任务卡 / 反馈收集表 / 自测预演记录 |
 | 根目录 `*.md` | 文档（见下面的索引） |
 
 ## 文档索引
@@ -31,7 +33,8 @@
 | `DEPLOY.md` | 部署手册（怎么推上公网）+ §十三 卡点表 |
 | `SECURITY.md` | 安全自查清单（每项含验证方法） |
 | `FLOW-TEST.md` | 核心链路测试清单 + 四步诊断协议 + 原因候选池 |
-| `ROLLBACK.md` | 回滚手册（什么情况必须回滚的判断表 + 已演练的回退四步 + 耗时记录） |
+| `RELEASE.md` | **发布清单**（版本标记 / 发布前验证 / 发布步骤 / 发布后验证 / 代码与数据备份） |
+| `ROLLBACK.md` | **回滚手册**（什么情况必须回滚的判断表 + 已演练的回退四步 + 云函数回退 + 演练记录模板） |
 
 ## 质量与验证
 
@@ -91,13 +94,40 @@ bash habit-tracker/scripts/core-flow-check.sh
 
 ### 4. 发布 / 回滚（Day 26 起）
 
-正式发布：改 `frontend/index.html` 底部的版本标识（`#app-ver`）→ 部署 → 跑第 1 节全量验证 → `git tag` 记锚点。
+**发布**：照 **`RELEASE.md`** 从上往下走 —— 版本标记 → 发布前门禁（第 1 节那条命令）→ 打 tag → 部署 → 发布后验证 → 记录。
 
-回滚演练 / 真实回退：
+发布前先备份数据（**唯一无法从代码重建的东西**）：
+
+```bash
+bash habit-tracker/scripts/db-snapshot.sh          # 导出两表 → db/backups/<时间>.sql
+bash habit-tracker/scripts/db-snapshot.sh --list   # 看已有快照
+```
+
+**回滚演练 / 真实回退**：
 
 ```bash
 bash habit-tracker/scripts/rollback-drill.sh drill-evidence.txt
 ```
 
-真实走一遍「回退到上一版 → 验证 → 恢复 v1.0 → 验证」，逐步计时（首跑实测：回退 4s + 恢复 5s）。
+真实走一遍「回退到上一版 → 验证 → 恢复当前版本 → 验证」，逐步计时（最近实测：回退 4s + 恢复 4s，全程 18s）。
+回退锚点默认取**最新版本 tag 的父提交**；若锚点产物与当前版本相同，脚本会当场拒绝执行（防止跑出"看起来全绿其实什么都没验证"的记录）。
+
 **什么情况该回滚、什么情况不该**：先看 `ROLLBACK.md` §一 的判断表 —— 数据问题回滚版本没用。
+演练记录怎么写：`ROLLBACK.md` §七 模板；填好的实例见 `releases/v1.0-rollback-drill-record.md`。
+
+### 5. 第三方试用 / 真实用户视角（Day 27 起）
+
+请真人试用：把 **`trial/task-card.md`** 直接转发给对方（自包含，含"首访会先看到
+腾讯云风险提醒页"的说明）；反馈按 `trial/feedback-form.md` 归档后进 `FLOW-TEST.md`
+四步协议。预演记录见 `trial/selftest-record.md`。
+
+以「真实用户视角」驱动真浏览器（Edge/Chrome 无头 + CDP 真实鼠标键盘事件）走完
+核心流程，适合**手机宽度自测**与真人试用前的回归：
+
+```bash
+node habit-tracker/scripts/drive-user-flow.js                       # 390px 手机宽度，跑线上
+node habit-tracker/scripts/drive-user-flow.js --width=430 --out=ev  # 指定宽度与截图目录
+```
+
+每步截图 + 逐项 ✓/✗，退出码 0/1；自造数据跑完自删。与 jsdom 测试（`test-home.js`，
+400+ 行为断言）的分工：那边快而细，这边慢但**所见即真人所见**。

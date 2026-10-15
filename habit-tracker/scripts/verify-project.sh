@@ -23,7 +23,7 @@
 #    B 自动化测试    前端 jsdom + 云函数自测
 #    C 线上可达性    首页 / health / 图标 / 跨域头             （卡点 5·7·15）
 #    D 静态资源      引用完整性 + 线上可达 + 重复检测           （卡点 15）
-#    E 数据新鲜度    库内最后一天 vs 今天                      （卡点 1）
+#    E 数据新鲜度    库内最后一天 vs 今天 + E2 资源额度与到期   （卡点 1 / Day 27）
 #    G 踩坑复验      跨域预检 / 环境变量 / 列名 / 错误分级 / 六环（卡点 2·3·8·10·13）
 #    F 仓库状态      工作区是否干净 / 是否真的推上去了
 #    ＋ 判据自证     把「必然命中」的样本回灌给判据本身，证明检查不是摆设
@@ -324,6 +324,66 @@ print(json.loads(rows[0])[cols.index("d")])
       warn "库内出现了未来日期（$LASTDAY > $TODAY）—— 检查一下 seed-shift 是不是跑偏了"
     fi
   fi
+
+  # --- E2 资源额度与到期（Day 27 加）-------------------------------------------------
+  # 为什么放进发布前检查：额度耗尽或环境到期，会让"功能全绿"变成假话 ——
+  # 接口能通是因为还没超额，等发现时已经是线上事故。阈值：≥80% 警告，≥95% 阻断。
+  say ""
+  say "      —— E2 资源额度与到期 ——"
+  ENVID="${ENVID:-habit-tracker-d9gh0mjel767ff0d2}"
+  if [ -z "$TCB" ] || [ -z "$PY" ]; then
+    warn "没找到 tcb / python —— 额度与到期两项跳过"
+  else
+    QUOTA_LINE="$("$TCB" env usage --env-id "$ENVID" 2>&1 | grep -oE 'resource points: [0-9.]+ used / [0-9.]+ total' | head -1)"
+    if [ -z "$QUOTA_LINE" ]; then
+      warn "额度查询失败（tcb 登录过期？）—— 手动跑：tcb env usage --env-id $ENVID"
+    else
+      USED="$(printf '%s' "$QUOTA_LINE" | awk '{print $3}')"
+      TOTAL="$(printf '%s' "$QUOTA_LINE" | awk '{print $6}')"
+      PCT="$(awk "BEGIN{ if ($TOTAL+0 == 0) print 100; else printf \"%.1f\", $USED*100/$TOTAL }")"
+      say "      本计费周期资源点：$USED / $TOTAL（$PCT%）"
+      if awk "BEGIN{exit !($PCT >= 95)}"; then
+        no "资源点已用 $PCT% —— 额度将尽，先扩容或清理再发布"
+      elif awk "BEGIN{exit !($PCT >= 80)}"; then
+        warn "资源点已用 $PCT% —— 接近上限，发布前留意增速"
+      else
+        ok "资源点充足：$USED / $TOTAL（$PCT%）"
+      fi
+    fi
+    EXPIRE="$("$TCB" env list --json 2>/dev/null | "$PY" -c '
+import sys, json
+raw = sys.stdin.read(); i = raw.find("{")
+if i < 0: print("__ERR__"); raise SystemExit
+try: envs = json.loads(raw[i:])["data"]
+except Exception: print("__ERR__"); raise SystemExit
+for e in envs:
+    if e.get("EnvId") == "'"$ENVID"'":
+        print(e.get("ExpireTime", "__ERR__")); break
+else: print("__ERR__")
+' 2>/dev/null)"
+    if [ "$EXPIRE" = "__ERR__" ] || [ -z "$EXPIRE" ]; then
+      warn "环境到期时间没查到 —— 手动跑：tcb env list --json"
+    else
+      DAYS_LEFT="$(EXPIRE="$EXPIRE" "$PY" -c '
+import os
+from datetime import datetime
+try:
+    left = datetime.strptime(os.environ["EXPIRE"], "%Y-%m-%d %H:%M:%S") - datetime.now()
+    print(left.days)
+except Exception:
+    print("__ERR__")
+' 2>/dev/null)"
+      if [ "$DAYS_LEFT" = "__ERR__" ]; then
+        warn "到期时间解析失败（$EXPIRE）—— 手动核一眼"
+      elif [ "$DAYS_LEFT" -lt 0 ]; then
+        no "环境已于 $EXPIRE 过期 —— 线上随时可能停服，必须先续费"
+      elif [ "$DAYS_LEFT" -le 30 ]; then
+        warn "环境 $EXPIRE 到期，只剩 $DAYS_LEFT 天 —— 体验版到期不自动续，尽快决定续费或迁移"
+      else
+        ok "环境有效期充足：$EXPIRE 到期（还剩 $DAYS_LEFT 天，体验版不自动续费）"
+      fi
+    fi
+  fi
 fi
 
 # ===========================================================================
@@ -493,6 +553,9 @@ probe     "私钥文件内容"          'BEGIN [A-Z ]*PRIVATE KEY'   "$(printf '
 FAKE_RAND="rand0mStr1ngW1thDigits""AndLetters9999"
 probe     "32 位随机串（值位置）"  '"[A-Za-z0-9_-]{32,}"'      "\"$FAKE_RAND\""
 probe_neg "纯分隔线不误报为随机串" '"[-]*[A-Za-z0-9][A-Za-z0-9_-]{30,}"' '"------------------------------------------------------------"'
+# E2 的判据也要自证：额度行的解析正则，拿真实输出格式回灌（Day 27 加）
+probe     "额度行解析正则"        'resource points: [0-9.]+ used / [0-9.]+ total' "In-package resource points: 9.78 used / 3000.00 total"
+probe_neg "残缺额度行不误报"      'resource points: [0-9.]+ used / [0-9.]+ total' "resource points: used / total"
 say ""
 tip "这一组是 Day 25 的教学点：检查清单最常见的失败不是漏检，而是**虚报通过**。"
 tip "拿「必然命中」的样本回灌给判据，任何一条正则写坏都会当场暴露成 ✗。"

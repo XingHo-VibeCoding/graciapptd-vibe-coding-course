@@ -2,7 +2,7 @@
  * 自律计划 · 云函数 api 本地自测（Day 17 建立，Day 18 补写入路径，Day 19 补分层）
  * ---------------------------------------------------------------------------
  * 作用：**不联网、不连数据库**，把云函数的五种东西验证一遍——
- *   1) 路由：路径/方法能不能命中，未命中会不会回 404 且列出可用路由
+ *   1) 路由：路径/方法能不能命中，未命中会不会回 404（且**不再**泄露路由表/版本号，Day 27 收口）
  *   2) 参数校验与身份：非法日期、互斥参数、limit 越界、缺必填字段、未取到身份 → 各自的错误码
  *   3) 数据库交互：拼出来的 SQL 查询串 / 写入体对不对 + 数据库回的行有没有被正确映射成契约形状
  *   4) 写入防护：重复提交（预检 + 唯一索引兜底两条路径）会不会都被拦住并回 409
@@ -169,9 +169,10 @@ const writeResponder = (opt) => {
 
   r = await call({ httpMethod: 'GET', path: '/api/nope' });
   eq('未命中路由：回 404 信封', r.code, 404);
-  ok('未命中路由：message 带出路径', r.message.indexOf('/api/nope') > -1);
-  ok('404 里列出可用路由', Array.isArray(r.data.availableRoutes) && r.data.availableRoutes.indexOf('GET /api/day') > -1,
-     JSON.stringify(r.data));
+  eq('未命中路由：只回一句中文，不回显请求路径（路径是用户输入）', r.message, '接口不存在');
+  ok('404 不再泄露路由表与版本号（Day 27 收口：原实现等于白送接口地图）',
+     r.data === null && r.message.indexOf('availableRoutes') === -1 &&
+     JSON.stringify(r).indexOf('0.5.') === -1, JSON.stringify(r));
 
   r = await call({ httpMethod: 'POST', path: '/api/health' });
   eq('方法不对：回 404（健康检查只认 GET）', r.code, 404);
@@ -543,8 +544,7 @@ const writeResponder = (opt) => {
   responder = () => ({ rows: [] });
   r = await call({ httpMethod: 'PATCH', path: '/api/checkins' });
   eq('PATCH 尚未实现（第 4 周）→ 404', r.code, 404);
-  ok('404 的可用路由里已含 POST /api/checkins',
-     r.data.availableRoutes.indexOf('POST /api/checkins') > -1, JSON.stringify(r.data.availableRoutes));
+  ok('404 的 data 为空（不借机带出任何路由信息）', r.data === null, JSON.stringify(r.data));
 
   // =========================================================================
   // 八、异常兜底
@@ -719,10 +719,8 @@ const writeResponder = (opt) => {
 
   r = await call({ httpMethod: 'PUT', path: '/api/checkins/101' });
   eq('没实现的方法：仍回 404（不悄悄当成别的接口）', r.code, 404);
-  ok('404 的可用路由里带出带参数的接口',
-     r.data.availableRoutes.indexOf('PATCH /api/checkins/:id') > -1 &&
-     r.data.availableRoutes.indexOf('DELETE /api/checkins/:id') > -1,
-     JSON.stringify(r.data.availableRoutes));
+  ok('404 一律同款最小响应（不区分"路径不存在"和"方法不对"，避免拼出接口地图）',
+     r.message === '接口不存在' && r.data === null, JSON.stringify(r));
 
   installFakeFetch();
   responder = () => ({ rows: [] });

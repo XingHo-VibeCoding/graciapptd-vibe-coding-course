@@ -29,6 +29,11 @@ node_modules/
 dist/
 build/
 
+# 真库数据快照（scripts/db-snapshot.sh 的产物）—— 含真实打卡数据，不入库。
+# 即便是演示数据也一并挡掉：仓库是公开的，数据一旦提交就永久留在历史里。
+# 目录本身靠 .gitkeep 留在版本里（否则 clone 后脚本第一次跑要自己建目录）。
+habit-tracker/db/backups/*.sql
+
 # ===== 日志 =====
 *.log
 npm-debug.log*

@@ -247,8 +247,13 @@
 
 | 情况 | 返回 |
 |---|---|
-| 方法不对（如 `POST /api/health`） | `{"code":404,"message":"接口不存在：POST /api/health","data":{"availableRoutes":["GET /api/health"]}}` |
+| 方法不对（如 `POST /api/health`） | `{"code":404,"message":"接口不存在","data":null}` |
 | 函数内部异常 | `{"code":500,"message":"服务端出了点问题，稍后再试","data":null}` |
+
+> **Day 27 收口**：404 曾带回 `availableRoutes`（全部路由清单）与云函数版本号，
+> 实测 `/api/nope` 就能拿到完整"接口地图"——属于信息泄露，已改为上面的最小响应。
+> 路由清单的唯一权威是本文档；排查"路径写错了还是接口没做"看云函数日志里的
+> `[api] 未命中路由：…`。前端对 404 的处理不变（`business` 类，转述 message）。
 
 **验证方式**（Day 15 截图就是这一步）：
 

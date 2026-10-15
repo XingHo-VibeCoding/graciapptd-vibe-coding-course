@@ -607,12 +607,8 @@ const idRoutes = [
   { method: 'PATCH', re: /^\/api\/checkins\/([^/]+)$/, handler: updateCheckin },
   { method: 'DELETE', re: /^\/api\/checkins\/([^/]+)$/, handler: deleteCheckin },
 ];
-
-/** 全部可用路由（固定 + 带参数的），只用于 404 提示与调试时列出 */
-const allRoutes = () => Object.keys(routes).concat([
-  'PATCH /api/checkins/:id',
-  'DELETE /api/checkins/:id',
-]);
+// 注：不再有 allRoutes() —— Day 27 把 404 收口成最小响应后，路由清单的
+// 唯一权威是 api-contract.md，云函数不再向请求方输出它。
 
 /**
  * 云函数入口：平台每次请求都会调用这个 main。
@@ -639,11 +635,15 @@ exports.main = async (event = {}, context = {}) => {
     }
 
     if (!handler) {
-      // 404 的 message 里带上可用路由，调试时一眼看出是路径写错了还是接口还没做
-      return reply(404, '接口不存在：' + method + ' ' + path, {
-        availableRoutes: allRoutes(),
-        version: VERSION,
-      });
+      // 404 只回一句中文 —— Day 27 收口：
+      //   ① 不再回 availableRoutes + 版本号：原实现等于把"接口地图"白送给任何
+      //      探测者（实测 /api/nope 能拿到全部 6 条路由 + 0.5.0），信息泄露；
+      //   ② 也不再原样回显请求路径：路径是用户输入，回显虽经前端 textContent
+      //      渲染不会执行，但对其它消费方不设防，没必要留。
+      // 调试去哪找：路由清单看 api-contract.md；服务端日志有下面这行未命中记录。
+      const safePath = String(path).replace(/[\r\n\t]/g, ' ').slice(0, 120);
+      console.log('[api] 未命中路由：' + method + ' ' + safePath);
+      return reply(404, '接口不存在', null);
     }
     // 顺手打一行日志：出错时在 CloudBase 控制台"日志"里能看到每次请求的方法和路径
     console.log('[api] ' + method + ' ' + path + ' 命中路由，uid=' +
@@ -663,7 +663,6 @@ exports.SERVICE = SERVICE;
 exports.VERSION = VERSION;
 exports.routes = routes;
 exports.idRoutes = idRoutes;
-exports.allRoutes = allRoutes;
 exports.pickBody = pickBody;
 exports.isDate = isDate;
 exports.isTime = isTime;
