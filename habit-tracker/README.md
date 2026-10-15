@@ -19,7 +19,7 @@
 | `scripts/` | 质量工具：`verify-project.sh` / `check-secrets.sh` / `core-flow-check.sh` / `rollback-drill.sh` / `db-snapshot.sh` / `drive-user-flow.js` / `make-favicon.py` |
 | `skills/` | 可复用的检查 Skill：`verify-project` / `filter-interaction-check` |
 | `releases/` | 发布与演练的记录（`v1.0-rollback-drill-record.md` / `v1.0-quota-20261015.txt`） |
-| `trial/` | 第三方试用材料：任务卡 / 反馈收集表 / 自测预演记录 |
+| `trial/` | 第三方试用材料：任务脚本（`task-card.md`）/ 观察员记录表（`record-sheet.md`）/ 反馈收集表 / 分诊与复验（`triage.md`）/ 自测预演记录 |
 | 根目录 `*.md` | 文档（见下面的索引） |
 
 ## 文档索引
@@ -35,6 +35,7 @@
 | `FLOW-TEST.md` | 核心链路测试清单 + 四步诊断协议 + 原因候选池 |
 | `RELEASE.md` | **发布清单**（版本标记 / 发布前验证 / 发布步骤 / 发布后验证 / 代码与数据备份） |
 | `ROLLBACK.md` | **回滚手册**（什么情况必须回滚的判断表 + 已演练的回退四步 + 云函数回退 + 演练记录模板） |
+| `RESOURCES.md` | **资源与到期说明**（当前用量 / 怎么看 / 导出数据三步 / 到期倒排清单；**不含任何密钥**） |
 
 ## 质量与验证
 
@@ -115,11 +116,20 @@ bash habit-tracker/scripts/rollback-drill.sh drill-evidence.txt
 **什么情况该回滚、什么情况不该**：先看 `ROLLBACK.md` §一 的判断表 —— 数据问题回滚版本没用。
 演练记录怎么写：`ROLLBACK.md` §七 模板；填好的实例见 `releases/v1.0-rollback-drill-record.md`。
 
-### 5. 第三方试用 / 真实用户视角（Day 27 起）
+### 5. 第三方试用 / 真实用户视角（Day 27 起，Day 28 升级为"观察版"）
 
-请真人试用：把 **`trial/task-card.md`** 直接转发给对方（自包含，含"首访会先看到
-腾讯云风险提醒页"的说明）；反馈按 `trial/feedback-form.md` 归档后进 `FLOW-TEST.md`
-四步协议。预演记录见 `trial/selftest-record.md`。
+**请真人试用**：把 **`trial/task-card.md`** 直接转发给对方（自包含，含"首访会先看到
+腾讯云风险提醒页"的说明）。Day 28 起它升级为**观察版**：每步只说"做什么"，
+**故意有 2 处不写"怎么点"**（打卡 / 修改），专门用来测外行第一反应点哪里。
+
+用完在旁边的**观察员**照 **`trial/record-sheet.md`** 逐步骤记（到达时刻 / 停留秒数 /
+他实际点了什么 / 原话），试用者自己填的走 `trial/feedback-form.md`；
+拿到记录后照 **`trial/triage.md`** 打分选出"本次只修哪一条"，再用它的**修复提示词模板**
+下指令、用**复验最小任务模板**让用户回验。
+
+> 为什么两张表都要：试用者填的是**事后回忆**（会自动补全逻辑），观察员记的是
+> 卡住那 20 秒里**手指点了哪** —— 真问题通常藏在后者里。
+> 预演记录见 `trial/selftest-record.md`。
 
 以「真实用户视角」驱动真浏览器（Edge/Chrome 无头 + CDP 真实鼠标键盘事件）走完
 核心流程，适合**手机宽度自测**与真人试用前的回归：
