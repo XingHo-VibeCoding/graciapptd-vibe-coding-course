@@ -653,7 +653,9 @@
     .app-item .ai-badge{ display:flex; align-items:center; justify-content:center;
                width:40px; height:40px; border-radius:11px; overflow:hidden;
                background:var(--card2); }
-    .app-item .ai-badge img{ width:32px; height:32px; object-fit:contain; display:block; }
+    .app-item .ai-badge svg{ width:30px; height:30px; display:block;
+               color:var(--ink); }            /* 单色线条图标：颜色跟主题（浅=深棕 / 深=浅白）*/
+    .app-item:disabled .ai-badge svg{ color:var(--muted); opacity:.75; }
     .app-item .ai-txt{ overflow:hidden; }
     .app-item .ai-txt b{ display:block; font-size:15px; font-weight:600;
                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -674,6 +676,43 @@
   </style>
 </head>
 <body>
+<!-- 应用页图标（改进：替换原黑白 PNG 线稿）。
+     单色线条 sprite，stroke=currentColor → 颜色由 CSS var(--ink) 控制，
+     浅色主题=深棕线条 / 深色主题=浅色线条，随主题自动切换（PNG 做不到）。 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="ic-todo" viewBox="0 0 48 48">
+      <rect x="10" y="8" width="28" height="32" rx="5" fill="none" stroke="currentColor" stroke-width="3"/>
+      <path d="M16 17h14M16 24h14M16 31h8" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+    </symbol>
+    <symbol id="ic-timer" viewBox="0 0 48 48">
+      <path d="M18 6h12M24 6v5" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <circle cx="24" cy="27" r="12" fill="none" stroke="currentColor" stroke-width="3"/>
+      <path d="M24 27l6-6" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ic-memorial" viewBox="0 0 48 48">
+      <rect x="9" y="10" width="30" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="3"/>
+      <path d="M9 20h30M17 6v7M31 6v7" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M24 35c-4-3-6.5-5.2-6.5-8 0-2.1 1.6-3.6 3.5-3.6 1.2 0 2.3.6 3 1.6.7-1 1.8-1.6 3-1.6 1.9 0 3.5 1.5 3.5 3.6 0 2.8-2.5 5-6.5 8z" fill="currentColor"/>
+    </symbol>
+    <symbol id="ic-affirm" viewBox="0 0 48 48">
+      <path d="M11 9h26a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H24l-7 7v-7h-6a3 3 0 0 1-3-3V12a3 3 0 0 1 3-3z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M24 14.5l1.7 3.8 4 .6-2.9 2.8.7 4-3.5-1.9-3.5 1.9.7-4-2.9-2.8 4-.6z" fill="currentColor"/>
+    </symbol>
+    <symbol id="ic-topic" viewBox="0 0 48 48">
+      <rect x="9" y="9" width="30" height="30" rx="7" fill="none" stroke="currentColor" stroke-width="3"/>
+      <circle cx="17.5" cy="17.5" r="2.6" fill="currentColor"/><circle cx="30.5" cy="17.5" r="2.6" fill="currentColor"/>
+      <circle cx="24" cy="24" r="2.6" fill="currentColor"/>
+      <circle cx="17.5" cy="30.5" r="2.6" fill="currentColor"/><circle cx="30.5" cy="30.5" r="2.6" fill="currentColor"/>
+    </symbol>
+    <symbol id="ic-widget" viewBox="0 0 48 48">
+      <path d="M24 29V16" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <path d="M24 21c0-5-3.5-8-8-8 0 5 3.5 8 8 8z" fill="currentColor"/>
+      <path d="M24 21c0-5 3.5-8 8-8 0 5-3.5 8-8 8z" fill="currentColor"/>
+      <path d="M15 29h18l-2.2 9h-13.6z" fill="currentColor"/>
+    </symbol>
+  </defs>
+</svg>
 <div class="app">
 
   <main>
@@ -784,32 +823,32 @@
       <div class="card">
         <div class="apps-list" id="apps-list">
         <button type="button" class="app-item" data-app="todo">
-          <span class="ai-badge"><img src="assets/icon-todo.png?v=2" alt="待办事项" /></span>
+          <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-todo"/></svg></span>
           <span class="ai-txt"><b>待办事项</b><span>查看和管理今天的安排</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="timer">
-          <span class="ai-badge"><img src="assets/icon-timer.png?v=2" alt="专注计时" /></span>
+          <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-timer"/></svg></span>
           <span class="ai-txt"><b>专注计时</b><span>番茄钟和正计时，帮你沉下心</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="memorial">
-          <span class="ai-badge"><img src="assets/icon-memorial.png?v=2" alt="纪念与倒数日" /></span>
+          <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-memorial"/></svg></span>
           <span class="ai-txt"><b>纪念&amp;倒数日</b><span>重要的日子，一天天靠近或远去</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="affirm">
-          <span class="ai-badge"><img src="assets/icon-affirm.png?v=2" alt="肯定语" /></span>
+          <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-affirm"/></svg></span>
           <span class="ai-txt"><b>肯定语</b><span>每天一句，对自己温柔一点</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="topic">
-          <span class="ai-badge"><img src="assets/icon-topic.png?v=2" alt="随即话题" /></span>
+          <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-topic"/></svg></span>
           <span class="ai-txt"><b>随即话题</b><span>随机一个话题，聊天不冷场</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="widget" disabled>
-          <span class="ai-badge"><img src="assets/icon-widget.png?v=2" alt="小组件" /></span>
+          <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-widget"/></svg></span>
           <span class="ai-txt"><b>小组件</b><span>签到盆栽、完美日、喝水打卡</span></span>
           <span class="ai-soon">🔒</span>
         </button>
