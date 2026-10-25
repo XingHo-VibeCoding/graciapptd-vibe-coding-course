@@ -264,9 +264,8 @@
        右端扇形 = 今日进度，满圈变实心整圆 = 今天完成 ===== */
     .todo .pie{ flex-shrink:0; display:flex; }
     .todo .hcount{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
-    .habit-add{ float:right; width:30px; height:30px; border-radius:50%; padding:0;
-                border:1px solid var(--accent-line); background:var(--card);
-                color:var(--accent-deep); font-size:17px; line-height:1; cursor:pointer; }
+    /* 「＋ 打卡」入口：挂在筛选栏最右（Day 29 二轮：打卡不再单独成卡） */
+    .tags .tag-add{ margin-left:auto; color:var(--accent-deep); border-color:var(--accent-line); }
     .habit-stepper{ display:flex; align-items:center; gap:12px; margin:12px 0; }
     .habit-stepper span{ font-size:14px; flex:1; }
     .habit-stepper button{ width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
@@ -740,10 +739,13 @@
 
       <div class="week" id="week-strip"></div>
 
-      <!-- Day 12：筛选标签 + 状态行（role=group / aria-pressed / role=status 供读屏识别） -->
+      <!-- Day 12：筛选标签 + 状态行（role=group / aria-pressed / role=status 供读屏识别）
+           Day 29 二轮：新增「打卡」筛选标签；打卡项不再单独成卡，混进同一个列表 -->
       <div class="tags" id="filter-tags" role="group" aria-label="今日待做筛选">
         <button type="button" id="tag-all" class="on" aria-pressed="true">全部</button>
         <button type="button" id="tag-timeline" aria-pressed="false">时间轴</button>
+        <button type="button" id="tag-habit" aria-pressed="false">打卡</button>
+        <button type="button" id="habit-add" class="tag-add" title="新建打卡">＋ 打卡</button>
       </div>
       <div id="filter-status" class="filter-status" role="status" aria-live="polite" hidden>
         <span id="filter-status-text"></span>
@@ -803,17 +805,6 @@
           <div id="today-empty" class="mini-empty" hidden>
             <span id="empty-text">今天还没有安排，写一条试试</span>
             <button id="load-demo" type="button">或看看示例数据 →</button>
-          </div>
-        </div>
-
-        <!-- 打卡（Day 29 改进）：时间轴之后的每日打卡计划。
-             数据暂存本机（与心情同待遇）；点行打卡一次，右端扇形 = 今日进度。 -->
-        <div class="card" id="habit-card">
-          <h2>打卡 <span class="sub" id="habit-count"></span>
-            <button id="habit-add" type="button" class="habit-add" title="新建打卡" aria-label="新建打卡">＋</button></h2>
-          <div id="habit-list"></div>
-          <div id="habit-empty" class="mini-empty" hidden>
-            <span>还没有打卡，点右上角的 ＋ 建一个</span>
           </div>
         </div>
       </div>
@@ -953,7 +944,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.2</b> · 2026-10-25</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.3</b> · 2026-10-25</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
@@ -1950,42 +1941,67 @@
   };
 
   // ===== 今日待做（F1 + 四象限标注 + Day 12 筛选三态）=====
-  const FILTER_LABEL = { all: '全部', timeline: '时间轴' };
+  // Day 29 二轮：打卡不再是独立卡片，混进同一个列表——
+  // 「全部」= 待办 + 打卡一起显示；「时间轴」= 只看带时间的待办；「打卡」= 只看打卡项。
+  const FILTER_LABEL = { all: '全部', timeline: '时间轴', habit: '打卡' };
   const FILTER_EMPTY_REASON = { timeline: '都没设时间' };   // 无结果时解释"为什么空"
   const renderToday = () => {
     const isToday = currentDate === todayStr();
     const all = demoMode ? mockToday() : getTodos(currentDate);
-    const filtering = filter !== 'all';
-    const list = filtering ? all.filter(t => t.time) : all;   // 筛选：时间轴=只看带时间的
     const interactive = isToday && !demoMode;
+    const habits = (demoMode || !data) ? [] :
+      data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end));
+    // 打卡没有时间概念，进不了时间轴：归入"未安排"区，与无时间的待办同区
+    const list = filter === 'timeline' ? all.filter(t => t.time)
+               : filter === 'habit'    ? []
+               : all;
     const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
     const untimed = list.filter(t => !t.time);
+    const showHabits = filter !== 'timeline';   // 时间轴只看带时间的待办
 
     const timeline = el('timeline'); timeline.textContent = '';
     timed.forEach(t => timeline.appendChild(createTodoCard(t, interactive)));
 
-    el('unassigned-wrap').hidden = untimed.length === 0;
+    el('unassigned-wrap').hidden = untimed.length === 0 && (!showHabits || habits.length === 0);
     const unList = el('unassigned-list'); unList.textContent = '';
     untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
+    if (showHabits) appendHabitRows(unList, interactive);
+    // 组名跟着内容走：只有打卡时叫「打卡」，混排时叫「未安排 · 打卡」
+    const groupLabel = unList.parentElement.querySelector('.group-label');
+    if (groupLabel) {
+      groupLabel.textContent = untimed.length === 0 ? '打卡'
+                             : (showHabits && habits.length ? '未安排 · 打卡' : '未安排');
+    }
+    el('habit-add').hidden = !interactive;      // 与待办一致：只有今天能新建
 
     const done = all.filter(t => t.done).length;
     el('today-count').textContent = all.length ? (done + '/' + all.length + ' 已完成') : '';
 
-    // 态①有结果：常显"筛了谁 + 命中几条"（A5）
-    el('filter-status').hidden = !filtering;
-    if (filtering) {
-      el('filter-status-text').textContent =
-        '筛选：' + FILTER_LABEL[filter] + ' · ' + list.length + '/' + all.length + ' 条';
-    }
-    // 态②无结果：与"本来就没数据"区分开，给原因（A2/A6）
-    const noMatch = filtering && list.length === 0 && all.length > 0;
-    el('filter-empty').hidden = !noMatch;
-    if (noMatch) {
-      el('filter-empty-text').textContent = '「' + FILTER_LABEL[filter] + '」下没有待办：'
-        + '现有 ' + all.length + ' 条' + (FILTER_EMPTY_REASON[filter] || '');
+    if (filter === 'habit') {
+      // 打卡筛选单独写状态/空文案（分母不是待办总数，"现有 N 条待办"在这里没意义）
+      el('filter-status').hidden = habits.length === 0;
+      el('filter-status-text').textContent = '筛选：打卡 · ' + habits.length + ' 个';
+      el('filter-empty').hidden = habits.length !== 0;
+      if (!habits.length) el('filter-empty-text').textContent =
+        '还没有打卡：点上方「＋ 打卡」建一个（设好起止日期和每天次数）';
+    } else {
+      // 态①有结果：常显"筛了谁 + 命中几条"（A5）
+      const filtering = filter !== 'all';
+      el('filter-status').hidden = !filtering;
+      if (filtering) {
+        el('filter-status-text').textContent =
+          '筛选：' + FILTER_LABEL[filter] + ' · ' + list.length + '/' + all.length + ' 条';
+      }
+      // 态②无结果：与"本来就没数据"区分开，给原因（A2/A6）
+      const noMatch = filtering && list.length === 0 && all.length > 0;
+      el('filter-empty').hidden = !noMatch;
+      if (noMatch) {
+        el('filter-empty-text').textContent = '「' + FILTER_LABEL[filter] + '」下没有待办：'
+          + '现有 ' + all.length + ' 条' + (FILTER_EMPTY_REASON[filter] || '');
+      }
     }
     // 态③数据本身为空（清空筛选后一并回落到这里）
-    el('today-empty').hidden = all.length > 0;
+    el('today-empty').hidden = all.length > 0 || (filter === 'habit' && habits.length > 0);
     el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
     el('load-demo').hidden = !isToday;
   };
@@ -2015,50 +2031,44 @@
     }
     return '<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">' + inner + '</svg>';
   };
-  const renderHabits = () => {
-    const card = el('habit-card');
-    if (demoMode) { card.hidden = true; return; }   // 演示模式只有待办示例，打卡不掺假数据
-    card.hidden = false;
-    const isToday = currentDate === todayStr();
-    const interactive = isToday && !demoMode;
-    const active = data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end));
-    const list = el('habit-list'); list.textContent = '';
-    active.forEach(h => {
-      const count = habitCountOf(h, currentDate);
-      const full = count >= h.perDay;
-      const row = document.createElement('div');
-      row.className = 'todo habit' + (full ? ' done' : '') + (interactive ? ' clickable' : '');
-      row.dataset.id = h.id;
-      const text = document.createElement('span');
-      text.className = 'text'; text.textContent = h.name;
-      const pie = document.createElement('span');
-      pie.className = 'pie'; pie.innerHTML = pieSvg(count, h.perDay);
-      const cnt = document.createElement('span');
-      cnt.className = 'hcount'; cnt.textContent = count + '/' + h.perDay;
-      const del = document.createElement('button');
-      del.className = 'del'; del.type = 'button'; del.textContent = '···';
-      del.title = '删除这个打卡';
-      del.addEventListener('click', (e) => { e.stopPropagation(); deleteHabit(h.id); });
-      row.append(text, pie, cnt, del);
-      if (interactive) {
-        row.setAttribute('role', 'button');
-        row.setAttribute('tabindex', '0');
-        row.setAttribute('aria-label', h.name + '：今天 ' + count + '/' + h.perDay
-          + (full ? '，已完成' : '，点一下打卡一次'));
-        row.addEventListener('click', (e) => {
-          if (e.target.closest('.menu')) return;
-          checkInHabit(h.id);
-        });
-        row.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); checkInHabit(h.id); }
-        });
-      }
-      list.appendChild(row);
-    });
-    el('habit-empty').hidden = active.length > 0;
-    const done = active.filter(h => habitCountOf(h, currentDate) >= h.perDay).length;
-    el('habit-count').textContent = active.length ? (done + '/' + active.length + ' 已完成') : '';
-    el('habit-add').hidden = !isToday;   // 与待办一致：只有今天能新建
+  // 打卡行与待办卡片同构（Day 29 二轮：混进同一个列表，不再单独成卡）；
+  // 由 renderToday 在"未安排"区按当前筛选追加（时间轴不含打卡）。
+  const createHabitRow = (h, interactive) => {
+    const count = habitCountOf(h, currentDate);
+    const full = count >= h.perDay;
+    const row = document.createElement('div');
+    row.className = 'todo habit' + (full ? ' done' : '') + (interactive ? ' clickable' : '');
+    row.dataset.id = h.id;
+    const text = document.createElement('span');
+    text.className = 'text'; text.textContent = h.name;
+    const pie = document.createElement('span');
+    pie.className = 'pie'; pie.innerHTML = pieSvg(count, h.perDay);
+    const cnt = document.createElement('span');
+    cnt.className = 'hcount'; cnt.textContent = count + '/' + h.perDay;
+    const del = document.createElement('button');
+    del.className = 'del'; del.type = 'button'; del.textContent = '···';
+    del.title = '删除这个打卡';
+    del.addEventListener('click', (e) => { e.stopPropagation(); deleteHabit(h.id); });
+    row.append(text, pie, cnt, del);
+    if (interactive) {
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-label', h.name + '：今天 ' + count + '/' + h.perDay
+        + (full ? '，已完成' : '，点一下打卡一次'));
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.menu')) return;
+        checkInHabit(h.id);
+      });
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); checkInHabit(h.id); }
+      });
+    }
+    return row;
+  };
+  const appendHabitRows = (container, interactive) => {
+    if (demoMode) return;   // 演示模式只有待办示例，打卡不掺假数据
+    data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end))
+      .forEach(h => container.appendChild(createHabitRow(h, interactive)));
   };
   // 点行 = 打卡一次；打满后再点 = 撤回一次（误触兜底，不用进菜单找撤销）
   const checkInHabit = (id) => {
@@ -2356,7 +2366,7 @@
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
-    renderWeek(); renderToday(); renderHabits(); renderMe(); renderThoughts(); syncFab();
+    renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
     renderCloudHint();                                      // Day 20：数据来源 + 最后更新时间
     checkMemReminders();                                    // Day 21：提醒条随渲染刷新
   };
@@ -2409,7 +2419,7 @@
   // 筛选标签（Day 12：三种情况齐全——有结果 / 无结果 / 清空恢复；选中态同步 aria-pressed）
   const setFilter = (f) => { filter = f; syncTags(); };
   const syncTags = () => {
-    [['tag-all', 'all'], ['tag-timeline', 'timeline']].forEach(([id, f]) => {
+    [['tag-all', 'all'], ['tag-timeline', 'timeline'], ['tag-habit', 'habit']].forEach(([id, f]) => {
       const on = filter === f;
       el(id).classList.toggle('on', on);
       el(id).setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -2418,6 +2428,7 @@
   };
   el('tag-all').addEventListener('click', () => setFilter('all'));
   el('tag-timeline').addEventListener('click', () => setFilter('timeline'));
+  el('tag-habit').addEventListener('click', () => setFilter('habit'));
   el('filter-clear').addEventListener('click', () => setFilter('all'));         // 状态行上的清空
   el('filter-empty-clear').addEventListener('click', () => setFilter('all'));   // 空状态里的恢复
 
