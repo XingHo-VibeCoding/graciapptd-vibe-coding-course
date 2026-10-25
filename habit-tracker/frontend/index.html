@@ -240,33 +240,43 @@
                  background:var(--q5); }
     .todo .time{ color:var(--accent-deep); font-size:13px; font-variant-numeric:tabular-nums;
                  min-width:42px; }
-    .todo .check{ width:22px; height:22px; border-radius:50%; border:2px solid var(--accent);
-                  background:transparent; cursor:pointer; flex-shrink:0; padding:0;
-                  transition:background .15s, transform .15s; }
-    .todo .check:hover{ transform:scale(1.12); }
-    .todo .check:active{ transform:scale(.9); }
+    /* Day 29 改进：去掉行首勾选圈（视觉噪音），点整行 = 勾选/恢复；
+       键盘可达性不丢：interactive 行带 role=button + tabindex=0（见 createTodoCard）*/
+    .todo.clickable{ cursor:pointer; }
     .todo .text{ flex:1; font-size:14px; }
     .todo .del{ border:none; background:transparent; color:var(--muted); font-size:16px;
                 cursor:pointer; padding:8px 6px; margin-right:-2px; position:relative; }
     .todo .del::after{ content:""; position:absolute; inset:-10px; } /* 透明命中区 ~44px */
-    .todo.done .check{ background:var(--accent); }
     .todo.done .text{ text-decoration:line-through; text-decoration-color:var(--muted);
                       color:var(--muted); }
     .todo.done{ opacity:.75; transform:translateY(1px); }
     /* ===== 交互反馈动画（Day 11）：只作用于"刚点的那张卡"（.just），
        避免重渲染时已完成卡片反复重播 ===== */
-    @keyframes check-pop{ 0%{transform:scale(1);} 45%{transform:scale(1.35);} 100%{transform:scale(1);} }
     @keyframes strike-in{ from{text-decoration-color:transparent;} to{text-decoration-color:var(--muted);} }
     @keyframes card-settle{ from{opacity:1; transform:translateY(0);} to{opacity:.75; transform:translateY(1px);} }
-    .todo.just .check{ animation:check-pop .28s ease-out; }
     .todo.just .text{ animation:strike-in .35s ease-out; }
     .todo.just{ animation:card-settle .25s ease-out; }
     /* 无障碍：系统开启"减少动态效果"时关掉动效，保留静态反馈（划线/置灰） */
     @media (prefers-reduced-motion: reduce){
-      .todo.just .check, .todo.just .text, .todo.just{ animation:none; }
-      .todo .check{ transition:none; }
+      .todo.just .text, .todo.just{ animation:none; }
     }
-    .todo .check:disabled{ border-color:var(--muted); cursor:not-allowed; }
+    /* ===== 打卡（Day 29 改进）：起止日期内每天 N 次；点行打卡一次；
+       右端扇形 = 今日进度，满圈变实心整圆 = 今天完成 ===== */
+    .todo .pie{ flex-shrink:0; display:flex; }
+    .todo .hcount{ font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .habit-add{ float:right; width:30px; height:30px; border-radius:50%; padding:0;
+                border:1px solid var(--accent-line); background:var(--card);
+                color:var(--accent-deep); font-size:17px; line-height:1; cursor:pointer; }
+    .habit-stepper{ display:flex; align-items:center; gap:12px; margin:12px 0; }
+    .habit-stepper span{ font-size:14px; flex:1; }
+    .habit-stepper button{ width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
+                background:var(--card); color:var(--ink); font-size:16px; cursor:pointer; }
+    .habit-stepper b{ font-size:16px; min-width:20px; text-align:center;
+                color:var(--accent-deep); font-weight:600; }
+    .habit-field{ display:flex; align-items:center; gap:10px; margin:10px 0; }
+    .habit-field label{ font-size:14px; width:64px; flex-shrink:0; }
+    .habit-field input{ flex:1; min-width:0; }
+    .habit-field .habit-hint{ font-size:12px; color:var(--muted); white-space:nowrap; }
     /* ===== 待办操作菜单（Day 13）：点 ··· 弹出，一次只开一个 =====
        精进 2：菜单选择器同时作用于思考卡片（.note），样式共用 */
     .todo .menu, .note .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
@@ -795,6 +805,17 @@
             <button id="load-demo" type="button">或看看示例数据 →</button>
           </div>
         </div>
+
+        <!-- 打卡（Day 29 改进）：时间轴之后的每日打卡计划。
+             数据暂存本机（与心情同待遇）；点行打卡一次，右端扇形 = 今日进度。 -->
+        <div class="card" id="habit-card">
+          <h2>打卡 <span class="sub" id="habit-count"></span>
+            <button id="habit-add" type="button" class="habit-add" title="新建打卡" aria-label="新建打卡">＋</button></h2>
+          <div id="habit-list"></div>
+          <div id="habit-empty" class="mini-empty" hidden>
+            <span>还没有打卡，点右上角的 ＋ 建一个</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -885,8 +906,8 @@
              与首页每张卡片上方的「云端数据 · 更新于 …」**直接矛盾** —— 用户会以为自己的
              待办根本没被保存。改成与真实数据流一致的两行（首页小字也已写「移动/心情暂存本机」）。
              注：这里刻意不照抄旧文案，免得以后用 grep 检查线上时把注释也算成"没修干净"。 -->
-        <div class="set-row"><span>待办与打卡</span><span class="sv">同步到云端</span></div>
-        <div class="set-row"><span>移动与心情</span><span class="sv">暂存本机</span></div>
+        <div class="set-row"><span>待办</span><span class="sv">同步到云端</span></div>
+        <div class="set-row"><span>打卡计划、移动与心情</span><span class="sv">暂存本机</span></div>
         <div class="theme-block">
           <div class="tb-label">主题（深浅与背景图各自独立设置）</div>
           <div class="theme-mode" id="theme-mode" role="group" aria-label="深浅主题">
@@ -932,7 +953,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.1</b> · 2026-10-15</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.2</b> · 2026-10-25</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
@@ -1191,6 +1212,33 @@
   </div>
 </div>
 
+<!-- 弹窗 11：新建打卡（Day 29 改进）：名称 + 每天次数 + 起止日期（结束留空 = 永久） -->
+<div class="overlay" id="habit-modal" hidden>
+  <div class="modal" style="max-width:380px">
+    <h3>新建打卡</h3>
+    <input id="habit-name" placeholder="打卡什么？如：背单词" maxlength="20" />
+    <div class="habit-stepper" role="group" aria-label="每天次数">
+      <span>每天次数</span>
+      <button id="habit-minus" type="button" aria-label="减少一次">−</button>
+      <b id="habit-perday">1</b>
+      <button id="habit-plus" type="button" aria-label="增加一次">＋</button>
+    </div>
+    <div class="habit-field">
+      <label for="habit-start">开始日期</label>
+      <input id="habit-start" type="date" />
+    </div>
+    <div class="habit-field">
+      <label for="habit-end">结束日期</label>
+      <input id="habit-end" type="date" />
+      <span class="habit-hint">留空 = 永久</span>
+    </div>
+    <div class="row">
+      <button id="habit-cancel" type="button">取消</button>
+      <button id="habit-ok" type="button">保存</button>
+    </div>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -1227,6 +1275,7 @@
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
                             speeches: [],
+                            habits: [], habitLogs: {},   // Day 29 改进：打卡计划 + 每日次数（暂存本机）
                             theme: Object.assign({}, DEFAULT_THEME),
                             profile: { name: '' }, meta: {} });
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
@@ -1236,6 +1285,8 @@
     if (!Array.isArray(d.anniversaries)) d.anniversaries = def.anniversaries;
     if (!d.affirm) d.affirm = def.affirm;
     if (!Array.isArray(d.speeches)) d.speeches = [];     // 精进 8：表达练习记录
+    if (!Array.isArray(d.habits)) d.habits = [];         // Day 29 改进：旧数据补打卡字段
+    if (!d.habitLogs || typeof d.habitLogs !== 'object') d.habitLogs = {};
     if (!d.theme || !d.theme.img) d.theme = def.theme;   // v3.5：旧数据补默认主题
     // 精进 11：旧数据的 'auto' 已废弃（深浅与图片解耦），统一迁移为显式浅色
     if (d.theme && (!d.theme.pref || d.theme.pref === 'auto')) d.theme.pref = 'light';
@@ -1505,7 +1556,7 @@
     if (demoMode) { node.textContent = ''; return; }
     if (cloudState.mode === 'cloud') {
       node.textContent = '云端数据 · 更新于 ' + fmtCloudTime(cloudState.updatedAt || cloudState.at)
-                       + ' · 移动/心情暂存本机';
+                       + ' · 移动/心情/打卡计划暂存本机';
     } else if (cloudState.mode === 'offline') {
       node.textContent = errKindText(cloudState.err) + ' · 当前显示本机数据';
     } else if (cloudState.mode === 'server') {
@@ -1857,9 +1908,12 @@
   };
 
   // ===== 可复用卡片组件：时间轴与"未安排"区共用（Day 8 余力加练）=====
+  // Day 29 改进：去掉行首勾选圈（视觉噪音、用户反馈"没什么用"）——
+  // 点整行 = 勾选/恢复，与打卡「点行打卡」的交互统一；键盘可达性用
+  // role=button + tabindex=0 + Enter/Space 保住（勾选圈原是 button，不能白白丢掉）。
   const createTodoCard = (todo, interactive) => {
     const row = document.createElement('div');
-    row.className = 'todo' + (todo.done ? ' done' : '');
+    row.className = 'todo' + (todo.done ? ' done' : '') + (interactive ? ' clickable' : '');
     row.dataset.id = todo.id;   // Day 11：toggle 后定位"刚点的这张卡"触发动画
     // 四象限色标（C4）：颜色只从 QUADS 取，未分类走 q5 雾蓝
     const info = quadInfo(todo);
@@ -1868,12 +1922,18 @@
     qbar.style.background = info.color;
     qbar.title = info.label;
     row.appendChild(qbar);
-    const check = document.createElement('button');
-    check.className = 'check'; check.type = 'button';
-    check.title = todo.done ? '点击恢复未完成' : '点击标记完成';
-    check.setAttribute('aria-label', check.title);
-    if (!interactive) check.disabled = true;
-    check.addEventListener('click', () => toggleTodo(todo.id));
+    if (interactive) {
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-label', (todo.done ? '恢复未完成：' : '标记完成：') + todo.text);
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.menu')) return;   // 点的是 ··· 菜单里的东西，不算勾选
+        toggleTodo(todo.id);
+      });
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTodo(todo.id); }
+      });
+    }
     const time = document.createElement('span');
     time.className = 'time'; time.textContent = todo.time || '';
     const text = document.createElement('span');
@@ -1881,8 +1941,11 @@
     const del = document.createElement('button');
     del.className = 'del'; del.type = 'button'; del.textContent = '···';
     del.title = '删除或移动这条待办'; del.hidden = demoMode;
-    del.addEventListener('click', () => openTodoMenu(del, todo));   // Day 13：先出菜单再操作
-    row.append(check, time, text, del);
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();                       // 点 ··· 不算勾选（Day 29：整行可点后的守卫）
+      openTodoMenu(del, todo);                   // Day 13：先出菜单再操作
+    });
+    row.append(time, text, del);
     return row;
   };
 
@@ -1925,6 +1988,100 @@
     el('today-empty').hidden = all.length > 0;
     el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
     el('load-demo').hidden = !isToday;
+  };
+
+  // ===== 打卡（Day 29 改进）：起止日期内每天 N 次，点行打卡一次，右端扇形 = 今日进度 =====
+  // 数据（暂存本机，与心情同一待遇，云端暂不接）：
+  //   habits    = [{ id, name, start, end, perDay, created }]   end 为空 = 永久
+  //   habitLogs = { [habitId]: { [date]: 次数 } }
+  const habitCountOf = (h, date) => {
+    const logs = data.habitLogs[h.id];
+    return (logs && logs[date]) || 0;
+  };
+  // 扇形从正上方开始顺时针走；0 次 = 空圈，满 = 实心整圆（今天完成）
+  const pieSvg = (count, perDay) => {
+    let inner;
+    if (count >= perDay) {
+      inner = '<circle cx="13" cy="13" r="11" fill="var(--accent)"/>';
+    } else if (count > 0) {
+      const ang = (count / perDay) * 2 * Math.PI - Math.PI / 2;
+      const x = (13 + 11 * Math.cos(ang)).toFixed(2);
+      const y = (13 + 11 * Math.sin(ang)).toFixed(2);
+      inner = '<circle cx="13" cy="13" r="11" fill="var(--card)" stroke="var(--line)"/>'
+        + '<path d="M13 13 L13 2 A11 11 0 ' + (count / perDay > 0.5 ? 1 : 0)
+        + ' 1 ' + x + ' ' + y + ' Z" fill="var(--accent)"/>';
+    } else {
+      inner = '<circle cx="13" cy="13" r="11" fill="var(--card)" stroke="var(--line)"/>';
+    }
+    return '<svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">' + inner + '</svg>';
+  };
+  const renderHabits = () => {
+    const card = el('habit-card');
+    if (demoMode) { card.hidden = true; return; }   // 演示模式只有待办示例，打卡不掺假数据
+    card.hidden = false;
+    const isToday = currentDate === todayStr();
+    const interactive = isToday && !demoMode;
+    const active = data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end));
+    const list = el('habit-list'); list.textContent = '';
+    active.forEach(h => {
+      const count = habitCountOf(h, currentDate);
+      const full = count >= h.perDay;
+      const row = document.createElement('div');
+      row.className = 'todo habit' + (full ? ' done' : '') + (interactive ? ' clickable' : '');
+      row.dataset.id = h.id;
+      const text = document.createElement('span');
+      text.className = 'text'; text.textContent = h.name;
+      const pie = document.createElement('span');
+      pie.className = 'pie'; pie.innerHTML = pieSvg(count, h.perDay);
+      const cnt = document.createElement('span');
+      cnt.className = 'hcount'; cnt.textContent = count + '/' + h.perDay;
+      const del = document.createElement('button');
+      del.className = 'del'; del.type = 'button'; del.textContent = '···';
+      del.title = '删除这个打卡';
+      del.addEventListener('click', (e) => { e.stopPropagation(); deleteHabit(h.id); });
+      row.append(text, pie, cnt, del);
+      if (interactive) {
+        row.setAttribute('role', 'button');
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('aria-label', h.name + '：今天 ' + count + '/' + h.perDay
+          + (full ? '，已完成' : '，点一下打卡一次'));
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('.menu')) return;
+          checkInHabit(h.id);
+        });
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); checkInHabit(h.id); }
+        });
+      }
+      list.appendChild(row);
+    });
+    el('habit-empty').hidden = active.length > 0;
+    const done = active.filter(h => habitCountOf(h, currentDate) >= h.perDay).length;
+    el('habit-count').textContent = active.length ? (done + '/' + active.length + ' 已完成') : '';
+    el('habit-add').hidden = !isToday;   // 与待办一致：只有今天能新建
+  };
+  // 点行 = 打卡一次；打满后再点 = 撤回一次（误触兜底，不用进菜单找撤销）
+  const checkInHabit = (id) => {
+    if (demoMode || currentDate !== todayStr()) return;
+    const h = data.habits.find(x => x.id === id);
+    if (!h) return;
+    const logs = (data.habitLogs[id] = data.habitLogs[id] || {});
+    const cur = logs[currentDate] || 0;
+    logs[currentDate] = cur >= h.perDay ? cur - 1 : cur + 1;
+    saveData(data); renderAll();
+    showToast(logs[currentDate] >= h.perDay
+      ? '✓ ' + h.name + ' · 今天完成'
+      : h.name + ' ' + logs[currentDate] + '/' + h.perDay);
+  };
+  const deleteHabit = (id) => {
+    if (demoMode || !data) return;
+    const h = data.habits.find(x => x.id === id);
+    if (!h) return;
+    if (!confirm('删除打卡「' + h.name + '」？所有打卡记录也会一起删掉')) return;  // A4：删除先确认
+    data.habits = data.habits.filter(x => x.id !== id);
+    delete data.habitLogs[id];
+    saveData(data); renderAll();
+    showToast('已删除打卡');
   };
 
   // ===== 思考卡片"···"菜单（精进 2，F3）：分享 / 编辑 / 复制 / 删除 =====
@@ -2199,7 +2356,7 @@
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
-    renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
+    renderWeek(); renderToday(); renderHabits(); renderMe(); renderThoughts(); syncFab();
     renderCloudHint();                                      // Day 20：数据来源 + 最后更新时间
     checkMemReminders();                                    // Day 21：提醒条随渲染刷新
   };
@@ -2304,6 +2461,46 @@
     const to = el('move-date').value;
     if (!to) { showToast('先选一个日期'); return; }
     if (moveTodoTo(moveCtx.id, moveCtx.from, to)) el('move-modal').hidden = true;
+  });
+
+  // ===== 新建打卡弹窗（Day 29 改进）：空名称拦截，日期校验，次数 1-9 =====
+  let habitPerDay = 1;
+  el('habit-add').addEventListener('click', () => {
+    habitPerDay = 1;
+    el('habit-perday').textContent = '1';
+    el('habit-name').value = '';
+    el('habit-start').value = todayStr();
+    el('habit-end').value = '';
+    el('habit-modal').hidden = false;
+    el('habit-name').focus();
+  });
+  el('habit-minus').addEventListener('click', () => {
+    habitPerDay = Math.max(1, habitPerDay - 1);
+    el('habit-perday').textContent = String(habitPerDay);
+  });
+  el('habit-plus').addEventListener('click', () => {
+    habitPerDay = Math.min(9, habitPerDay + 1);
+    el('habit-perday').textContent = String(habitPerDay);
+  });
+  el('habit-cancel').addEventListener('click', () => { el('habit-modal').hidden = true; });
+  const submitHabit = () => {
+    // 与 tm 弹窗同一套拦截写法：toast + 不关窗（Day 28 P1 的教训不重犯）
+    const name = el('habit-name').value.trim();
+    if (!name) { showToast('先写上要打卡什么'); el('habit-name').focus(); return; }
+    const start = el('habit-start').value;
+    if (!start) { showToast('选一个开始日期'); return; }
+    const end = el('habit-end').value;
+    if (end && end < start) { showToast('结束日期不能早于开始日期'); return; }
+    data.habits.push({ id: 'h' + Date.now(), name: name, start: start,
+                       end: end, perDay: habitPerDay, created: Date.now() });
+    saveData(data);
+    el('habit-modal').hidden = true;
+    renderAll();
+    showToast('已创建打卡「' + name + '」');
+  };
+  el('habit-ok').addEventListener('click', submitHabit);
+  el('habit-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submitHabit(); }
   });
 
   // 记想法弹窗（Day 14，F3）：空内容拦截，保存后新卡片出现在最上面
