@@ -268,16 +268,32 @@
     .habit-new{ display:block; width:100%; padding:11px; border:none; border-radius:10px;
                 background:var(--accent); color:var(--accent-ink); font-size:14px;
                 font-weight:600; cursor:pointer; margin-bottom:10px; }
-    .habit-stepper{ display:flex; align-items:center; gap:12px; margin:12px 0; }
-    .habit-stepper span{ font-size:14px; flex:1; }
-    .habit-stepper button{ width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
-                background:var(--card); color:var(--ink); font-size:16px; cursor:pointer; }
-    .habit-stepper b{ font-size:16px; min-width:20px; text-align:center;
-                color:var(--accent-deep); font-weight:600; }
-    .habit-field{ display:flex; align-items:center; gap:10px; margin:10px 0; }
-    .habit-field label{ font-size:14px; width:64px; flex-shrink:0; }
-    .habit-field input{ flex:1; min-width:0; }
-    .habit-field .habit-hint{ font-size:12px; color:var(--muted); white-space:nowrap; }
+    /* ===== 弹窗 11（截图版式）：顶栏 ✕/保存 + 行式布局 + 分段选择 + 步进器 ===== */
+    .hm-head{ display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+    .hm-x{ border:none; background:transparent; font-size:17px; color:var(--ink);
+           cursor:pointer; padding:6px 8px; }
+    .hm-title{ flex:1; text-align:left; font-size:16px; font-weight:600; color:var(--ink); }
+    .hm-save{ border:none; background:transparent; color:var(--accent-deep); font-size:15px;
+           font-weight:600; cursor:pointer; padding:6px 4px; }
+    .hm-name{ margin-bottom:2px; }
+    .hrow{ display:flex; align-items:center; justify-content:space-between; gap:12px;
+           padding:12px 0; border-bottom:1px solid var(--line); }
+    .hrow.hcol{ flex-wrap:wrap; }
+    .hl{ font-size:14px; color:var(--ink); flex-shrink:0; }
+    .hv{ display:flex; align-items:center; gap:8px; }
+    .hv i{ font-style:normal; font-size:12px; color:var(--muted); }
+    .hv input{ border:none; background:transparent; padding:0; text-align:right;
+           color:var(--ink); font-size:13px; width:128px; font-family:inherit; }
+    .hstepper{ display:flex; align-items:center; gap:16px; }
+    .hstepper button{ width:30px; height:30px; border-radius:50%; border:1px solid var(--line);
+           background:var(--card2); color:var(--ink); font-size:15px; cursor:pointer; padding:0; }
+    .hstepper b{ font-size:20px; color:var(--accent-deep); min-width:24px; text-align:center; }
+    /* 象限分段选择（仿截图胶囊组；选中态与筛选标签同款：实心底 + 深字） */
+    .hseg{ display:flex; gap:6px; flex-wrap:wrap; }
+    .hseg button{ border:1px solid var(--line); background:var(--card); color:var(--muted);
+           border-radius:999px; padding:5px 14px; font-size:13px; cursor:pointer; }
+    .hseg button.on{ background:var(--accent); border-color:var(--accent);
+           color:var(--accent-ink); font-weight:600; }
     /* ===== 待办操作菜单（Day 13）：点 ··· 弹出，一次只开一个 =====
        精进 2：菜单选择器同时作用于思考卡片（.note），样式共用 */
     .todo .menu, .note .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
@@ -956,7 +972,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.4</b> · 2026-10-25</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.5</b> · 2026-10-25</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
@@ -1215,29 +1231,45 @@
   </div>
 </div>
 
-<!-- 弹窗 11：新建打卡（Day 29 改进）：名称 + 每天次数 + 起止日期（结束留空 = 永久） -->
+<!-- 弹窗 11：新建打卡（Day 29 三轮，版式按用户截图重做）：顶栏 ✕/保存，
+     行式布局（左标签右值 + 分隔线）：名称 / 每天次数 stepper / 时间 / 象限分段 / 起止日期 -->
 <div class="overlay" id="habit-modal" hidden>
-  <div class="modal" style="max-width:380px">
-    <h3>新建打卡</h3>
-    <input id="habit-name" placeholder="打卡什么？如：背单词" maxlength="20" />
-    <div class="habit-stepper" role="group" aria-label="每天次数">
-      <span>每天次数</span>
-      <button id="habit-minus" type="button" aria-label="减少一次">−</button>
-      <b id="habit-perday">1</b>
-      <button id="habit-plus" type="button" aria-label="增加一次">＋</button>
+  <div class="modal habit-modal">
+    <div class="hm-head">
+      <button id="habit-cancel" type="button" class="hm-x" aria-label="关闭">✕</button>
+      <b class="hm-title">新建打卡</b>
+      <button id="habit-ok" type="button" class="hm-save">保存</button>
     </div>
-    <div class="habit-field">
-      <label for="habit-start">开始日期</label>
-      <input id="habit-start" type="date" />
+    <input id="habit-name" class="hm-name" placeholder="打卡什么？如：背单词" maxlength="20" />
+    <div class="hrow">
+      <span class="hl">每天次数</span>
+      <span class="hstepper" role="group" aria-label="每天次数">
+        <button id="habit-minus" type="button" aria-label="减少一次">−</button>
+        <b id="habit-perday">1</b>
+        <button id="habit-plus" type="button" aria-label="增加一次">＋</button>
+      </span>
     </div>
-    <div class="habit-field">
-      <label for="habit-end">结束日期</label>
-      <input id="habit-end" type="date" />
-      <span class="habit-hint">留空 = 永久</span>
+    <div class="hrow">
+      <label class="hl" for="habit-time">时间</label>
+      <span class="hv"><input id="habit-time" type="time" /><i>可不设</i></span>
     </div>
-    <div class="row">
-      <button id="habit-cancel" type="button">取消</button>
-      <button id="habit-ok" type="button">保存</button>
+    <div class="hrow hcol">
+      <span class="hl">象限</span>
+      <div class="hseg" id="habit-quad" role="group" aria-label="四象限分类">
+        <button type="button" data-quad="q1">Q1</button>
+        <button type="button" data-quad="q2">Q2</button>
+        <button type="button" data-quad="q3">Q3</button>
+        <button type="button" data-quad="q4">Q4</button>
+        <button type="button" data-quad="" class="on">未分类</button>
+      </div>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="habit-start">开始时间</label>
+      <span class="hv"><input id="habit-start" type="date" /></span>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="habit-end">结束时间</label>
+      <span class="hv"><input id="habit-end" type="date" /><i id="habit-forever">永久</i></span>
     </div>
   </div>
 </div>
@@ -1964,13 +1996,20 @@
     const habits = (demoMode || !data) ? [] :
       data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end));
     const isHabitView = filter === 'habit';
-    // 打卡没有时间概念，进不了时间轴：「全部」视图归入"未安排"区与无时间待办混排
+    // Day 29 四轮：打卡可设时间——带时间的打卡按时间混进时间轴排序，
+    // 无时间的归入"未安排"区；「时间轴」= 带时间的待办 + 带时间的打卡
     const list = filter === 'timeline' ? all.filter(t => t.time)
                : isHabitView           ? []
                : all;
-    const timed = list.filter(t => t.time).sort((a, b) => a.time.localeCompare(b.time));
+    const showHabits = filter === 'all' || filter === 'timeline';
+    const activeHabits = showHabits ? habits : [];
+    const hTimed = activeHabits.filter(h => h.time);
+    const hUntimed = activeHabits.filter(h => !h.time);
+    const timedEntries = [
+      ...list.filter(t => t.time).map(t => ({ kind: 'todo', time: t.time, item: t })),
+      ...hTimed.map(h => ({ kind: 'habit', time: h.time, item: h })),
+    ].sort((a, b) => a.time.localeCompare(b.time));
     const untimed = list.filter(t => !t.time);
-    const showHabits = filter === 'all';        // 只有「全部」把打卡混进未安排区
 
     // Day 29 三轮：打卡筛选显示专属「打卡」卡（带自己的添加入口与列表），
     // 「今日待做」卡整体让位——不再挂着一张用不了的表单误导人
@@ -1978,17 +2017,19 @@
     el('habit-card').hidden = !isHabitView;
 
     const timeline = el('timeline'); timeline.textContent = '';
-    timed.forEach(t => timeline.appendChild(createTodoCard(t, interactive)));
+    timedEntries.forEach(e =>
+      timeline.appendChild(e.kind === 'todo' ? createTodoCard(e.item, interactive)
+                                             : createHabitRow(e.item, interactive)));
 
-    el('unassigned-wrap').hidden = untimed.length === 0 && !(showHabits && habits.length);
+    el('unassigned-wrap').hidden = untimed.length === 0 && hUntimed.length === 0;
     const unList = el('unassigned-list'); unList.textContent = '';
     untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
-    if (showHabits && habits.length) appendHabitRows(unList, interactive);
+    hUntimed.forEach(h => unList.appendChild(createHabitRow(h, interactive)));
     // 组名跟着内容走：只有打卡时叫「打卡」，混排时叫「未安排 · 打卡」
     const groupLabel = unList.parentElement.querySelector('.group-label');
     if (groupLabel) {
       groupLabel.textContent = untimed.length === 0 ? '打卡'
-                             : (showHabits && habits.length ? '未安排 · 打卡' : '未安排');
+                             : (hUntimed.length ? '未安排 · 打卡' : '未安排');
     }
 
     const done = all.filter(t => t.done).length;
@@ -2006,6 +2047,7 @@
       el('filter-empty').hidden = true;
     } else {
       el('habit-add').hidden = true;
+      el('habit-list').textContent = '';   // 离开打卡视图时清掉残留行（hidden 卡里的行不该被数到）
       // 态①有结果：常显"筛了谁 + 命中几条"（A5）
       const filtering = filter !== 'all';
       el('filter-status').hidden = !filtering;
@@ -2060,6 +2102,15 @@
     const row = document.createElement('div');
     row.className = 'todo habit' + (full ? ' done' : '') + (interactive ? ' clickable' : '');
     row.dataset.id = h.id;
+    // Day 29 四轮：打卡也带象限色条与时间（与待办行同构）
+    const info = QUADS[h.quad] || { label: '普通打卡（未分类）', color: 'var(--q5)' };
+    const qbar = document.createElement('span');
+    qbar.className = 'qbar';
+    qbar.style.background = info.color;
+    qbar.title = info.label;
+    row.appendChild(qbar);
+    const time = document.createElement('span');
+    time.className = 'time'; time.textContent = h.time || '';
     const text = document.createElement('span');
     text.className = 'text'; text.textContent = h.name;
     const pie = document.createElement('span');
@@ -2070,7 +2121,7 @@
     del.className = 'del'; del.type = 'button'; del.textContent = '···';
     del.title = '删除这个打卡';
     del.addEventListener('click', (e) => { e.stopPropagation(); deleteHabit(h.id); });
-    row.append(text, pie, cnt, del);
+    row.append(time, text, pie, cnt, del);
     if (interactive) {
       row.setAttribute('role', 'button');
       row.setAttribute('tabindex', '0');
@@ -2085,11 +2136,6 @@
       });
     }
     return row;
-  };
-  const appendHabitRows = (container, interactive) => {
-    if (demoMode) return;   // 演示模式只有待办示例，打卡不掺假数据
-    data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end))
-      .forEach(h => container.appendChild(createHabitRow(h, interactive)));
   };
   // 点行 = 打卡一次；打满后再点 = 撤回一次（误触兜底，不用进菜单找撤销）
   const checkInHabit = (id) => {
@@ -2495,16 +2541,32 @@
     if (moveTodoTo(moveCtx.id, moveCtx.from, to)) el('move-modal').hidden = true;
   });
 
-  // ===== 新建打卡弹窗（Day 29 改进）：空名称拦截，日期校验，次数 1-9 =====
+  // ===== 新建打卡弹窗（Day 29 四轮，截图版式）：名称/次数/时间/象限/起止，校验同前 =====
   let habitPerDay = 1;
+  let habitQuad = '';                     // '' = 未分类
   el('habit-add').addEventListener('click', () => {
     habitPerDay = 1;
     el('habit-perday').textContent = '1';
+    habitQuad = '';
+    el('habit-quad').querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', b.dataset.quad === ''));
     el('habit-name').value = '';
+    el('habit-time').value = '';
     el('habit-start').value = todayStr();
     el('habit-end').value = '';
+    el('habit-forever').hidden = false;
     el('habit-modal').hidden = false;
     el('habit-name').focus();
+  });
+  el('habit-quad').querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      habitQuad = b.dataset.quad;
+      el('habit-quad').querySelectorAll('button').forEach(x =>
+        x.classList.toggle('on', x === b));
+    });
+  });
+  el('habit-end').addEventListener('input', () => {
+    el('habit-forever').hidden = !!el('habit-end').value;   // 选了结束日期就收起「永久」
   });
   el('habit-minus').addEventListener('click', () => {
     habitPerDay = Math.max(1, habitPerDay - 1);
@@ -2523,8 +2585,10 @@
     if (!start) { showToast('选一个开始日期'); return; }
     const end = el('habit-end').value;
     if (end && end < start) { showToast('结束日期不能早于开始日期'); return; }
+    const time = el('habit-time').value || null;    // 可不设；设了就进时间轴排序
     data.habits.push({ id: 'h' + Date.now(), name: name, start: start,
-                       end: end, perDay: habitPerDay, created: Date.now() });
+                       end: end, perDay: habitPerDay, time: time,
+                       quad: habitQuad || null, created: Date.now() });
     saveData(data);
     el('habit-modal').hidden = true;
     renderAll();
