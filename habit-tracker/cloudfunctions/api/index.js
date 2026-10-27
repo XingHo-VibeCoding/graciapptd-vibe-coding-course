@@ -110,7 +110,7 @@ const pickQuery = (event) => {
  */
 const pickBody = (event) => {
   const raw = event.body;
-  const PLAIN = ['date', 'text', 'time', 'quad', 'clientReqId'];
+  const PLAIN = ['date', 'text', 'time', 'quad', 'clientReqId', 'mood', 'items'];
 
   // 没有 body：可能是控制台把字段摊在了 event 顶层
   if (raw === undefined || raw === null || raw === '') {
@@ -564,6 +564,107 @@ const deleteCheckin = async (event, context, idRaw) => {
 };
 
 // ===========================================================================
+// 四·补充、心情写入（Day 29 十三轮）
+// ===========================================================================
+/**
+ * 心情的五个取值 —— 与数据库 plan_days_mood_enum 一一对应。
+ * 服务端先校验一遍是为了"错得早、提示是中文"；真正兜底的是数据库那条 CHECK。
+ */
+const MOODS = ['sad', 'blue', 'calm', 'cozy', 'joy'];
+
+/** 一次迁移最多收多少条心情 —— 前端本机历史再多也不会超过这个量级 */
+const MAX_MOOD_IMPORT = 200;
+
+/**
+ * `PUT /api/day/:date/mood` —— 记下某一天的心情。
+ *
+ * 为什么是 upsert 而不是"只允许新增"：心情本来就允许改（A9 以最后一次为准），
+ * `plan_days` 的主键是 (uid, date)，同一天反复选只会覆盖同一条，不会长出第二行。
+ *
+ * 未来日期回 409：日期格式没错，是"业务上还没到"，与给未来待办打勾同一口径。
+ */
+const putMood = async (event, context, dateRaw) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const date = String(dateRaw === undefined || dateRaw === null ? '' : dateRaw);
+  if (!isDate(date)) return reply(400, '日期格式不对，应为 YYYY-MM-DD', null);
+  if (date > todayLocal()) return reply(409, '还没到那一天，到了再记心情吧', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+  const mood = typeof body.mood === 'string' ? body.mood : '';
+  if (MOODS.indexOf(mood) < 0) {
+    return reply(400, '心情只能是 sad / blue / calm / cozy / joy', null);
+  }
+
+  try {
+    const planDay = await db.savePlanDayMood(uid, date, mood);
+    logWrite('写心情成功', { uid: uid, date: date, code: 0, ms: Date.now() - startedAt });
+    return reply(0, '已记下', planDay || { date: date, mood: mood, updatedAt: Date.now() });
+  } catch (err) {
+    console.error('[api] 写心情失败：' + err.message);
+    return reply(500, '心情没存上，稍后再试一次', null);
+  }
+};
+
+/**
+ * `POST /api/day/moods` —— 把本机历史心情一次性搬上云（前端只调一次，成功后打标记）。
+ *
+ * 两条容易踩的点：
+ *   ① **同一批里同一天不能出现两次**：PostgREST 的批量 upsert 在同一个语句里
+ *      撞到同一个冲突键会直接报 `ON CONFLICT DO UPDATE command cannot affect row a second time`。
+ *      所以先用 Map 按日期去重（后面的覆盖前面的），再写库。
+ *   ② **整批原子**：任意一条非法就整体 400，一条都不写。因为接口幂等，前端改完重发安全。
+ */
+const importMoods = async (event, context) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+
+  const items = body.items;
+  if (!Array.isArray(items) || items.length < 1 || items.length > MAX_MOOD_IMPORT) {
+    return reply(400, 'items 必须是 1~200 条的数组', null);
+  }
+
+  const today = todayLocal();
+  const uniq = new Map();                    // date -> mood（后面的覆盖前面的）
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i] || {};
+    const date = String(it.date === undefined || it.date === null ? '' : it.date);
+    if (!isDate(date)) {
+      return reply(400, '第 ' + (i + 1) + ' 条的日期格式不对，应为 YYYY-MM-DD', null);
+    }
+    if (date > today) {
+      return reply(400, '第 ' + (i + 1) + ' 条是未来日期，心情只能记已经到来的日子', null);
+    }
+    const mood = typeof it.mood === 'string' ? it.mood : '';
+    if (MOODS.indexOf(mood) < 0) {
+      return reply(400, '第 ' + (i + 1) + ' 条的心情只能是 sad / blue / calm / cozy / joy', null);
+    }
+    uniq.set(date, mood);
+  }
+
+  const payload = [];
+  uniq.forEach((mood, date) => payload.push({ date: date, mood: mood }));
+
+  try {
+    const imported = await db.savePlanDayMoods(uid, payload);
+    logWrite('导入本机心情', { uid: uid, count: imported, code: 0, ms: Date.now() - startedAt });
+    return reply(0, '已导入', { imported: imported });
+  } catch (err) {
+    console.error('[api] 导入心情失败：' + err.message);
+    return reply(500, '心情没搬完，稍后再试一次', null);
+  }
+};
+
+// ===========================================================================
 // 五、路由表
 // ===========================================================================
 /**
@@ -590,6 +691,9 @@ const routes = {
 
   // Day 18：第一个写入接口。方法区分大小写（平台给的是大写）
   'POST /api/checkins': createCheckin,
+
+  // Day 29 十三轮：本机历史心情一次性迁移（固定路径，先于带参路由命中）
+  'POST /api/day/moods': importMoods,
 };
 
 /**
@@ -606,6 +710,9 @@ const routes = {
 const idRoutes = [
   { method: 'PATCH', re: /^\/api\/checkins\/([^/]+)$/, handler: updateCheckin },
   { method: 'DELETE', re: /^\/api\/checkins\/([^/]+)$/, handler: deleteCheckin },
+  // Day 29 十三轮：路径里带的是**日期**（YYYY-MM-DD），不是自增 id —— 正则同样用 ([^/]+)，
+  // 让 2026-13-99 这种也能命中路由，好回一句"日期格式不对"，而不是笼统的 404。
+  { method: 'PUT', re: /^\/api\/day\/([^/]+)\/mood$/, handler: putMood },
 ];
 // 注：不再有 allRoutes() —— Day 27 把 404 收口成最小响应后，路由清单的
 // 唯一权威是 api-contract.md，云函数不再向请求方输出它。

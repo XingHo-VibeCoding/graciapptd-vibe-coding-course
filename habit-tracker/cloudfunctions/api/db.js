@@ -255,6 +255,55 @@ const toMs = (v) => {
   return Number.isNaN(n) ? null : n;
 };
 
+/**
+ * 写一张表：有就改、没有就插（PostgREST 的 upsert 语义）—— Day 29 新增。
+ *
+ * 为什么不能拿 update 凑：`update` 是 PATCH，行不存在时它只返回空数组，
+ * "先查再改、查不到再插"两步之间又有并发窗口；`plan_days` 的主键是 (uid, date)，
+ * 数据库天然知道"冲突了该合并"，把这件事交给它做才是原子的。
+ *
+ * `onConflict` 必须是**真实存在的唯一约束列**（如 `'uid,date'`），否则 PostgreSQL 会报错；
+ * 传空则退化成普通插入（撞主键就抛 23505）。
+ *
+ * 单条与批量共用：`rows` 是对象就是一条，是数组就一次写多条（同一次请求、同一个事务）。
+ */
+const upsert = async (table, rows, onConflict) => {
+  const { apiKey, base } = connection();
+
+  const payload = Array.isArray(rows) ? rows : [rows];
+  if (!payload.length) return [];
+
+  const qs = onConflict ? '?on_conflict=' + encodeURIComponent(onConflict) : '';
+  const res = await fetch(base + '/' + table + qs, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + apiKey,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      // resolution=merge-duplicates = 撞唯一键时用请求里的值覆盖，而不是报错
+      Prefer: 'return=representation,resolution=merge-duplicates',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch (e) {
+    body = null;
+  }
+
+  if (!res.ok) {
+    const detail = body && (body.message || body.details || body.error);
+    const err = new Error('数据库写入失败（HTTP ' + res.status + '）：' + (detail || String(text).slice(0, 200)));
+    err.pgCode = body && body.code ? String(body.code) : '';
+    throw err;
+  }
+
+  return Array.isArray(body) ? body : [];
+};
+
 /** plan_days 一行 → 契约里的 planDay 对象 */
 const mapPlanDay = (r) => ({
   date: r.date,
@@ -312,6 +361,36 @@ const findPlanDay = async (uid, date) => {
     limit: 1,
   });
   return res.rows.length ? mapPlanDay(res.rows[0]) : null;
+};
+
+/**
+ * 写入某天的心情（Day 29 十三轮）：upsert，已有就以新值覆盖（A9 以最后一次为准）。
+ * 返回契约形状的 planDay；写失败抛错，由路由层兜成 500。
+ */
+const savePlanDayMood = async (uid, date, mood) => {
+  const rows = await upsert('plan_days', {
+    uid: uid,
+    date: date,
+    mood: mood,
+    updated_at: new Date().toISOString(),   // 覆盖更新也要刷新时间，否则 GET /api/day 的 updatedAt 会一直停在第一次
+  }, 'uid,date');
+  return rows.length ? mapPlanDay(rows[0]) : null;
+};
+
+/**
+ * 批量写入本机历史心情（Day 29 十三轮，一次性迁移用）。
+ * 一次请求写多行 = 数据库在一个事务里处理，不会出现"搬了一半"。
+ * 返回真正写进去的行数。
+ */
+const savePlanDayMoods = async (uid, items) => {
+  const now = new Date().toISOString();
+  const rows = await upsert('plan_days', items.map((it) => ({
+    uid: uid,
+    date: it.date,
+    mood: it.mood,
+    updated_at: now,
+  })), 'uid,date');
+  return rows.length;
 };
 
 // —— checkins ——
@@ -519,6 +598,9 @@ const softDeleteCheckin = async (uid, id) => {
 module.exports = {
   // ① 表级函数
   findPlanDay: findPlanDay,
+  // ① 表级函数 · Day 29 增补（心情上云）
+  savePlanDayMood: savePlanDayMood,
+  savePlanDayMoods: savePlanDayMoods,
   listCheckinsByDay: listCheckinsByDay,
   listCheckins: listCheckins,
   existsCheckinWithReqId: existsCheckinWithReqId,
@@ -534,6 +616,7 @@ module.exports = {
   select: select,
   insert: insert,
   update: update,
+  upsert: upsert,
   // ③ 小工具
   mapPlanDay: mapPlanDay,
   mapCheckin: mapCheckin,

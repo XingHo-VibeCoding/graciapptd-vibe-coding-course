@@ -592,7 +592,9 @@ const writeResponder = (opt) => {
      ['createCheckin', 'dbConfig', 'existsCheckinWithReqId', 'findCheckinByContent',
       'findCheckinByReqId', 'findCheckinRowById', 'findLastSort', 'findPlanDay', 'insert',
       'isDuplicateError', 'listCheckins', 'listCheckinsByDay', 'mapCheckin', 'mapPlanDay',
-      'pickTotal', 'select', 'softDeleteCheckin', 'update', 'updateCheckin']
+      'pickTotal', 'select', 'softDeleteCheckin', 'update', 'updateCheckin',
+      // Day 29 十三轮：心情上云新增的三个
+      'savePlanDayMood', 'savePlanDayMoods', 'upsert']
        .sort().join(','));
 
   // —— 9.3 数据访问层能脱离路由独立工作（这才是"拆干净了"的证明）——
@@ -911,6 +913,133 @@ const writeResponder = (opt) => {
   }
   ok('update 遇到 CHECK 约束冲突会把 SQLSTATE 带回来（不是静默成功）',
      !!checkErr && checkErr.pgCode === '23514', checkErr && checkErr.pgCode);
+
+  // =========================================================================
+  // 十一、心情上云（Day 29 十三轮）
+  //   PUT  /api/day/:date/mood —— 单日写入（upsert，覆盖）
+  //   POST /api/day/moods      —— 本机历史一次性迁移（批量、整批原子、同日去重）
+  // =========================================================================
+  const MOOD_ROW = {
+    date: '2026-10-20', mood: 'joy',
+    created_at: '2026-10-20T01:00:00+00:00', updated_at: '2026-10-20T02:00:00+00:00',
+  };
+
+  installFakeFetch();
+  responder = (url, table) => (table === 'plan_days' ? { rows: [MOOD_ROW] } : { rows: [] });
+  r = await call({
+    httpMethod: 'PUT', path: '/api/day/2026-10-20/mood',
+    body: JSON.stringify({ mood: 'joy' }),
+  });
+  eq('mood：写入成功走信封', r.code, 0);
+  eq('mood：回的是 planDay 形状（snake→camel + 毫秒）', r.data, {
+    date: '2026-10-20', mood: 'joy',
+    createdAt: Date.parse(MOOD_ROW.created_at), updatedAt: Date.parse(MOOD_ROW.updated_at),
+  });
+  ok('mood：不是插入而是 upsert（POST + on_conflict=uid,date）',
+     captured.length === 1 && captured[0].method === 'POST' && paramsOf(0).on_conflict === 'uid,date',
+     JSON.stringify(captured.map((c) => c.method + ' ' + c.url)));
+  ok('mood：带 resolution=merge-duplicates（同一天再选就覆盖）',
+     String(captured[0].headers.Prefer || '').indexOf('resolution=merge-duplicates') > -1,
+     captured[0].headers.Prefer);
+  const moodWriteRaw = bodyOf(0);
+  const moodWrite = Array.isArray(moodWriteRaw) ? moodWriteRaw[0] : moodWriteRaw;
+  ok('mood：写入体带 uid / date / mood / updated_at',
+     moodWrite && moodWrite.uid === 'seed-demo-user' && moodWrite.date === '2026-10-20'
+     && moodWrite.mood === 'joy' && typeof moodWrite.updated_at === 'string',
+     JSON.stringify(moodWriteRaw));
+
+  installFakeFetch();
+  responder = () => ({ rows: [MOOD_ROW] });
+  r = await call({ httpMethod: 'PUT', path: '/api/day/2026-13-99/mood', body: JSON.stringify({ mood: 'joy' }) });
+  eq('mood：日期不存在 → 400', r.code, 400);
+  eq('mood：日期非法时不写库', captured.length, 0);
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'PUT', path: '/api/day/2099-01-01/mood', body: JSON.stringify({ mood: 'joy' }) });
+  eq('mood：未来日期 → 409（与"给未来待办打勾"同一口径）', r.code, 409);
+  eq('mood：未来日期不写库', captured.length, 0);
+
+  r = await call({ httpMethod: 'PUT', path: '/api/day/2026-10-20/mood', body: JSON.stringify({ mood: 'happy' }) });
+  eq('mood：不在五值内 → 400', r.code, 400);
+
+  r = await call({ httpMethod: 'PUT', path: '/api/day/2026-10-20/mood', body: '{not json' });
+  eq('mood：请求体不是 JSON → 400', r.code, 400);
+
+  delete process.env.DEMO_UID;
+  r = await call({ httpMethod: 'PUT', path: '/api/day/2026-10-20/mood', body: JSON.stringify({ mood: 'joy' }) });
+  eq('mood：拿不到身份 → 401', r.code, 401);
+  process.env.DEMO_UID = 'seed-demo-user';
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'GET', path: '/api/day/2026-10-20/mood' });
+  eq('mood：方法不对（GET）→ 404，不会误命中写入路由', r.code, 404);
+
+  // —— 11.2 批量迁移 ——
+  installFakeFetch();
+  responder = (url, table) => (table === 'plan_days'
+    ? { rows: [
+        { date: '2026-10-18', mood: 'sad', created_at: '2026-10-18T01:00:00+00:00', updated_at: '2026-10-18T01:00:00+00:00' },
+        { date: '2026-10-19', mood: 'calm', created_at: '2026-10-19T01:00:00+00:00', updated_at: '2026-10-19T01:00:00+00:00' },
+      ] }
+    : { rows: [] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/day/moods',
+    body: JSON.stringify({ items: [
+      { date: '2026-10-18', mood: 'sad' },
+      { date: '2026-10-19', mood: 'calm' },
+    ] }),
+  });
+  eq('moods：批量导入成功', r.code, 0);
+  eq('moods：返回真正写进去的条数', r.data.imported, 2);
+  ok('moods：一次请求写多行（不是循环单条）',
+     captured.length === 1 && Array.isArray(bodyOf(0)) && bodyOf(0).length === 2,
+     JSON.stringify(bodyOf(0)));
+  ok('moods：每行都补上了同一个 uid',
+     (bodyOf(0) || []).every((row) => row.uid === 'seed-demo-user'));
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ date: '2026-10-18', mood: 'joy', created_at: 'x', updated_at: 'x' }] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/day/moods',
+    body: JSON.stringify({ items: [
+      { date: '2026-10-18', mood: 'sad' },
+      { date: '2026-10-18', mood: 'joy' },
+    ] }),
+  });
+  ok('moods：同一批里同一天出现两次 → 先去重（否则 PostgREST 会报 "cannot affect row a second time"）',
+     captured.length === 1 && bodyOf(0).length === 1 && bodyOf(0)[0].mood === 'joy',
+     JSON.stringify(bodyOf(0)));
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'POST', path: '/api/day/moods', body: JSON.stringify({ items: [] }) });
+  eq('moods：空数组 → 400', r.code, 400);
+
+  const tooMany = [];
+  for (let i = 0; i < 201; i++) tooMany.push({ date: '2026-09-' + String((i % 28) + 1).padStart(2, '0'), mood: 'calm' });
+  r = await call({ httpMethod: 'POST', path: '/api/day/moods', body: JSON.stringify({ items: tooMany }) });
+  eq('moods：超过 200 条 → 400（一次最多搬这么多）', r.code, 400);
+  eq('moods：超限时不写库', captured.length, 0);
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/day/moods',
+    body: JSON.stringify({ items: [{ date: '2026-10-18', mood: 'sad' }, { date: '2099-01-01', mood: 'joy' }] }),
+  });
+  eq('moods：含未来日期 → 整批 400', r.code, 400);
+  eq('moods：整批拒绝时一条都不写（原子性）', captured.length, 0);
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/day/moods',
+    body: JSON.stringify({ items: [{ date: '2026-10-18', mood: 'unknown' }] }),
+  });
+  eq('moods：心情值非法 → 400 且指出是第几条',
+     { code: r.code, hasIndex: r.message.indexOf('第 1 条') > -1 }, { code: 400, hasIndex: true });
 
   global.fetch = realFetch;
   console.log = realLog;

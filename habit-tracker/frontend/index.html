@@ -953,8 +953,8 @@
              与首页每张卡片上方的「云端数据 · 更新于 …」**直接矛盾** —— 用户会以为自己的
              待办根本没被保存。改成与真实数据流一致的两行（首页小字也已写「移动/心情暂存本机」）。
              注：这里刻意不照抄旧文案，免得以后用 grep 检查线上时把注释也算成"没修干净"。 -->
-        <div class="set-row"><span>待办</span><span class="sv">同步到云端</span></div>
-        <div class="set-row"><span>打卡计划、移动与心情</span><span class="sv">暂存本机</span></div>
+        <div class="set-row"><span>待办与心情</span><span class="sv">同步到云端</span></div>
+        <div class="set-row"><span>打卡计划与移动</span><span class="sv">暂存本机</span></div>
         <div class="theme-block">
           <div class="tb-label">主题（深浅与背景图各自独立设置）</div>
           <div class="theme-mode" id="theme-mode" role="group" aria-label="深浅主题">
@@ -974,7 +974,7 @@
         <ul class="guide">
           <li><b>加待办</b>：点「＋ 新建」写一条，可加时间、象限和日期；点整行 = 完成，··· 编辑或删除</li>
           <li><b>打卡</b>：同样点「＋ 新建」，类型切到「打卡」；设今日次数和起止，点行打卡看扇形</li>
-          <li><b>数据</b>：待办同步云端；打卡与心情暂存本机；AI 洞察只在本地拼装，不上传</li>
+          <li><b>数据</b>：待办与心情同步云端；打卡计划暂存本机；AI 洞察只在本地拼装，不上传</li>
         </ul>
         <button type="button" id="guide-replay" class="guide-replay">让薯条再教我一遍</button>
       </div>
@@ -998,7 +998,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.4</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.5</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1397,6 +1397,9 @@
                           accent: '#eac73e', ink: '#3a2a06', deep: '#f0d878' };
   // pref：深浅偏好——'light' / 'dark'，与背景图完全解耦（换图不再改深浅）。
   // mode 字段保留为"图片亮度分析结果"留档，不再参与深浅判定。
+  // 心情五个取值 —— 与数据库 plan_days_mood_enum、云函数 MOODS 三处一致（Day 29 上云）。
+  // 前端这一份的用途：迁移前筛掉脏数据，别把不认识的字符串传给服务端（会被 400 拦下、整批白跑）。
+  const MOODS = ['sad', 'blue', 'calm', 'cozy', 'joy'];
   const defaults = () => ({ todos: {}, moods: {}, notes: [], focus: { logs: [] },
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
@@ -1408,6 +1411,9 @@
                                    awarded: {}, onboarded: false, pos: null },
                             theme: Object.assign({}, DEFAULT_THEME),
                             profile: { name: '' }, meta: {} });
+  // Day 29 十三轮：meta.moodsSynced —— 本机历史心情是否已经搬上云（只搬一次）。
+  // 为什么一定要标记：迁移在每次启动都会走到，没有标记就会反复上传（虽然接口幂等，但白耗请求）。
+  const MOOD_IMPORT_BATCH = 200;      // 与契约 POST /api/day/moods 的上限一致
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
   const fillDefaults = (d) => {
     const def = defaults();
@@ -1521,6 +1527,13 @@
     body: JSON.stringify(body || {}),
   });
   const apiDelete = (path) => apiFetch(path, { method: 'DELETE' });
+  // Day 29 十三轮：心情写入。用 PUT 而不是 POST —— 语义是"把这一天的心情设成这个值"，
+  // 同一天反复设置是同一个资源被覆盖（A9 以最后一次为准），不是每次新增一条。
+  const apiPut = (path, body) => apiFetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
   // 幂等键：标识"一次添加动作"（不是"一份内容"），语义见 api-contract.md §1.6。
   // 优先用浏览器自带的 uuid；老环境退回时间戳+随机数（同样满足 1~64 位字母数字短横线的要求）。
   const newReqId = () => (window.crypto && crypto.randomUUID)
@@ -1693,7 +1706,7 @@
     if (demoMode) { node.textContent = ''; return; }
     if (cloudState.mode === 'cloud') {
       node.textContent = '云端数据 · 更新于 ' + fmtCloudTime(cloudState.updatedAt || cloudState.at)
-                       + ' · 移动/心情/打卡计划暂存本机';
+                       + ' · 移动与打卡计划暂存本机';
     } else if (cloudState.mode === 'offline') {
       node.textContent = errKindText(cloudState.err) + ' · 当前显示本机数据';
     } else if (cloudState.mode === 'server') {
@@ -2583,6 +2596,28 @@
   };
 
   // ===== 统一取数入口（打开 / 重试）=====
+  // ===== 本机历史心情一次性上云（Day 29 十三轮）=====
+  // 时机很关键：**必须在 fetchCloudDay 之前**。
+  // applyCloudDay 的规则是"云端没有心情就清本机"（云端是唯一真相源），
+  // 先拉云端的话，这批还没上传的历史会在第一屏就被抹掉，迁移根本没东西可搬。
+  // 只搬一次：成功后在 meta.moodsSynced 打标记；失败不标记，下次打开自动重试（接口幂等，重发安全）。
+  const migrateLocalMoods = async () => {
+    if (!data || !apiReady() || data.meta.moodsSynced) return;
+    const items = Object.keys(data.moods || {})
+      .filter(ds => /^\d{4}-\d{2}-\d{2}$/.test(ds)
+                 && MOODS.indexOf(data.moods[ds]) > -1
+                 && ds <= todayStr())          // 未来日期服务端会整批拒掉，这里先筛干净
+      .sort()
+      .map(ds => ({ date: ds, mood: data.moods[ds] }));
+    if (!items.length) { data.meta.moodsSynced = true; saveData(data); return; }
+    let allOk = true;
+    for (let i = 0; i < items.length; i += MOOD_IMPORT_BATCH) {
+      const r = await apiPost('/day/moods', { items: items.slice(i, i + MOOD_IMPORT_BATCH) });
+      if (!r.ok) { allOk = false; break; }
+    }
+    if (allOk) { data.meta.moodsSynced = true; saveData(data); }
+  };
+
   const refreshDay = async () => {
     demoMode = false;
     cloudState = { mode: 'pending', updatedAt: null, at: 0 };
@@ -2593,7 +2628,8 @@
     applyTheme(data.theme);                    // v3.5：启动时应用已存主题
     showState('content');
     renderAll();
-    await fetchCloudDay(currentDate);          // ② 再拉云端：真库数据到了就覆盖重绘，拿不到就保持本机
+    await migrateLocalMoods();                 // ② 先把本机历史心情搬上去（只一次），再拉云端
+    await fetchCloudDay(currentDate);          // ③ 再拉云端：真库数据到了就覆盖重绘，拿不到就保持本机
     maybeAskMood();                            // 放在取数之后：云端说"今天已选过心情"就不再弹（A6）
   };
 
@@ -2626,14 +2662,25 @@
 
   // 心情弹窗（F2）：覆盖更新，以最后一次为准（A9）
   // 修复：弹窗问的永远是"今天"，与当前查看的日期无关，去掉 currentDate 守卫
+  // Day 29 十三轮：心情改为**真的写进云端**（原先只写本机，下一次拉云端就被"云端没有"覆盖掉）。
+  //   顺序 = 先落本机再发请求：弹窗一关界面立刻变，不用等网络；失败也不回滚，
+  //   只在 toast 里说清"这次没同步上"，用户看到的仍是他刚选的那个。
   document.querySelectorAll('#mood-modal .mood-opts button').forEach(b => {
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       if (!data || demoMode) return;
-      data.moods[todayStr()] = b.dataset.mood;
+      const date = todayStr();
+      const mood = b.dataset.mood;
+      data.moods[date] = mood;
       saveData(data);
-      moodAskedDate = todayStr();                 // 已回答，今天不再自动弹
+      moodAskedDate = date;                       // 已回答，今天不再自动弹
       el('mood-modal').hidden = true;
       renderAll();
+      if (!apiReady()) return;
+      const r = await apiPut('/day/' + encodeURIComponent(date) + '/mood', { mood: mood });
+      if (!r.ok) {
+        showToast(r.offline ? '心情先记在本机（连不上云端）'
+                            : '心情已记在本机，这次没同步上云端');
+      }
     });
   });
   el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
@@ -4068,7 +4115,7 @@
       a:'「我的」页里可以换深浅主题和背景图。',
       act:['去我的', () => document.querySelector('nav button[data-view="me"]').click()] },
     { k:['数据', '备份', '导出', '换手机', '同步'], t:'数据存在哪？',
-      a:'待办会同步云端；打卡、心情暂存本机。换手机前记得在「我的」页导出一份。',
+      a:'待办和心情会同步云端；打卡计划暂存本机。换手机前记得在「我的」页导出一份。',
       act:['去我的', () => document.querySelector('nav button[data-view="me"]').click()] },
     { k:['积分', '换装', '衣服', '奖励'], t:'积分换装什么时候有？',
       a:'正在路上！攒够积分就能给薯条换小衣服，再等等喵。' },
