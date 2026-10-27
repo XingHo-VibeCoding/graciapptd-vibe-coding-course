@@ -63,6 +63,13 @@
       --overlay:rgba(0,0,0,.6);
       --desk:#07080c;
     }
+    /* ===== 薯条（吉祥物）调色板（P1，UPGRADE-PLAN §2.1）=====
+       毛色落在主色 #E6A23C 邻域不抢内容；描边与瞳孔用 var(--ink)（与图标同一支笔，
+       深色下自动变浅）；毛色本身不换色，深色下整体提亮一档保对比。 */
+    :root{ --pet-fur:#F0C08A; --pet-stripe:#D99A4E; --pet-cream:#FBF6EA;
+           --pet-pink:#F2A9A0; --pet-eye:#C98A3E; }
+    html[data-theme="dark"]{ --pet-fur:#F4D3A5; --pet-stripe:#E2AC5E;
+           --pet-cream:#F7F1E4; --pet-pink:#F3ACA1; --pet-eye:#D6A058; }
     /* ===== 精进 12：强调文字恢复为「纯文字色」，不再加背景色块 =====
        用户反馈嫩黄高光底越改越丑，已全部回滚；浅底上靠「色 + 字重」表达重点，
        强调文字统一用 var(--accent-deep)（白卡上 4.77:1），不够醒目就加粗。 */
@@ -231,6 +238,30 @@
     .cal-day.muted{ color:var(--muted); opacity:.55; }
     .cal-day.today-cell{ box-shadow:inset 0 0 0 1px var(--accent); color:var(--accent-deep); }
     .cal-day.sel{ background:var(--accent); color:var(--accent-ink); font-weight:600; }
+
+    /* ===== 薯条首访引导（P1，UPGRADE-PLAN §三）：3 步气泡，替代长指南 ===== */
+    .ob-card{ width:min(340px, 88vw); }
+    .ob-head{ display:flex; align-items:flex-start; gap:10px; margin-bottom:6px; }
+    .ob-face{ width:64px; height:64px; flex-shrink:0; color:var(--ink); }
+    .ob-bubble{ position:relative; background:var(--card2); border:1px solid var(--line);
+           border-radius:14px; padding:10px 12px; font-size:14px; color:var(--ink);
+           line-height:1.55; flex:1; }
+    .ob-bubble::before{ content:''; position:absolute; left:-6px; top:22px;
+           width:10px; height:10px; background:var(--card2);
+           border-left:1px solid var(--line); border-bottom:1px solid var(--line);
+           transform:rotate(45deg); }
+    .ob-sub{ font-size:13px; color:var(--muted); line-height:1.6; margin:4px 2px 12px; }
+    .ob-actions{ display:flex; gap:8px; justify-content:flex-end; margin:0 0 10px; }
+    .ob-actions #ob-skip{ border:1px solid var(--line); background:transparent;
+           color:var(--muted); }
+    .ob-actions #ob-next{ border:none; background:var(--accent); color:var(--accent-ink);
+           font-weight:600; }
+    .ob-dots{ display:flex; gap:6px; justify-content:center; }
+    .ob-dots i{ width:6px; height:6px; border-radius:50%; background:var(--line); }
+    .ob-dots i.on{ background:var(--accent); }
+    .guide-replay{ margin-top:10px; border:1px solid var(--accent); background:transparent;
+           color:var(--accent-deep); border-radius:999px; padding:7px 16px;
+           font-size:13px; cursor:pointer; }
 
     /* ===== 卡片 ===== */
     .card{ background:var(--card); border-radius:16px; padding:16px;
@@ -761,6 +792,45 @@
       <path d="M24 21c0-5 3.5-8 8-8 0 5-3.5 8-8 8z" fill="currentColor"/>
       <path d="M15 29h18l-2.2 9h-13.6z" fill="currentColor"/>
     </symbol>
+    <!-- 薯条 · 完整版吉祥物（P1，设计稿 = C 融合版，原型 = 用户自家橘白小奶猫）。
+         描边/瞳孔 currentColor（随 --ink 变），毛色走 --pet-* 变量；≥48px 使用。 -->
+    <symbol id="pet-fries" viewBox="0 0 96 96">
+      <!-- 尾巴（在身体后面，先画） -->
+      <path d="M70 78 Q88 76 86 58 Q85 49 77 52" fill="none" stroke="currentColor"
+            stroke-width="5" stroke-linecap="round"/>
+      <!-- 身体 + 白肚 + 前爪 -->
+      <ellipse cx="48" cy="70" rx="24" ry="17" fill="var(--pet-fur)" stroke="currentColor" stroke-width="2.5"/>
+      <ellipse cx="48" cy="74" rx="13" ry="10.5" fill="var(--pet-cream)"/>
+      <ellipse cx="38" cy="85" rx="5.5" ry="3.6" fill="var(--pet-fur)" stroke="currentColor" stroke-width="2"/>
+      <ellipse cx="58" cy="85" rx="5.5" ry="3.6" fill="var(--pet-fur)" stroke="currentColor" stroke-width="2"/>
+      <!-- 耳朵（耳内粉） -->
+      <path d="M28 25 L22 6 L41 15 Z" fill="var(--pet-fur)" stroke="currentColor"
+            stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M68 25 L74 6 L55 15 Z" fill="var(--pet-fur)" stroke="currentColor"
+            stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M29.5 19.5 L26.5 10.5 L35 14.5 Z" fill="var(--pet-pink)"/>
+      <path d="M66.5 19.5 L69.5 10.5 L61 14.5 Z" fill="var(--pet-pink)"/>
+      <!-- 头 -->
+      <circle cx="48" cy="38" r="25" fill="var(--pet-fur)" stroke="currentColor" stroke-width="2.5"/>
+      <!-- 虎斑（头顶三道） -->
+      <path d="M40 15.5 q2.5 6 .5 11 M48 13.5 q2 7 0 12 M56 15.5 q-2.5 6 -.5 11"
+            fill="none" stroke="var(--pet-stripe)" stroke-width="2.5" stroke-linecap="round"/>
+      <!-- 淡定斜眼：琥珀底 + 深瞳（双眼同往左看）+ 上眼皮压半 -->
+      <ellipse cx="39" cy="39" rx="4.6" ry="5.4" fill="var(--pet-eye)"/>
+      <ellipse cx="57" cy="39" rx="4.6" ry="5.4" fill="var(--pet-eye)"/>
+      <circle cx="40.6" cy="40" r="2" fill="currentColor"/>
+      <circle cx="55.4" cy="40" r="2" fill="currentColor"/>
+      <path d="M33.6 37.5 q5.4 -4.6 10.8 -1.2 M51.6 36.3 q5.4 -3.4 10.8 1.4"
+            fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      <!-- 鼻 + 嘴 + 小舌头 -->
+      <ellipse cx="48" cy="47.5" rx="2.3" ry="1.8" fill="var(--pet-pink)"/>
+      <path d="M48 49.5 q-2.8 3.4 -6 1.4 M48 49.5 q2.8 3.4 6 1.4"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M45.6 53.6 q2.4 2.8 4.8 0 z" fill="var(--pet-pink)" stroke="currentColor" stroke-width="1.4"/>
+      <!-- 胡须 -->
+      <path d="M20 40 h7.5 M21.5 45.5 h6 M76 40 h-7.5 M74.5 45.5 h-6"
+            stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
   </defs>
 </svg>
 <div class="app">
@@ -962,16 +1032,14 @@
 
       <div class="card">
         <h2>使用指南</h2>
+        <!-- P1（UPGRADE-PLAN §三）：8 条压成 3 行（≤120 字），细节交给薯条首访引导
+             ——文字只留稳定事实，不写会随版本失效的操作细节 -->
         <ul class="guide">
-          <li><b>加待办</b>：在「时间轴」输入内容，可选时间点和象限，点 ＋ 或回车；「全部」只看总览，也可用右下角 ＋</li>
-          <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
-          <li><b>完成 / 编辑 / 删除</b>：点整行打勾，再点恢复；点 ··· 可以编辑（名称/时间/象限/日期）或删除（会先确认）</li>
-          <li><b>思考</b>：切到「思考」页，点底部中间的 ＋ 随手写一条（Ctrl+Enter 可快捷保存）；长的自动折叠，点「展开全文」看全</li>
-          <li><b>应用</b>：切到「应用」页看小工具列表——待办事项可直达「今天」页；专注计时已可用（番茄钟 25/短专注 15/休息 5），其余按天逐步开放</li>
-          <li><b>AI 洞察</b>：「思考」页顶部的 ✨，两种视角（默认 / MBTI）——本地规则拼装，数据不上传，MBTI 仅供自娱</li>
-          <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
-          <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
+          <li><b>加待办</b>：切到「时间轴」写一条，可加时间和象限；点整行 = 完成，··· 编辑或删除</li>
+          <li><b>打卡</b>：筛选栏切到「打卡」，卡内大按钮新建；设好每天几次，点行打卡看扇形</li>
+          <li><b>数据</b>：待办同步云端；打卡与心情暂存本机；AI 洞察只在本地拼装，不上传</li>
         </ul>
+        <button type="button" id="guide-replay" class="guide-replay">让薯条再教我一遍</button>
       </div>
 
       <!-- 云端检查台（Day 20 补）：健康状态 / checkins 核心表真数据 / 写入测试入口 -->
@@ -993,7 +1061,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.8</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.9</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1335,6 +1403,22 @@
   </div>
 </div>
 
+<!-- 弹窗 6：薯条首访引导（P1，UPGRADE-PLAN §三）：3 步气泡，只自动弹一次，「我的」页可重播 -->
+<div class="overlay" id="ob-modal" hidden>
+  <div class="modal ob-card" role="dialog" aria-label="薯条的新手引导">
+    <div class="ob-head">
+      <svg class="ob-face" viewBox="0 0 96 96" aria-hidden="true"><use href="#pet-fries"/></svg>
+      <div class="ob-bubble" id="ob-bubble"></div>
+    </div>
+    <p class="ob-sub" id="ob-sub"></p>
+    <div class="ob-actions">
+      <button id="ob-skip" type="button">跳过</button>
+      <button id="ob-next" type="button">下一步</button>
+    </div>
+    <div class="ob-dots" id="ob-dots" aria-hidden="true"></div>
+  </div>
+</div>
+
 <nav><div>
   <button data-view="today" class="active">今天</button>
   <button data-view="thoughts">思考</button>
@@ -1372,6 +1456,9 @@
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
                             speeches: [],
                             habits: [], habitLogs: {},   // Day 29 改进：打卡计划 + 每日次数（暂存本机）
+                            // P1：薯条（吉祥物）状态——points/换装 P3 才用，字段先占位避免将来再迁移
+                            pet: { points: 0, owned: [], wearing: { head: null, body: null },
+                                   awarded: {}, onboarded: false },
                             theme: Object.assign({}, DEFAULT_THEME),
                             profile: { name: '' }, meta: {} });
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
@@ -1383,6 +1470,13 @@
     if (!Array.isArray(d.speeches)) d.speeches = [];     // 精进 8：表达练习记录
     if (!Array.isArray(d.habits)) d.habits = [];         // Day 29 改进：旧数据补打卡字段
     if (!d.habitLogs || typeof d.habitLogs !== 'object') d.habitLogs = {};
+    // P1：旧数据补薯条状态（独立字面量，不共享 defaults 里的引用）
+    if (!d.pet || typeof d.pet !== 'object') {
+      d.pet = { points: 0, owned: [], wearing: { head: null, body: null },
+                awarded: {}, onboarded: false };
+    }
+    if (!Array.isArray(d.pet.owned)) d.pet.owned = [];
+    if (!d.pet.wearing || typeof d.pet.wearing !== 'object') d.pet.wearing = { head: null, body: null };
     if (!d.theme || !d.theme.img) d.theme = def.theme;   // v3.5：旧数据补默认主题
     // 精进 11：旧数据的 'auto' 已废弃（深浅与图片解耦），统一迁移为显式浅色
     if (d.theme && (!d.theme.pref || d.theme.pref === 'auto')) d.theme.pref = 'light';
@@ -3992,8 +4086,52 @@
   window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette, lightSurface };
 
 
+  // ===== 薯条首访引导（P1，UPGRADE-PLAN §三）：3 步气泡，只自动弹一次 =====
+  // 语气边界（§4.4）：短句、不堆感叹号、不道德绑架；跳过不追问。
+  // 触发：数据就绪后 pet.onboarded !== true → 自动弹；走完或跳过都落盘。
+  // 「我的」页「让薯条再教我一遍」→ startGuide() 重播（不再改 onboarded）。
+  const OB_STEPS = [
+    { say: '我是薯条，以后我来陪你打卡喵。',
+      sub: '要做的事切到「时间轴」写，填上时间和象限会自动排好序。' },
+    { say: '点整行就算完成，再点一下就恢复。',
+      sub: '不用找小圆圈，一整行都是按钮；··· 里可以编辑和删除。' },
+    { say: '想天天坚持的事，建一个「打卡」。',
+      sub: '切到「打卡」筛选，卡里的大按钮新建；点行打卡，右端扇形就是进度。' },
+  ];
+  let obStep = 0;
+  const renderOb = () => {
+    const step = OB_STEPS[obStep];
+    el('ob-bubble').textContent = step.say;
+    el('ob-sub').textContent = step.sub;
+    el('ob-next').textContent = obStep === OB_STEPS.length - 1 ? '收工' : '下一步';
+    el('ob-dots').textContent = '';
+    OB_STEPS.forEach((_, i) => {
+      const dot = document.createElement('i');
+      if (i === obStep) dot.className = 'on';
+      el('ob-dots').appendChild(dot);
+    });
+  };
+  const finishGuide = () => {
+    if (data && !demoMode) { data.pet.onboarded = true; saveData(data); }
+    el('ob-modal').hidden = true;
+  };
+  const startGuide = () => {
+    obStep = 0; renderOb();
+    el('ob-modal').hidden = false;
+  };
+  el('ob-next').addEventListener('click', () => {
+    if (obStep >= OB_STEPS.length - 1) { finishGuide(); showToast('薯条：收工，剩下的交给你啦喵'); }
+    else { obStep += 1; renderOb(); }
+  });
+  el('ob-skip').addEventListener('click', finishGuide);
+  el('guide-replay').addEventListener('click', startGuide);
+
   // ===== 启动 =====
-  refreshDay();
+  refreshDay().then(() => {
+    // 首访：数据就绪且没看过引导 → 薯条自动登场（演示模式不打扰；
+    // data 在 refreshDay 里异步赋值，必须等它完成，放外面永远赶不上）
+    if (!demoMode && data && !data.pet.onboarded) startGuide();
+  });
 
   // URL hash 直连视图（测试截图用，不影响正常访问）
   const viewByHash = { '#today':'today','#thoughts':'thoughts','#apps':'apps','#me':'me' }[location.hash];
