@@ -222,6 +222,9 @@
 
     /* 今日待做：表单 + 卡片（F1 时间轴 + 四象限标注）*/
     #add-form{ display:flex; gap:8px; margin-bottom:14px; }
+    /* Day 29 六轮：「全部」= 纯总览，不挂添加行（加待办去「时间轴」，或用右下角 ＋）；
+       用 class 而不是 [hidden] —— #add-form 有 display:flex，[hidden] 会被作者样式盖掉 */
+    #today-card.overview #add-form{ display:none; }
     #todo-text{ flex:1; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
                 font-size:14px; background:var(--card2); color:var(--ink); } /* min-width:0 防窄屏溢出 */
     #todo-time{ padding:9px 6px; border:1px solid var(--line); border-radius:10px;
@@ -670,11 +673,6 @@
     .modal .row button{ flex:1; padding:10px 0; border-radius:10px; font-size:14px; cursor:pointer; }
     #tm-cancel{ border:1px solid var(--line); background:transparent; color:var(--muted); }
     #tm-ok{ border:none; background:var(--accent); color:var(--accent-ink); }
-    /* 移动待办弹窗（Day 13） */
-    #move-date{ width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
-                font-size:13px; color:var(--ink); margin-bottom:10px;
-                background:var(--card2); color-scheme:var(--scheme); }
-    #move-src{ font-size:13px; color:var(--muted); margin:0 0 10px; word-break:break-all; }
 
     /* ===== 应用页入口列表（F6 骨架，Day 17）：仿九宫格应用中心的列表形态 ===== */
     .apps-list{ display:flex; flex-direction:column; gap:10px; }
@@ -849,7 +847,7 @@
       <h2 class="vh">思考</h2>
       <div class="card insight-entry">
         <div class="ie-txt">
-          <h2>AI 洞察 <span class="sub">5 种视角</span></h2>
+          <h2>AI 洞察 <span class="sub">2 种视角</span></h2>
           <p>基于你本机数据的轻量洞察，数据不出设备</p>
         </div>
         <button id="insight-open" type="button">看看 ✨</button>
@@ -948,12 +946,12 @@
       <div class="card">
         <h2>使用指南</h2>
         <ul class="guide">
-          <li><b>加待办</b>：在「今天」输入内容，可选时间点和象限，点 ＋ 或回车</li>
+          <li><b>加待办</b>：在「时间轴」输入内容，可选时间点和象限，点 ＋ 或回车；「全部」只看总览，也可用右下角 ＋</li>
           <li><b>四象限</b>：<span class="dot" style="background:var(--q1)"></span>重要且紧急 · <span class="dot" style="background:var(--q2)"></span>重要不紧急 · <span class="dot" style="background:var(--q3)"></span>紧急不重要 · <span class="dot" style="background:var(--q4)"></span>不重要不紧急；不选就是<span class="dot" style="background:var(--q5)"></span>普通待办</li>
-          <li><b>完成 / 删除 / 移动</b>：点圆圈打勾，再点恢复；点 ··· 可以删除（会先确认）或移动到其他日期</li>
+          <li><b>完成 / 编辑 / 删除</b>：点整行打勾，再点恢复；点 ··· 可以编辑（名称/时间/象限/日期）或删除（会先确认）</li>
           <li><b>思考</b>：切到「思考」页，点底部中间的 ＋ 随手写一条（Ctrl+Enter 可快捷保存）；长的自动折叠，点「展开全文」看全</li>
           <li><b>应用</b>：切到「应用」页看小工具列表——待办事项可直达「今天」页；专注计时已可用（番茄钟 25/短专注 15/休息 5），其余按天逐步开放</li>
-          <li><b>AI 洞察</b>：「思考」页顶部的 ✨，五种视角（默认/价值澄清/MBTI/每日回顾/随机漫步）——本地规则拼装，数据不上传，MBTI 仅供自娱</li>
+          <li><b>AI 洞察</b>：「思考」页顶部的 ✨，两种视角（默认 / MBTI）——本地规则拼装，数据不上传，MBTI 仅供自娱</li>
           <li><b>心情</b>：每天第一次打开会问一句，可跳过；想改就点「最近情绪」里今天的格子</li>
           <li><b>数据</b>：只存在这台设备的浏览器里，清缓存会一起清掉</li>
         </ul>
@@ -978,7 +976,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.6</b> · 2026-10-25</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.7</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
@@ -1023,15 +1021,38 @@
   </div>
 </div>
 
-<!-- 弹窗 3：移动待办到其他日期（Day 13，F1 ··· 菜单） -->
-<div class="overlay" id="move-modal" hidden>
-  <div class="modal">
-    <h3>移动到其他日期</h3>
-    <p class="move-src" id="move-src"></p>
-    <input id="move-date" type="date" title="选一个目标日期" />
-    <div class="row">
-      <button id="move-cancel" type="button">取消</button>
-      <button id="move-ok" type="button">确认移动</button>
+<!-- 弹窗 3：编辑待办（Day 29 六轮）：`···` 菜单的「移动」升级成「编辑」——
+     版式与新建打卡完全同款（✕/保存顶栏 + 行式布局 + 象限分段胶囊），一屏改完名称/时间/象限/日期。
+     同步边界：名称·时间·象限走 PATCH /api/checkins/:id（契约 §三 支持）；
+     **日期 PATCH 不收**，所以改日期 = 本机移动（与原「移动」同一待遇，首页小字已说明暂存本机） -->
+<div class="overlay" id="te-modal" hidden>
+  <div class="modal habit-modal">
+    <div class="hm-head">
+      <button id="te-cancel" type="button" class="hm-x" aria-label="关闭">✕</button>
+      <b class="hm-title">编辑待办</b>
+      <button id="te-ok" type="button" class="hm-save">保存</button>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="te-name">名称</label>
+      <span class="hv"><input id="te-name" maxlength="60" /></span>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="te-time">时间</label>
+      <span class="hv"><input id="te-time" type="time" /><i>可不设</i></span>
+    </div>
+    <div class="hrow hcol">
+      <span class="hl">象限</span>
+      <div class="hseg" id="te-quad" role="group" aria-label="四象限分类">
+        <button type="button" data-quad="q1">Q1</button>
+        <button type="button" data-quad="q2">Q2</button>
+        <button type="button" data-quad="q3">Q3</button>
+        <button type="button" data-quad="q4">Q4</button>
+        <button type="button" data-quad="" class="on">未分类</button>
+      </div>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="te-date">日期</label>
+      <span class="hv"><input id="te-date" type="date" /><i>改了就移过去</i></span>
     </div>
   </div>
 </div>
@@ -1237,7 +1258,7 @@
   <div class="modal habit-modal">
     <div class="hm-head">
       <button id="habit-cancel" type="button" class="hm-x" aria-label="关闭">✕</button>
-      <b class="hm-title">新建打卡</b>
+      <b class="hm-title" id="habit-title">新建打卡</b>
       <button id="habit-ok" type="button" class="hm-save">保存</button>
     </div>
     <div class="hrow">
@@ -1538,7 +1559,7 @@
   let filter = 'all';             // 'all' | 'timeline'
   let currentView = 'today';      // 'today' | 'thoughts' | 'apps' | 'me'（FAB 仅今天显示）
   let moodAskedDate = null;      // 最近一次询问心情的日期（跨天自动重置，A6）
-  let moveCtx = null;            // Day 13：正在移动的待办 { id, from }
+  // Day 29 六轮：原来的 moveCtx（正在移动的待办）已并入编辑弹窗的 editingTodo
   const el = (id) => document.getElementById(id);
 
   // ===== 数据读取层（Day 20 接线后：云端优先 → 本机兜底）=====
@@ -1871,20 +1892,23 @@
     showToast('已删除');
   };
 
-  // ===== 移动待办（Day 13）：把一条待办挪到其他日期，完成后原地消失 + Toast =====
-  // Day 22 说明：**移动仍是本机行为** —— 契约里没有"改归属日期"的接口
-  // （PATCH /api/checkins/:id 明确不接 date，见 api-contract.md §三），所以它不接云。
-  // 这也是首页小字写"移动/心情暂存本机"的原因，不是漏接线。
-  const moveTodoTo = (id, from, to) => {
-    if (demoMode || !data) return false;
-    const todo = getTodos(from).find(t => t.id === id);
-    if (!todo) return false;
-    if (to === from) { showToast('就是这一天，不用移动'); return false; }   // 同日拦截
-    data.todos[from] = getTodos(from).filter(t => t.id !== id);
-    (data.todos[to] = data.todos[to] || []).push(todo);
-    saveData(data); renderAll();
-    showToast('已移动到 ' + fmtDateLabel(to));
-    return true;
+  // ===== 编辑待办（Day 29 六轮）：顶替原来的「移动」 =====
+  // 一张卡改四件事：名称 / 时间 / 象限 / 日期。前三个是云端字段（PATCH 支持），
+  // 日期不是（契约 §三 明确忽略 date）——所以改日期退化为本机移动，
+  // 与 Day 13 那个「移动到其他日期」是同一份待遇，首页小字也已说明暂存本机。
+  let editingTodo = null;              // { id, date } —— 正在编辑哪一条、它原来在哪一天
+  let teQuad = '';                     // 弹窗内当前选中的象限（'' = 未分类）
+  const openTodoEdit = (todo) => {
+    if (demoMode || currentDate !== todayStr()) return;   // 与勾选一致：只能编辑今天
+    editingTodo = { id: todo.id, date: currentDate };
+    teQuad = QUADS[todo.quad] ? todo.quad : '';
+    el('te-name').value = todo.text;
+    el('te-time').value = todo.time || '';
+    el('te-date').value = currentDate;
+    el('te-quad').querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', b.dataset.quad === teQuad));
+    el('te-modal').hidden = false;
+    el('te-name').focus();
   };
 
   // ===== 待办"···"操作菜单（Day 13）：一次只开一个，点空白处关闭 =====
@@ -1894,22 +1918,16 @@
     document.querySelectorAll('.todo.menu-open').forEach(t => t.classList.remove('menu-open'));
   };
   const openTodoMenu = (btn, todo) => {
-    closeTodoMenu(); closeNoteMenu();                          // 先关掉上一个（含思考页）
+    closeTodoMenu(); closeNoteMenu(); closeHabitMenu();        // 先关掉上一个（含思考页/打卡）
     const menu = document.createElement('div');
     menu.className = 'menu';
-    const mv = document.createElement('button');
-    mv.type = 'button'; mv.textContent = '移动';                 // 精进 2：文案精简，弹窗里再选日期
-    mv.addEventListener('click', () => {
-      closeTodoMenu();
-      moveCtx = { id: todo.id, from: currentDate };        // 记住要移动谁
-      el('move-src').textContent = '「' + todo.text + '」';
-      el('move-date').value = shiftDate(currentDate, 1);   // 默认目标：后一天
-      el('move-modal').hidden = false;
-    });
+    const edit = document.createElement('button');
+    edit.type = 'button'; edit.textContent = '编辑';            // Day 29 六轮：原「移动」升级为整条编辑
+    edit.addEventListener('click', () => { closeTodoMenu(); openTodoEdit(todo); });
     const del = document.createElement('button');
     del.type = 'button'; del.className = 'danger'; del.textContent = '删除';
     del.addEventListener('click', () => { closeTodoMenu(); deleteTodoAt(currentDate, todo.id); });
-    menu.append(mv, del);
+    menu.append(edit, del);
     const card = btn.closest('.todo');
     card.classList.add('menu-open');                           // 精进 2：整卡浮到最上层
     card.appendChild(menu);
@@ -2022,6 +2040,9 @@
     // 「今日待做」卡整体让位——不再挂着一张用不了的表单误导人
     el('today-card').hidden = isHabitView;
     el('habit-card').hidden = !isHabitView;
+    // Day 29 六轮：视图职责重排——「全部」只做总览（添加行收起），
+    // 加待办去「时间轴」（表单）或右下角 ＋（弹窗）；编辑各在自己视图里做
+    el('today-card').classList.toggle('overview', filter === 'all');
 
     const timeline = el('timeline'); timeline.textContent = '';
     timedEntries.forEach(e =>
@@ -2070,7 +2091,10 @@
     }
     // 态③数据本身为空（清空筛选后一并回落到这里；打卡视图由专属卡自己交代空态）
     el('today-empty').hidden = all.length > 0 || isHabitView;
-    el('empty-text').textContent = isToday ? '今天还没有安排，写一条试试' : '这一天没有安排';
+    // 「全部」里没有添加行，空状态就别再叫人"写一条"——把去哪写说清楚（Day 29 六轮）
+    el('empty-text').textContent = isToday
+      ? (filter === 'all' ? '今天还没有安排，切到「时间轴」写一条' : '今天还没有安排，写一条试试')
+      : '这一天没有安排';
     el('load-demo').hidden = !isToday;
   };
 
@@ -2122,11 +2146,12 @@
     pie.className = 'pie'; pie.innerHTML = pieSvg(count, h.perDay);
     const cnt = document.createElement('span');
     cnt.className = 'hcount'; cnt.textContent = count + '/' + h.perDay;
-    const del = document.createElement('button');
-    del.className = 'del'; del.type = 'button'; del.textContent = '···';
-    del.title = '删除这个打卡';
-    del.addEventListener('click', (e) => { e.stopPropagation(); deleteHabit(h.id); });
-    row.append(time, text, pie, cnt, del);
+    const dots = document.createElement('button');
+    dots.className = 'del'; dots.type = 'button'; dots.textContent = '···';
+    dots.title = '编辑或删除这个打卡';
+    dots.hidden = demoMode;                    // 与待办一致：演示模式不显示操作入口
+    dots.addEventListener('click', (e) => { e.stopPropagation(); openHabitMenu(dots, h); });
+    row.append(time, text, pie, cnt, dots);
     if (interactive) {
       row.setAttribute('role', 'button');
       row.setAttribute('tabindex', '0');
@@ -2164,6 +2189,29 @@
     delete data.habitLogs[id];
     saveData(data); renderAll();
     showToast('已删除打卡');
+  };
+
+  // ===== 打卡"···"菜单（Day 29 六轮）：与待办完全一致 —— 编辑 + 删除 =====
+  // 之前打卡的 ··· 是"点一下就删"（还得再确认一次），和待办菜单行为不一致；
+  // 现在两边同一套菜单、同一套文案，编辑走同一张行式弹窗。
+  const closeHabitMenu = () => {
+    document.querySelectorAll('.todo.habit .menu').forEach(m => m.remove());
+    document.querySelectorAll('.todo.habit.menu-open').forEach(t => t.classList.remove('menu-open'));
+  };
+  const openHabitMenu = (btn, h) => {
+    closeHabitMenu(); closeTodoMenu(); closeNoteMenu();
+    const menu = document.createElement('div');
+    menu.className = 'menu';
+    const edit = document.createElement('button');
+    edit.type = 'button'; edit.textContent = '编辑';
+    edit.addEventListener('click', () => { closeHabitMenu(); openHabitEdit(h); });
+    const del = document.createElement('button');
+    del.type = 'button'; del.className = 'danger'; del.textContent = '删除';
+    del.addEventListener('click', () => { closeHabitMenu(); deleteHabit(h.id); });
+    menu.append(edit, del);
+    const card = btn.closest('.todo');
+    card.classList.add('menu-open');
+    card.appendChild(menu);
   };
 
   // ===== 思考卡片"···"菜单（精进 2，F3）：分享 / 编辑 / 复制 / 删除 =====
@@ -2520,19 +2568,98 @@
   el('tm-ok').addEventListener('click', submitToday);
   el('tm-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitToday(); } });
 
-  // 移动待办弹窗（Day 13）：空日期 / 同一天 → Toast 拦截，成功 → 落盘 + 关闭
-  el('move-cancel').addEventListener('click', () => { el('move-modal').hidden = true; });
-  el('move-ok').addEventListener('click', () => {
-    if (!moveCtx) { el('move-modal').hidden = true; return; }
-    const to = el('move-date').value;
-    if (!to) { showToast('先选一个日期'); return; }
-    if (moveTodoTo(moveCtx.id, moveCtx.from, to)) el('move-modal').hidden = true;
+  // ===== 编辑待办弹窗（Day 29 六轮）：名称/时间/象限走 PATCH，日期只能本机搬 =====
+  el('te-cancel').addEventListener('click', () => {
+    el('te-modal').hidden = true; editingTodo = null;
+  });
+  el('te-quad').querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => {
+      teQuad = b.dataset.quad;
+      el('te-quad').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    });
+  });
+  const submitTodoEdit = async () => {
+    // 与 tm / habit 两处同一套写法：空值和业务拒绝都是 toast + 不关窗
+    if (demoMode || !data || !editingTodo) { el('te-modal').hidden = true; return; }
+    const name = el('te-name').value.trim();
+    if (!name) { showToast('名称不能为空'); el('te-name').focus(); return; }
+    const to = el('te-date').value;
+    if (!to) { showToast('选一个日期'); return; }
+    const time = el('te-time').value || null;
+    const quad = teQuad || null;
+    const { id, date } = editingTodo;
+    const todo = getTodos(date).find(t => t.id === id);
+    if (!todo) { el('te-modal').hidden = true; return; }   // 已被删/被云端刷掉了
+
+    // ① 云端字段：有云端账号就 PATCH —— 只改本机的话，下次刷新会被云端数据盖回去
+    let saved = false;                                     // 是否已由服务端回写
+    if (apiReady() && isCloudId(id)) {
+      const r = await apiPatch('/checkins/' + id, { text: name, time: time, quad: quad });
+      if (r.ok) {
+        todo.text = r.data.text; todo.time = r.data.time; todo.quad = r.data.quad;
+        saved = true;
+      } else if (r.kind === 'business') {
+        showToast(errKindText(r));                          // 明确拒绝：不落盘、不关窗
+        return;
+      } else {
+        showToast(errKindText(r) + '，先改在本机');          // 基础设施故障：本机兜底
+      }
+    }
+    if (!saved) { todo.text = name; todo.time = time; todo.quad = quad; }
+
+    // ② 日期：契约 PATCH 不收 date，只能本机搬（与原「移动」同一待遇）
+    if (to !== date) {
+      data.todos[date] = getTodos(date).filter(t => t.id !== id);
+      (data.todos[to] = data.todos[to] || []).push(todo);
+    }
+    saveData(data);
+    el('te-modal').hidden = true; editingTodo = null;
+    renderAll();
+    showToast(to !== date ? '已保存，并移到 ' + fmtDateLabel(to) : '已保存');
+  };
+  el('te-ok').addEventListener('click', submitTodoEdit);
+  el('te-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); submitTodoEdit(); }
   });
 
-  // ===== 新建打卡弹窗（Day 29 四轮，截图版式）：名称/次数/时间/象限/起止，校验同前 =====
+  // ===== 打卡弹窗（Day 29 四轮截图版式 / 六轮支持编辑）：新建与编辑共用一张卡 =====
   let habitPerDay = 1;
   let habitQuad = '';                     // '' = 未分类
+  let editingHabitId = null;              // null = 新建；有值 = 正在编辑这条打卡
+  // 把「结束时间」拨回永久态（两态控件的小工具，新建与编辑都要用）
+  const setEndForever = () => {
+    el('habit-end').value = '';
+    el('habit-end').hidden = true;
+    el('habit-end-clear').hidden = true;
+    el('habit-forever').hidden = false;
+  };
+  // 编辑打卡：预填全部字段（含起止与次数），保存时原地更新而不是新增
+  const openHabitEdit = (h) => {
+    if (demoMode || !data) return;
+    editingHabitId = h.id;
+    el('habit-title').textContent = '编辑打卡';
+    habitPerDay = h.perDay;
+    el('habit-perday').textContent = String(h.perDay);
+    habitQuad = QUADS[h.quad] ? h.quad : '';
+    el('habit-quad').querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', b.dataset.quad === habitQuad));
+    el('habit-name').value = h.name;
+    el('habit-time').value = h.time || '';
+    el('habit-start').value = h.start;
+    if (h.end) {                          // 有结束日期 → 展开日期态；没有 → 「永久 ›」
+      el('habit-forever').hidden = true;
+      el('habit-end').hidden = false;
+      el('habit-end-clear').hidden = false;
+      el('habit-end').value = h.end;
+    } else {
+      setEndForever();
+    }
+    el('habit-modal').hidden = false;
+    el('habit-name').focus();
+  };
   el('habit-add').addEventListener('click', () => {
+    editingHabitId = null;                // 「＋ 新建打卡」永远是新建模式
+    el('habit-title').textContent = '新建打卡';
     habitPerDay = 1;
     el('habit-perday').textContent = '1';
     habitQuad = '';
@@ -2547,12 +2674,6 @@
     el('habit-name').focus();
   });
   // 结束时间两态：「永久 ›」⇄ 日期选择 + 恢复永久（Day 29 五轮）
-  const setEndForever = () => {
-    el('habit-end').value = '';
-    el('habit-end').hidden = true;
-    el('habit-end-clear').hidden = true;
-    el('habit-forever').hidden = false;
-  };
   el('habit-forever').addEventListener('click', () => {
     el('habit-forever').hidden = true;
     el('habit-end').hidden = false;
@@ -2575,7 +2696,9 @@
     habitPerDay = Math.min(9, habitPerDay + 1);
     el('habit-perday').textContent = String(habitPerDay);
   });
-  el('habit-cancel').addEventListener('click', () => { el('habit-modal').hidden = true; });
+  el('habit-cancel').addEventListener('click', () => {
+    el('habit-modal').hidden = true; editingHabitId = null;   // 关窗即回到新建模式
+  });
   const submitHabit = () => {
     // 与 tm 弹窗同一套拦截写法：toast + 不关窗（Day 28 P1 的教训不重犯）
     const name = el('habit-name').value.trim();
@@ -2585,13 +2708,22 @@
     const end = el('habit-end').value;
     if (end && end < start) { showToast('结束日期不能早于开始日期'); return; }
     const time = el('habit-time').value || null;    // 可不设；设了就进时间轴排序
-    data.habits.push({ id: 'h' + Date.now(), name: name, start: start,
-                       end: end, perDay: habitPerDay, time: time,
-                       quad: habitQuad || null, created: Date.now() });
+    const editing = editingHabitId ? data.habits.find(x => x.id === editingHabitId) : null;
+    if (editing) {
+      // 编辑模式（Day 29 六轮）：原地改字段，id / created / 已有打卡记录一律不动
+      editing.name = name; editing.start = start; editing.end = end;
+      editing.perDay = habitPerDay; editing.time = time;
+      editing.quad = habitQuad || null;
+    } else {
+      data.habits.push({ id: 'h' + Date.now(), name: name, start: start,
+                         end: end, perDay: habitPerDay, time: time,
+                         quad: habitQuad || null, created: Date.now() });
+    }
     saveData(data);
     el('habit-modal').hidden = true;
+    editingHabitId = null;                 // 关掉弹窗就回到新建模式，避免下次误改
     renderAll();
-    showToast('已创建打卡「' + name + '」');
+    showToast(editing ? '已保存打卡「' + name + '」' : '已创建打卡「' + name + '」');
   };
   el('habit-ok').addEventListener('click', submitHabit);
   el('habit-name').addEventListener('keydown', (e) => {
