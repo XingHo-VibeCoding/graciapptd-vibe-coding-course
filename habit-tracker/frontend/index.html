@@ -212,7 +212,6 @@
                          font-size:13px; cursor:pointer; }
 
     body.demo #add-form{ display:none; }
-    body.demo #pet-qa-add{ display:none; }           /* 假数据不落盘，演示模式只看 */
 
     /* ===== 自绘日历（Day 29 七轮）：替代原生 date picker，风格随主题 ===== */
     .cal{ position:relative; display:inline-flex; }
@@ -224,6 +223,8 @@
            background:var(--card); border:1px solid var(--line); border-radius:14px;
            box-shadow:0 8px 28px rgba(92,74,61,.16); padding:12px; width:248px;
            color:var(--ink); }
+    /* v2.2 越界自查：字段靠近屏幕底部时，月历翻到上方，别顶出可视区 */
+    .cal-pop.up{ top:auto; bottom:calc(100% + 8px); }
     .cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
     .cal-title{ font-size:14px; font-weight:600; color:var(--ink); }
     .cal-nav{ display:flex; gap:4px; }
@@ -263,16 +264,22 @@
            color:var(--accent-deep); border-radius:999px; padding:7px 16px;
            font-size:13px; cursor:pointer; }
 
-    /* ===== 薯条助手按钮 + 问答框（v2.1）：72px 右下常驻（顶替原 ＋），戳会喵，点开问答 ===== */
+    /* ===== 薯条助手按钮 + 问答框（v2.1）：72px 常驻（顶替原 ＋），戳会喵，点开问答；v2.2 可拖拽 =====
+       坐标由 JS 计算：left 锁在手机窗左边界内、bottom 留在导航栏之上——
+       不用 right/bottom 写死，宽屏（桌面预览的 430px 手机窗）也不会飘到窗外。 */
     #pet-btn{ position:fixed; right:16px; bottom:16px; width:72px; height:72px;
               padding:0; border:none; background:transparent; z-index:70;
-              cursor:pointer; -webkit-tap-highlight-color:transparent; }
+              cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none;
+              -webkit-tap-highlight-color:transparent; }
+    #pet-btn.dragging{ cursor:grabbing; z-index:75; }
     #pet-btn[hidden], #pet-qa[hidden]{ display:none; }
     #pet-btn img{ width:100%; height:100%; display:block; object-fit:contain;
+                  -webkit-user-drag:none;
                   filter:drop-shadow(0 5px 9px rgba(0,0,0,.18));
                   transform-origin:50% 88%;
                   animation:pet-sway 5.5s ease-in-out infinite;
                   transition:transform .15s ease; }
+    #pet-btn.dragging img{ animation:none; }
     html[data-theme="dark"] #pet-btn img{
                   filter:brightness(1.12) drop-shadow(0 3px 8px rgba(0,0,0,.55)); }
     #pet-btn.squash img{ transform:scale(1.12,.88); animation:none; }
@@ -280,8 +287,11 @@
                  background:var(--card); border:1px solid var(--line); color:var(--ink);
                  font-size:12px; padding:3px 10px; border-radius:12px; white-space:nowrap;
                  box-shadow:0 2px 6px rgba(0,0,0,.1); pointer-events:none; }
+    /* 薯条被拖到贴近顶部时，气泡翻到下方，免得飘出屏幕 */
+    #pet-btn.low .pet-bubble{ top:auto; bottom:-6px; transform:translate(50%,100%); }
     #pet-qa{ position:fixed; right:14px; bottom:96px; z-index:70;
              width:min(320px, calc(100vw - 28px)); box-sizing:border-box;
+             max-height:min(58vh, 420px); overflow-y:auto;
              background:var(--card); border:1px solid var(--line); border-radius:16px;
              padding:14px; box-shadow:0 10px 28px rgba(0,0,0,.18); }
     .pet-qa-head{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
@@ -580,8 +590,9 @@
     /* ===== 肯定语（Day 22，F6）===== */
     #affirm-box{ position:fixed; inset:0; display:flex; flex-direction:column;
                  justify-content:center; align-items:center; padding:16px; }
-    /* 竖长方形卡片：按 9/16 原图比例，高度不超视口（精进 4） */
-    #affirm-box .affirm-card{ width:min(100%, calc((100vh - 190px) * 0.5625)); aspect-ratio:9/16;
+    /* 竖长方形卡片：按 9/16 原图比例，高度不超视口（精进 4）；v2.2 再加 398 上限，
+       大屏（vh 很高）时卡片不会撑出 430px 手机窗 */
+    #affirm-box .affirm-card{ width:min(100%, calc((100vh - 190px) * 0.5625), 398px); aspect-ratio:9/16;
                               border-radius:20px; overflow:hidden; position:relative;
                               display:flex; flex-direction:column; justify-content:flex-end;
                               padding:24px; box-sizing:border-box;
@@ -719,16 +730,11 @@
     .guide .dot{ display:inline-block; width:8px; height:8px; border-radius:50%;
                  margin-right:2px; vertical-align:1px; }
 
-    /* 「＋写待办」：问答框顶部的琥珀金大按钮（v2.1 起顶替原右下角 ＋） */
-    .pet-qa-add{ width:100%; border:none; background:var(--accent); color:var(--accent-ink);
-                 font-size:13.5px; font-weight:600; border-radius:10px; padding:9px 0;
-                 cursor:pointer; margin-bottom:10px; }
-
     /* ===== Toast 轻提示（Day 11 交互反馈）：底部居中，自动消失 ===== */
     #toast{ position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(8px);
             background:var(--card2); border:1px solid var(--line); color:var(--ink);
             font-size:13px; padding:9px 16px; border-radius:999px; z-index:60;
-            box-shadow:0 4px 16px rgba(0,0,0,.5); max-width:82vw; white-space:nowrap;
+            box-shadow:0 4px 16px rgba(0,0,0,.5); max-width:min(82vw, 398px); white-space:nowrap;
             overflow:hidden; text-overflow:ellipsis;
             opacity:0; pointer-events:none; transition:opacity .18s, transform .18s; }
     #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
@@ -752,19 +758,8 @@
     .modal .tip{ font-size:12px; color:var(--muted); margin:12px 0 0; }
     .modal .close{ display:block; margin:14px auto 0; border:none; background:transparent;
                    color:var(--muted); font-size:13px; cursor:pointer; }
-    #tm-text{ width:100%; padding:10px 12px; border:1px solid var(--line);
-              border-radius:10px; font-size:14px; margin-bottom:10px;
-              background:var(--card2); color:var(--ink); }
-    #tm-time{ width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
-              font-size:13px; color:var(--muted); margin-bottom:10px;
-              background:var(--card2); color-scheme:var(--scheme); } /* 间距统一 10px（C3）*/
-    #tm-quad{ width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:10px;
-              font-size:13px; color:var(--muted); margin-bottom:10px;
-              background:var(--card2); }
     .modal .row{ display:flex; gap:10px; margin-top:0; }
     .modal .row button{ flex:1; padding:10px 0; border-radius:10px; font-size:14px; cursor:pointer; }
-    #tm-cancel{ border:1px solid var(--line); background:transparent; color:var(--muted); }
-    #tm-ok{ border:none; background:var(--accent); color:var(--accent-ink); }
 
     /* ===== 应用页入口列表（F6 骨架，Day 17）：仿九宫格应用中心的列表形态 ===== */
     .apps-list{ display:flex; flex-direction:column; gap:10px; }
@@ -796,6 +791,16 @@
     nav button.active{ color:var(--accent-deep); font-weight:600; }
     section{ display:none; }
     section.active{ display:block; }
+
+    /* ===== v2.2 越界自查：手机窗之外不该出现任何界面部件 =====
+       宽屏（桌面预览）时 .app 是居中的 430px 手机窗，但 fixed 元素默认按视口定位——
+       底部 tab 条的通栏背景、弹窗遮罩都会横跨整个桌面，看起来像「网页」而不是「手机软件」。
+       这里统一收进 430px。手机（<520px）不受影响。
+       注意必须写在基础规则之后（同为单类选择器，谁在后面谁生效）。 */
+    @media (min-width:520px){
+      nav{ left:50%; right:auto; transform:translateX(-50%); width:430px; }
+      .overlay{ left:50%; right:auto; transform:translateX(-50%); width:430px; }
+    }
   </style>
 </head>
 <body>
@@ -1064,7 +1069,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.1</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.2</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1085,26 +1090,6 @@
     </div>
     <p class="tip">选一个就好，随时可以在「我的 · 最近情绪」里换</p>
     <button class="close" id="mood-close" type="button">先不选</button>
-  </div>
-</div>
-
-<!-- 弹窗 2：添加待办（含四象限） -->
-<div class="overlay" id="tm-modal" hidden>
-  <div class="modal">
-    <h3>添加待办</h3>
-    <input id="tm-text" placeholder="今天要做什么？" maxlength="60" />
-    <input id="tm-time" type="time" title="可选：几点做" />
-    <select id="tm-quad" title="可选：四象限分类">
-      <option value="">象限：不选就是普通待办</option>
-      <option value="q1">Q1 重要且紧急</option>
-      <option value="q2">Q2 重要不紧急</option>
-      <option value="q3">Q3 紧急不重要</option>
-      <option value="q4">Q4 不重要不紧急</option>
-    </select>
-    <div class="row">
-      <button id="tm-cancel" type="button">取消</button>
-      <button id="tm-ok" type="button">添加</button>
-    </div>
   </div>
 </div>
 
@@ -1442,7 +1427,6 @@
     <b>问薯条</b>
     <button id="pet-qa-close" type="button" class="pet-x" aria-label="关闭">✕</button>
   </div>
-  <button id="pet-qa-add" type="button">＋ 写待办</button>
   <input id="pet-qa-input" type="search" placeholder="例如：我想设置打卡该怎么弄" autocomplete="off" />
   <div class="pet-chips" id="pet-chips"></div>
   <div class="pet-ans" id="pet-qa-ans"></div>
@@ -1476,8 +1460,9 @@
                             speeches: [],
                             habits: [], habitLogs: {},   // Day 29 改进：打卡计划 + 每日次数（暂存本机）
                             // P1：薯条（吉祥物）状态——points/换装 P3 才用，字段先占位避免将来再迁移
+                            // v2.2：pos = 拖拽后的位置（x 距手机窗左边 / y 距窗口底部），null = 默认右下角
                             pet: { points: 0, owned: [], wearing: { head: null, body: null },
-                                   awarded: {}, onboarded: false },
+                                   awarded: {}, onboarded: false, pos: null },
                             theme: Object.assign({}, DEFAULT_THEME),
                             profile: { name: '' }, meta: {} });
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
@@ -1492,8 +1477,9 @@
     // P1：旧数据补薯条状态（独立字面量，不共享 defaults 里的引用）
     if (!d.pet || typeof d.pet !== 'object') {
       d.pet = { points: 0, owned: [], wearing: { head: null, body: null },
-                awarded: {}, onboarded: false };
+                awarded: {}, onboarded: false, pos: null };
     }
+    if (!('pos' in d.pet)) d.pet.pos = null;             // v2.2：拖拽位置，旧的没有就回到默认右下角
     if (!Array.isArray(d.pet.owned)) d.pet.owned = [];
     if (!d.pet.wearing || typeof d.pet.wearing !== 'object') d.pet.wearing = { head: null, body: null };
     if (!d.theme || !d.theme.img) d.theme = def.theme;   // v3.5：旧数据补默认主题
@@ -2108,6 +2094,10 @@
         const from = input.value || todayStr();
         const parts = from.split('-').map(Number); vy = parts[0]; vm = parts[1];
         renderPop(); pop.hidden = false;
+        // 下方放不下就翻到字段上方（弹窗里的「结束时间」贴着屏幕底时尤其明显）
+        const r = pop.getBoundingClientRect();
+        const vh = window.innerHeight || 640;
+        pop.classList.toggle('up', r.height > 0 && r.bottom > vh - 8);
       }
     });
     CALS[inputId] = { sync: syncField, pop };
@@ -2736,6 +2726,10 @@
   // ===== 事件绑定 =====
   el('add-form').addEventListener('submit', (e) => {
     e.preventDefault();
+    // Day 28（v1.1 · 独立盲审 P1）：空内容先说一句人话。
+    // addTodo 遇到空文本会静默 return false —— 不说的话用户以为加上了，回头列表里找不到。
+    // v2.2：原添加弹窗删除后，这段提示挪到时间轴的输入行（现在是唯一的添加入口）。
+    if (!el('todo-text').value.trim()) { showToast('写点什么再添加吧'); el('todo-text').focus(); return; }
     addTodo(el('todo-text').value, el('todo-time').value, el('todo-quad').value);
     el('todo-text').value = ''; el('todo-time').value = ''; el('todo-quad').value = '';
   });
@@ -2772,26 +2766,6 @@
     });
   });
   el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
-
-  // 「问薯条」框顶的「＋写待办」→ 添加待办弹窗（顶替原右下角 ＋；写入当前查看的日期）
-  el('pet-qa-add').addEventListener('click', () => {
-    el('pet-qa').hidden = true;
-    el('tm-modal').hidden = false;
-    el('tm-text').value = ''; el('tm-time').value = ''; el('tm-quad').value = '';
-    el('tm-text').focus();
-  });
-  el('tm-cancel').addEventListener('click', () => { el('tm-modal').hidden = true; });
-  const submitToday = () => {
-    // Day 28（v1.1 · 独立盲审 P1）：空内容先拦在这里。
-    // 原先 addTodo 遇到空文本会**静默 return false**，而弹窗照样关掉 —— 用户以为加上了，
-    // 回去列表里找不到，还没有任何提示。同文件的「移动待办」（先选一个日期）与
-    // 「记想法」（写点什么再保存吧）两个弹窗都是"toast + 不关窗"的写法，只有这个最高频入口漏了。
-    if (!el('tm-text').value.trim()) { showToast('写点什么再添加吧'); el('tm-text').focus(); return; }
-    addTodo(el('tm-text').value, el('tm-time').value, el('tm-quad').value);
-    el('tm-modal').hidden = true;
-  };
-  el('tm-ok').addEventListener('click', submitToday);
-  el('tm-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitToday(); } });
 
   // ===== 编辑待办弹窗（Day 29 六轮）：名称/时间/象限走 PATCH，日期只能本机搬 =====
   el('te-cancel').addEventListener('click', () => {
@@ -4258,16 +4232,126 @@
     petSquashT = setTimeout(() => btn.classList.remove('squash'), 220);
     petMeow();
   };
-  el('pet-btn').addEventListener('click', () => {
-    petReact();
-    if (el('pet-qa').hidden) {
-      el('pet-qa').hidden = false;
-      petAnswer('');
-      el('pet-qa-input').focus();
-    } else {
-      el('pet-qa').hidden = true;
-    }
-  });
+  // ===== 薯条位置（v2.2）：可拖拽，拖到哪停哪，位置存本机 =====
+  // 坐标：x = 距手机窗左边，y = 距窗口底部。为什么不用 CSS 的 right/bottom：
+  // 宽屏（≥520px）时 .app 是居中的 430px「手机窗」，fixed + right:0 会把薯条甩到窗外桌面上。
+  // 所以横向上限锁在 .app 那一列里，纵向不低于导航栏（别盖住底部 tab）。
+  const PET_SIZE = 72, PET_EDGE = 8;
+  let petXY = null;                                  // 运行时位置 { x, y }
+  const petFrame = () => {
+    const app = document.querySelector('.app');
+    const r = app ? app.getBoundingClientRect() : null;
+    const vw = window.innerWidth || 360;
+    // jsdom / 极端环境下 rect 全 0：按窗口宽度推一个 430 的居中窗，边界逻辑照常可测
+    const w = (r && r.width) ? r.width : Math.min(vw, 430);
+    const left = (r && r.width) ? r.left : Math.max(0, (vw - w) / 2);
+    const navEl = document.querySelector('nav');
+    const navH = navEl ? navEl.getBoundingClientRect().height : 0;
+    return { left: left, w: w, navH: navH || 48 };
+  };
+  const petLimits = () => {
+    const f = petFrame(), vh = window.innerHeight || 640;
+    return { f: f,
+             minX: PET_EDGE, maxX: Math.max(PET_EDGE, f.w - PET_SIZE - PET_EDGE),
+             minY: f.navH + PET_EDGE,                     // 底边不低于导航栏
+             maxY: Math.max(f.navH + PET_EDGE, vh - f.navH - PET_SIZE - PET_EDGE) };
+  };
+  const clampPet = (x, y) => {
+    const L = petLimits();
+    return { x: Math.min(Math.max(x, L.minX), L.maxX),
+             y: Math.min(Math.max(y, L.minY), L.maxY), L: L };
+  };
+  // 问答框跟着薯条走：优先浮在它上方，上方放不下就落到下方，左右夹在手机窗内
+  const placePetQa = () => {
+    const qa = el('pet-qa');
+    if (!qa || !petXY) return;
+    const f = petFrame();
+    const vh = window.innerHeight || 640;
+    const w = Math.min(320, f.w - 28);
+    qa.style.width = w + 'px';
+    let left = f.left + petXY.x + PET_SIZE / 2 - w / 2;
+    left = Math.min(Math.max(left, f.left + 8), f.left + f.w - w - 8);
+    const h = qa.offsetHeight || 210;                  // 隐藏时量不到高度，给个保守值
+    const petTop = vh - petXY.y - PET_SIZE;
+    let top = petTop - h - 10;
+    if (top < 8) top = petTop + PET_SIZE + 10;
+    top = Math.min(Math.max(top, 8), Math.max(8, vh - f.navH - h - 8));
+    qa.style.left = left + 'px';
+    qa.style.top = top + 'px';
+    qa.style.right = 'auto';
+    qa.style.bottom = 'auto';
+  };
+  const paintPet = () => {
+    if (!petXY) return;
+    const btn = el('pet-btn');
+    const c = clampPet(petXY.x, petXY.y);
+    petXY = { x: c.x, y: c.y };
+    btn.style.left = (c.L.f.left + c.x) + 'px';
+    btn.style.right = 'auto';
+    btn.style.bottom = c.y + 'px';
+    // 头顶空间不够放气泡（约 34px）→ 气泡翻到猫下面，免得飘出屏幕
+    btn.classList.toggle('low', (window.innerHeight || 640) - c.y - PET_SIZE < 40);
+    if (!el('pet-qa').hidden) placePetQa();
+  };
+  const savePetPos = () => {
+    if (demoMode || !data || !data.pet || !petXY) return;   // 演示模式只看不存
+    data.pet.pos = { x: Math.round(petXY.x), y: Math.round(petXY.y) };
+    saveData(data);
+  };
+  const initPetPos = () => {
+    const p = data && data.pet && data.pet.pos;
+    const L = petLimits();
+    petXY = (p && typeof p.x === 'number' && typeof p.y === 'number')
+      ? { x: p.x, y: p.y }
+      : { x: L.maxX, y: L.minY };                       // 默认：右下角、导航栏上方
+    paintPet();
+  };
+
+  {
+    const btn = el('pet-btn');
+    let drag = null, moved = false, justDragged = false;
+    btn.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!petXY) initPetPos();
+      drag = { px: e.clientX, py: e.clientY, x: petXY.x, y: petXY.y };
+      moved = false;
+      if (e.pointerId != null && btn.setPointerCapture) {
+        try { btn.setPointerCapture(e.pointerId); } catch (err) { /* 老浏览器没有指针捕获 */ }
+      }
+      btn.classList.add('dragging');
+    });
+    btn.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.px, dy = e.clientY - drag.py;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < 6) return;   // 6px 以内算点击，不算拖
+      moved = true;
+      petXY = { x: drag.x + dx, y: drag.y - dy };              // 底边坐标：往上拖 = y 变大
+      paintPet();
+    });
+    const endDrag = () => {
+      if (!drag) return;
+      drag = null;
+      btn.classList.remove('dragging');
+      if (moved) { justDragged = true; savePetPos(); moved = false; }
+    };
+    btn.addEventListener('pointerup', endDrag);
+    btn.addEventListener('pointercancel', endDrag);
+    btn.addEventListener('click', (e) => {
+      if (justDragged) { justDragged = false; e.stopPropagation(); return; }  // 拖完那一下不当点击
+      petReact();
+      if (el('pet-qa').hidden) {
+        el('pet-qa').hidden = false;
+        petAnswer('');
+        placePetQa();
+        setTimeout(placePetQa, 0);        // 内容撑开后高度会变，再校一次
+        el('pet-qa-input').focus();
+      } else {
+        el('pet-qa').hidden = true;
+      }
+    });
+    window.addEventListener('resize', paintPet);
+    initPetPos();
+  }
   el('pet-qa-close').addEventListener('click', () => { el('pet-qa').hidden = true; });
   el('pet-qa-input').addEventListener('input', () => petAnswer(el('pet-qa-input').value));
   el('pet-qa-input').addEventListener('keydown', (e) => {
@@ -4279,6 +4363,8 @@
 
   // ===== 启动 =====
   refreshDay().then(() => {
+    // 数据就绪后再摆一次薯条：上次拖到的位置存在 data.pet.pos 里（首帧只能先摆默认位）
+    initPetPos();
     // 首访：数据就绪且没看过引导 → 薯条自动登场（演示模式不打扰；
     // data 在 refreshDay 里异步赋值，必须等它完成，放外面永远赶不上）
     if (!demoMode && data && !data.pet.onboarded) startGuide();
