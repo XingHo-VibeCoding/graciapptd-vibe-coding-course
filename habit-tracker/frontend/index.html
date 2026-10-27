@@ -953,8 +953,8 @@
              与首页每张卡片上方的「云端数据 · 更新于 …」**直接矛盾** —— 用户会以为自己的
              待办根本没被保存。改成与真实数据流一致的两行（首页小字也已写「移动/心情暂存本机」）。
              注：这里刻意不照抄旧文案，免得以后用 grep 检查线上时把注释也算成"没修干净"。 -->
-        <div class="set-row"><span>待办与心情</span><span class="sv">同步到云端</span></div>
-        <div class="set-row"><span>打卡计划与移动</span><span class="sv">暂存本机</span></div>
+        <div class="set-row"><span>待办、心情与打卡</span><span class="sv">同步到云端</span></div>
+        <div class="set-row"><span>薯条摆在哪儿（位置）</span><span class="sv">暂存本机</span></div>
         <div class="theme-block">
           <div class="tb-label">主题（深浅与背景图各自独立设置）</div>
           <div class="theme-mode" id="theme-mode" role="group" aria-label="深浅主题">
@@ -974,7 +974,7 @@
         <ul class="guide">
           <li><b>加待办</b>：点「＋ 新建」写一条，可加时间、象限和日期；点整行 = 完成，··· 编辑或删除</li>
           <li><b>打卡</b>：同样点「＋ 新建」，类型切到「打卡」；设今日次数和起止，点行打卡看扇形</li>
-          <li><b>数据</b>：待办与心情同步云端；打卡计划暂存本机；AI 洞察只在本地拼装，不上传</li>
+          <li><b>数据</b>：待办、心情与打卡同步云端；薯条位置暂存本机；AI 洞察只在本地拼装，不上传</li>
         </ul>
         <button type="button" id="guide-replay" class="guide-replay">让薯条再教我一遍</button>
       </div>
@@ -998,7 +998,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.5</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.6</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1404,7 +1404,7 @@
                             anniversaries: DEFAULT_MEMORIALS.map(m => Object.assign({}, m)),
                             affirm: { likes: [], bgIndex: 0, seed: 0 },
                             speeches: [],
-                            habits: [], habitLogs: {},   // Day 29 改进：打卡计划 + 每日次数（暂存本机）
+                            habits: [], habitLogs: {},   // Day 29：打卡计划 + 每日次数（v2.6 起同步云端）
                             // P1：薯条（吉祥物）状态——points/换装 P3 才用，字段先占位避免将来再迁移
                             // v2.2：pos = 拖拽后的位置（x 距手机窗左边 / y 距窗口底部），null = 默认右下角
                             pet: { points: 0, owned: [], wearing: { head: null, body: null },
@@ -1414,6 +1414,10 @@
   // Day 29 十三轮：meta.moodsSynced —— 本机历史心情是否已经搬上云（只搬一次）。
   // 为什么一定要标记：迁移在每次启动都会走到，没有标记就会反复上传（虽然接口幂等，但白耗请求）。
   const MOOD_IMPORT_BATCH = 200;      // 与契约 POST /api/day/moods 的上限一致
+  // v2.6：打卡上云的两批上限（与契约 POST /api/habits/import 的上限一致）。
+  // meta.habitsSynced 的语义与心情那个完全一样：搬成功才打标记，失败下次自动重试。
+  const HABIT_IMPORT_BATCH = 100;
+  const HABIT_LOG_IMPORT_BATCH = 400;
   // Day 21：旧数据迁移——没有 anniversaries 字段时补上默认春节
   const fillDefaults = (d) => {
     const def = defaults();
@@ -1673,12 +1677,55 @@
     return planDay;
   };
 
+  /**
+   * 把接口返回的打卡合进本机结构（v2.6）：
+   *   items（定义 + 当天 count）→ habits[] + habitLogs[id][date]
+   *
+   * 两条规则，和心情一致 —— **云端是唯一真相源**：
+   *   ① 云端没有的打卡定义，本机也删掉（可能是在别的设备删了）；
+   *   ② 这一天以云端次数为准：先清掉本机这天的值，再按云端写回。
+   *      只清"这一天"，别的日期的缓存留着 —— 离线翻旧日期时还能看见上次的数据。
+   *
+   * 返回 false 表示响应形状不对（老桩/网关抽风），调用处保持本机不动。
+   */
+  const applyCloudHabits = (store, date, payload) => {
+    const items = (payload && Array.isArray(payload.items)) ? payload.items : null;
+    if (!items) return false;
+
+    store.habits = items.map(h => ({
+      id: h.id, name: h.name, start: h.start, end: h.end || null,
+      perDay: Number(h.perDay) || 1, time: h.time || null, quad: h.quad || null,
+      created: h.createdAt || Date.now(),
+    }));
+
+    const keep = {};
+    items.forEach(h => { keep[h.id] = true; });
+    if (!store.habitLogs || typeof store.habitLogs !== 'object') store.habitLogs = {};
+    Object.keys(store.habitLogs).forEach(id => {
+      if (!keep[id]) { delete store.habitLogs[id]; return; }   // 云端没这条定义了
+      delete store.habitLogs[id][date];                        // 这天以云端为准
+    });
+    items.forEach(h => {
+      const n = Number(h.count) || 0;
+      if (n <= 0) return;
+      const bag = (store.habitLogs[h.id] = store.habitLogs[h.id] || {});
+      bag[date] = n;
+    });
+    return true;
+  };
+
   // 拉某一天的云端数据并重绘；拿不到就保持本机数据不变（离线兜底，页面不会白屏）
   let cloudSeq = 0;                 // 请求序号：快速切日期时用它丢弃"过期响应"，防止旧结果盖掉新结果
   const fetchCloudDay = async (date) => {
     if (!apiReady()) { cloudState = { mode: 'local', updatedAt: null, at: 0 }; renderCloudHint(); return; }
     const seq = ++cloudSeq;
-    const r = await apiGet('/day?date=' + encodeURIComponent(date));
+    // v2.6：打卡和"这一天"一起拉，两个请求并发发出（串行会让首屏多等一个来回）。
+    // 本机还没搬上云时不拉打卡 —— 云上必然空，拉回来只会把本机打卡清掉。
+    const wantHabits = !!(data && data.meta && data.meta.habitsSynced);
+    const [r, rh] = await Promise.all([
+      apiGet('/day?date=' + encodeURIComponent(date)),
+      wantHabits ? apiGet('/habits?date=' + encodeURIComponent(date)) : Promise.resolve(null),
+    ]);
     if (seq !== cloudSeq) return;                 // 期间又切了日期 → 这次结果作废
     if (!r.ok) {
       // 三类错误在首页小字上的表现不同：网络层说"连不上"，服务端故障带上真实的 HTTP 数字。
@@ -1689,6 +1736,8 @@
       return;
     }
     const planDay = applyCloudDay(data, date, r.data);
+    // 打卡单独成败：这一天没读到打卡不影响待办与心情照常显示
+    if (rh && rh.ok) applyCloudHabits(data, date, rh.data);
     cloudState = { mode: 'cloud', updatedAt: (planDay && planDay.updatedAt) || null, at: Date.now() };
     saveData(data);                               // 顺手当成本机缓存：下次断网也能看到上次的样子
     renderAll();
@@ -1706,7 +1755,7 @@
     if (demoMode) { node.textContent = ''; return; }
     if (cloudState.mode === 'cloud') {
       node.textContent = '云端数据 · 更新于 ' + fmtCloudTime(cloudState.updatedAt || cloudState.at)
-                       + ' · 移动与打卡计划暂存本机';
+                       + ' · 薯条位置暂存本机';
     } else if (cloudState.mode === 'offline') {
       node.textContent = errKindText(cloudState.err) + ' · 当前显示本机数据';
     } else if (cloudState.mode === 'server') {
@@ -2224,12 +2273,50 @@
   };
 
   // ===== 打卡（Day 29 改进）：起止日期内每天 N 次，点行打卡一次，右端扇形 = 今日进度 =====
-  // 数据（暂存本机，与心情同一待遇，云端暂不接）：
-  //   habits    = [{ id, name, start, end, perDay, created }]   end 为空 = 永久
+  // 数据（v2.6 起同步云端，本机仍留一份当缓存）：
+  //   habits    = [{ id, name, start, end, perDay, time, quad, created }]   end 为空 = 永久
   //   habitLogs = { [habitId]: { [date]: 次数 } }
+  // 为什么 id 是前端生成的 'h'+时间戳：上云后它就是服务端的 client_id（见 db/schema-4.sql），
+  // 两边 id 永远一致，前端不用维护任何映射表。
+  const HABIT_ID_RE = /^[A-Za-z0-9_-]{1,40}$/;
+  const isDayStr = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+  /** 本机形状 → 接口请求体（字段基本同名；空串统一成 null，服务端才认） */
+  const habitPayload = (h) => ({
+    name: String(h.name || '').trim(),
+    perDay: Number(h.perDay),
+    time: h.time || null,
+    quad: h.quad || null,
+    start: h.start,
+    end: h.end || null,
+  });
+  /**
+   * 这条本机打卡能不能原样传给服务端（迁移前先筛）。
+   * 为什么要筛：迁移是整批要么全过要么全拒 —— 一条脏数据会让整批白跑，
+   * 而脏数据往往是很久以前的旧版本留下的，用户根本不知道它存在。
+   */
+  const habitIsSane = (h) => {
+    if (!h || !HABIT_ID_RE.test(String(h.id || ''))) return false;
+    const name = String(h.name || '').trim();
+    if (!name || name.length > 20) return false;
+    const perDay = Number(h.perDay);
+    if (!Number.isInteger(perDay) || perDay < 1 || perDay > 9) return false;
+    if (h.time && !/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(String(h.time))) return false;
+    if (h.quad && !QUADS[h.quad]) return false;
+    if (!isDayStr(h.start)) return false;
+    if (h.end && (!isDayStr(h.end) || h.end < h.start)) return false;
+    return true;
+  };
   const habitCountOf = (h, date) => {
     const logs = data.habitLogs[h.id];
     return (logs && logs[date]) || 0;
+  };
+  /**
+   * 把一条打卡定义推上云（v2.6）：新建、编辑都走这个 PUT。
+   * 没有 fetch 的环境（本地自测）直接当成功 —— 和待办"没有 fetch 就走本机"同一口径。
+   */
+  const pushHabit = async (h) => {
+    if (!apiReady() || demoMode) return { ok: true, skipped: true };
+    return apiPut('/habits/' + encodeURIComponent(h.id), habitPayload(h));
   };
   // 扇形从正上方开始顺时针走；0 次 = 空圈，满 = 实心整圆（今天完成）
   const pieSvg = (count, perDay) => {
@@ -2306,6 +2393,17 @@
     showToast(logs[currentDate] >= h.perDay
       ? '✓ ' + h.name + ' · ' + doneWord
       : h.name + ' ' + logs[currentDate] + '/' + h.perDay);
+
+    // v2.6：本机先落（界面立刻有反馈），再把"这一天打了几次"整值推上云。
+    // 推的是新值而不是 +1：重发、乱序、多端同时点都不会把次数叠错。
+    // 失败不回滚 —— 用户眼前这一次是真打了，只是没同步；如实说一句。
+    if (apiReady()) {
+      const date = currentDate;
+      const n = logs[date];
+      apiPut('/habits/' + encodeURIComponent(id) + '/logs/' + date, { count: n }).then(r => {
+        if (!r.ok) showToast('这次打卡只记在本机了（' + errKindText(r) + '）');
+      });
+    }
   };
   const deleteHabit = (id) => {
     if (demoMode || !data) return;
@@ -2316,6 +2414,13 @@
     delete data.habitLogs[id];
     saveData(data); renderAll();
     showToast('已删除打卡');
+    // v2.6：云端也删（连同它的全部记录）。删不掉要如实说 ——
+    // 因为下次联网拉云端时它会"复活"，不说的话用户会以为删除失效了。
+    if (apiReady()) {
+      apiDelete('/habits/' + encodeURIComponent(id)).then(r => {
+        if (!r.ok) showToast('本机删了，云端没删掉（' + errKindText(r) + '），刷新后可能又出现');
+      });
+    }
   };
 
   // ===== 打卡"···"菜单（Day 29 六轮）：与待办完全一致 —— 编辑 + 删除 =====
@@ -2618,6 +2723,42 @@
     if (allOk) { data.meta.moodsSynced = true; saveData(data); }
   };
 
+  // ===== 本机打卡一次性上云（v2.6）=====
+  // 和心情同一个套路，也必须排在 fetchCloudDay 之前：打卡一旦标记"已同步"，
+  // 云端就是唯一真相源，先拉的话这批还没上传的打卡会在第一屏被清掉。
+  // 只搬一次（meta.habitsSynced）；失败不打标记，下次打开自动重试（接口是 upsert，重发安全）。
+  const migrateLocalHabits = async () => {
+    if (!data || !apiReady() || data.meta.habitsSynced) return;
+
+    // ① 定义：先筛掉服务端一定会拒的（一条脏数据会让整批 400）
+    const habits = (data.habits || []).filter(habitIsSane).map(h => Object.assign({ id: h.id }, habitPayload(h)));
+
+    // ② 次数：展开成 [{id, date, count}]；0 次不搬（迁移只搬真打过的卡）
+    const logs = [];
+    Object.keys(data.habitLogs || {}).forEach(id => {
+      const bag = data.habitLogs[id];
+      if (!bag || typeof bag !== 'object') return;
+      Object.keys(bag).forEach(date => {
+        const n = Number(bag[date]);
+        if (!isDayStr(date) || !Number.isInteger(n) || n < 1 || n > 9) return;
+        logs.push({ id: id, date: date, count: n });
+      });
+    });
+
+    if (!habits.length && !logs.length) { data.meta.habitsSynced = true; saveData(data); return; }
+
+    let allOk = true;
+    for (let i = 0; i < habits.length && allOk; i += HABIT_IMPORT_BATCH) {
+      const r = await apiPost('/habits/import', { habits: habits.slice(i, i + HABIT_IMPORT_BATCH) });
+      if (!r.ok) allOk = false;
+    }
+    for (let i = 0; i < logs.length && allOk; i += HABIT_LOG_IMPORT_BATCH) {
+      const r = await apiPost('/habits/import', { logs: logs.slice(i, i + HABIT_LOG_IMPORT_BATCH) });
+      if (!r.ok) allOk = false;
+    }
+    if (allOk) { data.meta.habitsSynced = true; saveData(data); }
+  };
+
   const refreshDay = async () => {
     demoMode = false;
     cloudState = { mode: 'pending', updatedAt: null, at: 0 };
@@ -2629,6 +2770,7 @@
     showState('content');
     renderAll();
     await migrateLocalMoods();                 // ② 先把本机历史心情搬上去（只一次），再拉云端
+    await migrateLocalHabits();                //    打卡同理，顺序换不得（见 migrateLocalHabits 注释）
     await fetchCloudDay(currentDate);          // ③ 再拉云端：真库数据到了就覆盖重绘，拿不到就保持本机
     maybeAskMood();                            // 放在取数之后：云端说"今天已选过心情"就不再弹（A6）
   };
@@ -2867,27 +3009,36 @@
     const end = el('new-end').value;
     if (end && end < start) { showToast('结束日期不能早于开始日期'); return; }
     const editing = editingHabitId ? data.habits.find(x => x.id === editingHabitId) : null;
+    let target = editing;
     if (editing) {
       // 编辑模式：原地改字段，id / created / 已有打卡记录一律不动
       editing.name = name; editing.start = start; editing.end = end;
       editing.perDay = nmTimes; editing.time = time;
       editing.quad = quad;
     } else {
-      data.habits.push({ id: 'h' + Date.now(), name: name, start: start,
-                         end: end, perDay: nmTimes, time: time,
-                         quad: quad, created: Date.now() });
+      target = { id: 'h' + Date.now(), name: name, start: start,
+                 end: end, perDay: nmTimes, time: time,
+                 quad: quad, created: Date.now() };
+      data.habits.push(target);
     }
     saveData(data);
     editingHabitId = null;                 // 关掉弹窗就回到新建模式，避免下次误改
     renderAll();
+
+    // v2.6：定义写云端（新建/编辑同一个 PUT —— 撞 (uid, client_id) 就覆盖，重发安全）
+    const sync = await pushHabit(target);
+    // 云端明确拒绝时说清原因；纯网络问题就说"先记在本机"，两种情况都保住了本机这份
+    const tail = sync.ok ? ''
+      : (sync.kind === 'business' ? '（云端拒绝：' + sync.message + '）' : '（先记在本机）');
+
     if (editing) {
       // 编辑：改完就该回列表看结果 —— 关窗（v2.4 用户拍板）
       el('new-modal').hidden = true;
-      showToast('已保存打卡「' + name + '」');
+      showToast('已保存打卡「' + name + '」' + tail);
     } else {
       // 新建：留在卡里接着建下一个，日期与类型保留
       resetNewForNext();
-      showToast('已创建打卡「' + name + '」，可以接着建');
+      showToast('已创建打卡「' + name + '」，可以接着建' + tail);
     }
   };
   el('new-ok').addEventListener('click', submitNew);
@@ -4115,7 +4266,7 @@
       a:'「我的」页里可以换深浅主题和背景图。',
       act:['去我的', () => document.querySelector('nav button[data-view="me"]').click()] },
     { k:['数据', '备份', '导出', '换手机', '同步'], t:'数据存在哪？',
-      a:'待办和心情会同步云端；打卡计划暂存本机。换手机前记得在「我的」页导出一份。',
+      a:'待办、心情和打卡都会同步云端；薯条摆在哪儿暂存本机。换手机前记得在「我的」页导出一份。',
       act:['去我的', () => document.querySelector('nav button[data-view="me"]').click()] },
     { k:['积分', '换装', '衣服', '奖励'], t:'积分换装什么时候有？',
       a:'正在路上！攒够积分就能给薯条换小衣服，再等等喵。' },

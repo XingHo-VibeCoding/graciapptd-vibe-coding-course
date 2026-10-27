@@ -1,6 +1,6 @@
 # 自律计划 · API 接口契约（api-contract.md）
 
-- 版本：v1.8（2026-10-29 Day 29 十三轮：**心情上云**——新增 §三 `PUT /api/day/:date/mood`（upsert 覆盖）与 `POST /api/day/moods`（本机历史一次性批量导入，1–200 条，整批原子），`plan_days` 表与 `mood` 枚举**零改动**（Day 16 建表时就留好了这一列）；响应用于修正"选了心情刷新就丢"的旧行为（前端原先只写本机，云端空值会把它覆盖掉）。v1.7（2026-10-10 Day 23：**新增 §1.8「错误提示分级约定」**——把"网络层 / 服务端故障 / 业务拒绝"三类的判定口径、统一文案出口 `errKindText()` 与"不许出现的形状"写进契约；**接口路径、字段名、响应信封、错误码一个没动**（`offline` 布尔字段保留，仅新增 `kind`），按 §五 变更规则属兼容性变更，故只升文档版本。v1.6 于 2026-10-09 Day 22：**PATCH / DELETE 两个接口落地**——新增 §1.7「软删除约定」（删除不真删行，只置 `checkins.is_deleted`，查询默认跳过）、§三 追加 `PATCH /api/checkins/:id` 与 `DELETE /api/checkins/:id` 的完整定义、§四 两条接口标记 ✅ 已实现、§二 表清单与 §六 部署记录同步。**这是本项目第一次"改已有接口行为"**——`GET /api/day` 与 `GET /api/checkins` 新增了"跳过已删除项"的语义，按 §五 变更规则属**兼容性变更**（响应形状、字段名、错误码一个没动，只是不再返回已删行），故只升文档版本、不改信封。v1.5 于 2026-10-08 Day 20 补：**契约正文零改动**——只在 §6 部署记录追加 §6.4「云端检查台 + 跨域收紧 + 密钥复核」验收记录；跨域实测补「放行时原样回显具体来源、`*` 通配符出现次数为 0」。v1.4 于 2026-10-07 Day 20：前端已接线——§1.1 跨域约定由「本期不配置」改为「已通并附实测」、新增 §6.3；v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
+- 版本：v1.9（2026-10-27 Day 29 十四轮：**打卡上云**——新建 `db/schema-4.sql`（`habits` / `habit_logs` 两表），§三 追加五条接口：`GET /api/habits?date=`、`PUT/DELETE /api/habits/:clientId`、`PUT /api/habits/:clientId/logs/:date`、`POST /api/habits/import`；`plan_days` / `checkins` 零改动。设计要点：**用前端生成的 `client_id` 当业务主键**（避免 id 映射）；新建与编辑共用 `PUT`（upsert 幂等）；每日次数推**整值**而非 `+1`（重发不叠错）；删除是**真删**且连日志一起删（与 `checkins` 软删除的差异写在接口注释里）。v1.8（2026-10-29 Day 29 十三轮：**心情上云**——新增 §三 `PUT /api/day/:date/mood`（upsert 覆盖）与 `POST /api/day/moods`（本机历史一次性批量导入，1–200 条，整批原子），`plan_days` 表与 `mood` 枚举**零改动**（Day 16 建表时就留好了这一列）；响应用于修正"选了心情刷新就丢"的旧行为（前端原先只写本机，云端空值会把它覆盖掉）。v1.7（2026-10-10 Day 23：**新增 §1.8「错误提示分级约定」**——把"网络层 / 服务端故障 / 业务拒绝"三类的判定口径、统一文案出口 `errKindText()` 与"不许出现的形状"写进契约；**接口路径、字段名、响应信封、错误码一个没动**（`offline` 布尔字段保留，仅新增 `kind`），按 §五 变更规则属兼容性变更，故只升文档版本。v1.6 于 2026-10-09 Day 22：**PATCH / DELETE 两个接口落地**——新增 §1.7「软删除约定」（删除不真删行，只置 `checkins.is_deleted`，查询默认跳过）、§三 追加 `PATCH /api/checkins/:id` 与 `DELETE /api/checkins/:id` 的完整定义、§四 两条接口标记 ✅ 已实现、§二 表清单与 §六 部署记录同步。**这是本项目第一次"改已有接口行为"**——`GET /api/day` 与 `GET /api/checkins` 新增了"跳过已删除项"的语义，按 §五 变更规则属**兼容性变更**（响应形状、字段名、错误码一个没动，只是不再返回已删行），故只升文档版本、不改信封。v1.5 于 2026-10-08 Day 20 补：**契约正文零改动**——只在 §6 部署记录追加 §6.4「云端检查台 + 跨域收紧 + 密钥复核」验收记录；跨域实测补「放行时原样回显具体来源、`*` 通配符出现次数为 0」。v1.4 于 2026-10-07 Day 20：前端已接线——§1.1 跨域约定由「本期不配置」改为「已通并附实测」、新增 §6.3；v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
 - 作用：**前端和云端之间的"合同"**。前端按这份文档发请求，后端按这份文档回数据；任何一方想改形状，先改这份文档，再改代码（R2 文档先行）。
 - **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。
 - **当前实现进度**：`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）、**`PATCH /api/checkins/:id` + `DELETE /api/checkins/:id`（Day 22，增删改查四类操作在 `checkins` 上闭环）**；其余仍为占位，按后续每天逐个实现。
@@ -198,13 +198,17 @@
 
 > 表格从**前端页面的实际字段**反推，不是凭空设计。TECH_DESIGN §三 是 v2.0 版本（只有 4 张表），本期按 Day 18–22 新增的板块补全为 7 张。
 >
-> **建表进度（Day 16 建、Day 18 / Day 22 增补）**：**核心两表 `plan_days` / `checkins` 已建**，脚本在 `db/schema.sql`（含字段说明与约束），种子在 `db/seed.sql`（可重复执行），验证语句 `db/verify.sql`，设计说明 `db/README.md`。Day 18 给 `checkins` 加了幂等键列 `client_req_id` + 唯一索引，写在 **`db/schema-2.sql`**；Day 22 加了软删除标记列 `is_deleted`，写在 **`db/schema-3.sql`**（都是增量脚本，**不改 `schema.sql`**）。其余 5 张表在需要它们的接口开工那天，按同样方式追加新的增量脚本。
+> **建表进度（Day 16 建、Day 18 / Day 22 / Day 29 增补）**：**核心两表 `plan_days` / `checkins` 已建**，脚本在 `db/schema.sql`（含字段说明与约束），种子在 `db/seed.sql`（可重复执行），验证语句 `db/verify.sql`，设计说明 `db/README.md`。Day 18 给 `checkins` 加了幂等键列 `client_req_id` + 唯一索引，写在 **`db/schema-2.sql`**；Day 22 加了软删除标记列 `is_deleted`，写在 **`db/schema-3.sql`**；Day 29 十四轮新建 **`habits` / `habit_logs`** 两张打卡表，写在 **`db/schema-4.sql`**（都是增量脚本，**不改 `schema.sql`**）。其余 5 张表在需要它们的接口开工那天，按同样方式追加新的增量脚本。
+>
+> 打卡两张表的 id 方案值得单独记一笔：**用前端生成的 `client_id` 当业务主键**，服务端自增 `id` 只供排查。这样本机 `habitLogs[habitId][date]` 与云端 `(client_id, date)` 天然对齐，前后端不需要维护任何 id 映射表。
 
 | 表名 | 中文名 | 谁在用 | 说明 |
 |---|---|---|---|
 | `users` | 用户 | 我的页 | 匿名 uid 主键；姓名、主题偏好 |
 | `plan_days` | 计划日 | 今天页 | **一天一条**，记录当天心情；打卡应用里的"那一天" |
 | `checkins` | 打卡项 | 今天页 | **一天多条**，就是待办事项；含完成状态、时间、四象限、幂等键 `client_req_id`、软删除标记 `is_deleted` |
+| `habits` | 打卡定义 | 今天页·打卡 | **一个习惯一行**：名称、每天次数 `per_day`、时间、象限、起止日期（`end_date` 空 = 永久）；业务主键是 `client_id` |
+| `habit_logs` | 每日打卡次数 | 今天页·打卡 | **(uid, client_id, date) 一天一行**，`count` = 当天打了几次；减到 0 直接删行 |
 | `notes` | 想法流 | 思考页 | 一条一条的记录卡片 |
 | `focus_sessions` | 专注记录 | 应用·专注计时 | 每次计时结束写一条 |
 | `anniversaries` | 纪念&倒数日 | 应用·纪念&倒数日 | 公历/农历、周期重复、置顶、背景 |
@@ -564,10 +568,142 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 ---
 
+### `GET /api/habits?date=YYYY-MM-DD` —— 打卡定义 + 当天次数（**Day 29 十四轮已实现**）
+
+**用途**：今日清单要同时知道"有哪些打卡"和"每条今天打了几次"。这两件事放一个接口取，
+避免"定义回来了、次数没回来"的中间态，也少一次往返。
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `date` | ❌ | 要取哪一天的次数，默认服务端今天（与 `GET /api/day` 同口径） |
+
+**响应**：
+
+```json
+{ "code": 0, "message": "ok", "data": {
+  "date": "2026-10-27", "total": 1,
+  "items": [ {
+    "id": "h1729000000000", "name": "背单词", "perDay": 2,
+    "time": "08:00", "quad": "q2",
+    "start": "2026-10-01", "end": null,
+    "createdAt": 1793113635758, "updatedAt": 1793113645448,
+    "count": 1
+  } ] } }
+```
+
+> **`id` 就是前端本机的那个 id**（`client_id`）。服务端另有自增主键，但**不出现在响应里** ——
+> 前端本机的 `habitLogs[habitId][date]` 不用做任何映射就能对上。
+
+**错误返回**：日期格式不对 → 400；未取得身份 → 401。
+
+---
+
+### `PUT /api/habits/:clientId` —— 新建或修改一条打卡（**Day 29 十四轮已实现**）
+
+**用途**：新建和编辑**共用这一个接口**。本机 id 是前端生成的稳定标识，
+对服务端而言两种情况都只是"把 id=X 的那行写成这样"，撞 `(uid, client_id)` 就覆盖（upsert）。
+好处：断网重试天然幂等，同一个请求发两遍不会变成两条打卡。
+
+**请求体**：
+
+```json
+{ "name": "背单词", "perDay": 2, "time": "08:00", "quad": "q2",
+  "start": "2026-10-01", "end": null }
+```
+
+| 字段 | 必填 | 类型 | 说明 |
+|---|---|---|---|
+| `name` | ✅ | string | 1–20 字（两端空格会被 trim） |
+| `perDay` | ✅ | number | 1–9 的整数（字符串数字也接受） |
+| `time` | ❌ | string | `HH:mm`；`null` = 不安排时间 |
+| `quad` | ❌ | string | `q1`~`q4`；`null` = 未分类 |
+| `start` | ✅ | string | 开始日期 `YYYY-MM-DD` |
+| `end` | ❌ | string | 结束日期；`null`/空串 = **永久** |
+
+> 路径里的 `:clientId` 是权威的：body 里就算带了 `id` 也不采信（防"路径改 A、内容改 B"）。
+
+**响应**：`{"code":0,"message":"已保存","data":{ …打卡定义（形状同 GET items，但没有 count）… }}`
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| `:clientId` 不是 1–40 位字母/数字/下划线/短横线 | `{"code":400,"message":"打卡 id 不合法","data":null}` |
+| 名称空 / 超 20 字 | `{"code":400,"message":"打卡名称不能为空" / "打卡名称最多 20 个字","data":null}` |
+| `perDay` 不是 1–9 的整数 | `{"code":400,"message":"每天次数必须是 1~9 的整数","data":null}` |
+| `time` 不是 `HH:mm` | `{"code":400,"message":"时间格式不对，应为 HH:mm","data":null}` |
+| `quad` 不在 q1–q4 | `{"code":400,"message":"象限只能是 q1 / q2 / q3 / q4","data":null}` |
+| `start` 非法日期 | `{"code":400,"message":"开始日期格式不对，应为 YYYY-MM-DD","data":null}` |
+| `end` 早于 `start` | `{"code":400,"message":"结束日期不能早于开始日期","data":null}` |
+
+---
+
+### `DELETE /api/habits/:clientId` —— 删除一条打卡及其全部记录（**Day 29 十四轮已实现，真删**）
+
+**用途**：用户在 `···` 菜单里删掉一个习惯。语义是"这个习惯我不要了"，
+所以**连它的全部每日次数一起删**（`habit_logs` 先删、`habits` 后删）。
+
+> 与 `checkins` 的软删除不同：那边是课程要求的"删错了还能找回"，
+> 这边留下的孤儿日志没有意义，还会在下次建同名习惯时被误当成历史记录。
+
+**响应**：`{"code":0,"message":"已删除","data":{"id":"h1729000000000","removed":1}}`
+
+**幂等**：云上本来没有这条时 `removed` 为 `0`，仍返回 `code: 0` ——
+用户的目的（让它从列表里消失）已由本机删除达成，没必要让他看见一个红叉。
+
+---
+
+### `PUT /api/habits/:clientId/logs/:date` —— 设置某天打了几次（**Day 29 十四轮已实现**）
+
+**用途**：用户点了一下打卡行。请求体是**当天的新次数**，不是"+1" ——
+这样重发、乱序、多端同时点都不会把次数叠错（幂等）。
+
+**请求体**：`{ "count": 2 }`
+
+| 字段 | 必填 | 类型 | 说明 |
+|---|---|---|---|
+| `count` | ✅ | number | 0–9 的整数；**0 = 撤回干净，那行直接删掉**（不留 `count=0` 的垃圾行） |
+
+**响应**：`{"code":0,"message":"已记录","data":{"id":"h1729000000000","date":"2026-10-27","count":2}}`
+
+**语义**：upsert 到 `(uid, client_id, date)`。**不校验是否在今天之内** ——
+产品的既有规则是"看哪天就记哪天"（v1.8 起放开了"仅限今天"），补记昨天的卡是正常用法。
+
+**错误返回**：`count` 不是 0–9 的整数 → 400；`:date` 非法 → 400；未取身份 → 401。
+
+---
+
+### `POST /api/habits/import` —— 批量导入本机打卡（**Day 29 十四轮已实现，一次性迁移**）
+
+**用途**：本机已有的打卡定义与历史次数第一次上云时批量搬过去。
+前端只在 `meta.habitsSynced` 为空时调用，成功后写标记，之后不再走这条。
+
+**请求体**（两个字段都可省略，但不能同时为空）：
+
+```json
+{ "habits": [ { "id": "h1729000000000", "name": "背单词", "perDay": 2,
+                "time": null, "quad": null, "start": "2026-10-01", "end": null } ],
+  "logs":   [ { "id": "h1729000000000", "date": "2026-10-26", "count": 1 } ] }
+```
+
+| 字段 | 上限 | 说明 |
+|---|---|---|
+| `habits` | 100 条 | 每条规则同 `PUT /api/habits/:clientId`（`id` 必填，同批不许重复） |
+| `logs` | 500 条 | `count` 必须是 1–9（迁移只搬真打过的卡）；同批同 `(id,date)` **自动去重，留最后一条** |
+
+**语义**：两次批量 upsert（定义一批、次数一批）。整批校验不过就整批 400，不做"搬一半"。
+
+**响应**：`{"code":0,"message":"已导入","data":{"habits":1,"logs":3}}`
+
+> 去重不是可选优化：PostgREST 的 upsert 不允许一条语句里两次影响同一行
+> （`ON CONFLICT DO UPDATE command cannot affect row a second time`）。
+
+---
+
 ## 四、待实现接口（后续每天逐个补；标 ✅ 的已在 §三 实现）
 
 > 以下是第 3 周要落地的全部接口。**先定名字和形状，避免前端先写死后端再改。**
-> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；✅ `PATCH /api/checkins/:id`、✅ `DELETE /api/checkins/:id`（Day 22）；✅ `PUT /api/day/:date/mood`、✅ `POST /api/day/moods`（Day 29 十三轮，心情上云 + 本机历史一次性迁移）；其余待做。
+> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；✅ `PATCH /api/checkins/:id`、✅ `DELETE /api/checkins/:id`（Day 22）；✅ `PUT /api/day/:date/mood`、✅ `POST /api/day/moods`（Day 29 十三轮，心情上云 + 本机历史一次性迁移）；✅ `GET /api/habits`、✅ `PUT/DELETE /api/habits/:clientId`、✅ `PUT /api/habits/:clientId/logs/:date`、✅ `POST /api/habits/import`（Day 29 十四轮，打卡上云）；其余待做。
 
 ### 📌 先记住这条：别忘了「列表读取」接口
 

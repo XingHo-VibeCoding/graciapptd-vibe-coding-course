@@ -242,6 +242,53 @@ const update = async (table, query, patch) => {
   return Array.isArray(body) ? body : [];
 };
 
+/**
+ * 真删一张表里符合条件的行（PostgREST 的 DELETE 语义）—— Day 29 新增。
+ *
+ * 为什么这次是"真删"而不是像 checkins 那样软删除：
+ *   checkins 的软删除是课程要求的余力加练（删错了还能找回）；
+ *   打卡删除的语义是"这个习惯我不要了，连同它的所有打卡记录一起消失"，
+ *   留一堆孤儿日志既没用、又会在下次建同名习惯时被误当成历史记录。
+ *   而且**只有 uid 对得上才删得掉**（筛选条件必带 uid），越权这一道照样在。
+ *
+ * ⚠️ 这里同样拒绝无条件 DELETE —— 少写一个条件就是"把全表删掉"。
+ * 返回：被删掉的行（数组，可能为空 = 本来就没有这条）。
+ */
+const remove = async (table, query) => {
+  const { apiKey, base } = connection();
+
+  const search = buildSearch(query);
+  if (!search.toString()) {
+    throw new Error('删除数据必须带筛选条件（拒绝无条件 DELETE）');
+  }
+
+  const res = await fetch(base + '/' + table + '?' + search.toString(), {
+    method: 'DELETE',
+    headers: {
+      Authorization: 'Bearer ' + apiKey,
+      Accept: 'application/json',
+      Prefer: 'return=representation',
+    },
+  });
+
+  const text = await res.text();
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch (e) {
+    body = null;
+  }
+
+  if (!res.ok) {
+    const detail = body && (body.message || body.details || body.error);
+    const err = new Error('数据库删除失败（HTTP ' + res.status + '）：' + (detail || String(text).slice(0, 200)));
+    err.pgCode = body && body.code ? String(body.code) : '';
+    throw err;
+  }
+
+  return Array.isArray(body) ? body : [];
+};
+
 // ===========================================================================
 // 三、行 → 契约形状的映射（数据库 snake_case → 契约 camelCase）
 // ===========================================================================
@@ -324,9 +371,28 @@ const mapCheckin = (r) => ({
   sort: r.sort === null || r.sort === undefined ? 0 : Number(r.sort),
 });
 
+/**
+ * habits 一行 → 契约里的打卡定义对象（Day 29）。
+ * 契约里 id 就是 **client_id**（前端本机那个 id），服务端自增 id 不出现在响应里 ——
+ * 这样前端拿到的形状和它本机存的完全一致，一行映射都不用写。
+ */
+const mapHabit = (r) => ({
+  id: r.client_id,
+  name: r.name,
+  perDay: r.per_day === null || r.per_day === undefined ? 1 : Number(r.per_day),
+  time: r.time === undefined ? null : r.time,
+  quad: r.quad === undefined ? null : r.quad,
+  start: r.start_date,
+  end: r.end_date === undefined ? null : r.end_date,
+  createdAt: toMs(r.created_at),
+  updatedAt: toMs(r.updated_at),
+});
+
 /** 取列清单（放这里而不是路由层：「这张表有哪些列」是数据库知识） */
 const CHECKIN_COLS = 'id,date,text,time,quad,done,done_at,sort';
 const PLANDAY_COLS = 'date,mood,created_at,updated_at';
+/** habits 的列（Day 29）：注意取的是 client_id 而不是自增 id —— 接口只用 client_id */
+const HABIT_COLS = 'client_id,name,per_day,time,quad,start_date,end_date,created_at,updated_at';
 /**
  * Day 22：查"这一行是谁的、删过没"时要用的列。
  * 比 CHECKIN_COLS 多了 `uid` 与 `is_deleted` —— 这两列**只给服务端判断用**，
@@ -595,6 +661,133 @@ const softDeleteCheckin = async (uid, id) => {
   return rows.length > 0;
 };
 
+// —— habits / habit_logs（Day 29：打卡上云）——
+
+/**
+ * 取一个人的全部打卡定义（不分页），按创建时间升序。
+ * 打卡数量天然有限（几十条量级），不做分页 —— 分页反而会让"今天的清单"拼不齐。
+ */
+const listHabits = async (uid) => {
+  const res = await select('habits', {
+    uid: 'eq.' + uid,
+    select: HABIT_COLS,
+    order: 'created_at.asc,client_id.asc',    // 时间相同再按 id 兜底，顺序稳定
+    limit: 500,
+  });
+  return res.rows.map(mapHabit);
+};
+
+/**
+ * 取某一天的全部打卡次数，返回 `{ [clientId]: count }`（前端本机就是这个形状）。
+ * 只返回 count >= 1 的行（接口在次数减到 0 时会直接删行，这里再兜一层）。
+ */
+const listHabitLogsByDate = async (uid, date) => {
+  const res = await select('habit_logs', {
+    uid: 'eq.' + uid,
+    date: 'eq.' + date,
+    select: 'client_id,count',
+    limit: 500,
+  });
+  const out = {};
+  res.rows.forEach((r) => {
+    const n = Number(r.count) || 0;
+    if (n > 0) out[r.client_id] = n;
+  });
+  return out;
+};
+
+/**
+ * 新建 / 修改一条打卡定义（Day 29）：upsert，撞 (uid, client_id) 就覆盖。
+ * 前端"新建"和"编辑"走同一个接口 —— 本机 id 是稳定的，两种情况都只是"把这行写成这样"。
+ * 返回契约形状的打卡定义；写失败抛错，由路由层兜成 500。
+ */
+const saveHabit = async (uid, h) => {
+  const rows = await upsert('habits', {
+    uid: uid,
+    client_id: h.id,
+    name: h.name,
+    per_day: h.perDay,
+    time: h.time,
+    quad: h.quad,
+    start_date: h.start,
+    end_date: h.end,
+    updated_at: new Date().toISOString(),
+  }, 'uid,client_id');
+  return rows.length ? mapHabit(rows[0]) : null;
+};
+
+/**
+ * 删除一条打卡定义**及其全部打卡记录**（Day 29）。
+ * 顺序：先删日志、再删定义 —— 反过来的话中途失败会留下查不到主人的孤儿日志。
+ * 返回被删掉的打卡定义条数（0 = 本来就没有这条，或不是这个人的）。
+ */
+const deleteHabit = async (uid, clientId) => {
+  await remove('habit_logs', { uid: 'eq.' + uid, client_id: 'eq.' + clientId });
+  const rows = await remove('habits', { uid: 'eq.' + uid, client_id: 'eq.' + clientId });
+  return rows.length;
+};
+
+/**
+ * 写某一条打卡在某一天打了多少次（Day 29）。
+ *   count >= 1 → upsert（同一天重复点 = 覆盖次数，不是新增一行）
+ *   count <= 0 → 直接删行（"撤回"不留 count=0 的垃圾行）
+ * 返回写入后的次数（删行时是 0）。
+ */
+const saveHabitLog = async (uid, clientId, date, count) => {
+  if (count <= 0) {
+    await remove('habit_logs', {
+      uid: 'eq.' + uid, client_id: 'eq.' + clientId, date: 'eq.' + date,
+    });
+    return 0;
+  }
+  const rows = await upsert('habit_logs', {
+    uid: uid,
+    client_id: clientId,
+    date: date,
+    count: count,
+    updated_at: new Date().toISOString(),
+  }, 'uid,client_id,date');
+  return rows.length ? Number(rows[0].count) : count;
+};
+
+/**
+ * 批量写入本机已有的打卡定义（Day 29 一次性迁移用）。
+ * 一次请求写多行 = 数据库在一个事务里处理；重发安全（走 upsert 合并）。
+ * 返回真正写进去的行数。
+ */
+const saveHabitsBulk = async (uid, items) => {
+  const now = new Date().toISOString();
+  const rows = await upsert('habits', items.map((h) => ({
+    uid: uid,
+    client_id: h.id,
+    name: h.name,
+    per_day: h.perDay,
+    time: h.time,
+    quad: h.quad,
+    start_date: h.start,
+    end_date: h.end,
+    updated_at: now,
+  })), 'uid,client_id');
+  return rows.length;
+};
+
+/**
+ * 批量写入本机已有的打卡次数（Day 29 一次性迁移用）。
+ * 同批里同 (client_id, date) 必须**先去重**再进来 ——
+ * PostgREST 的 upsert 不允许一条语句里两次影响同一行（会报 21000）。
+ */
+const saveHabitLogsBulk = async (uid, items) => {
+  const now = new Date().toISOString();
+  const rows = await upsert('habit_logs', items.map((it) => ({
+    uid: uid,
+    client_id: it.id,
+    date: it.date,
+    count: it.count,
+    updated_at: now,
+  })), 'uid,client_id,date');
+  return rows.length;
+};
+
 module.exports = {
   // ① 表级函数
   findPlanDay: findPlanDay,
@@ -612,14 +805,24 @@ module.exports = {
   findCheckinRowById: findCheckinRowById,
   updateCheckin: updateCheckin,
   softDeleteCheckin: softDeleteCheckin,
+  // ① 表级函数 · Day 29 增补（打卡上云：定义 + 每日次数）
+  listHabits: listHabits,
+  listHabitLogsByDate: listHabitLogsByDate,
+  saveHabit: saveHabit,
+  deleteHabit: deleteHabit,
+  saveHabitLog: saveHabitLog,
+  saveHabitsBulk: saveHabitsBulk,
+  saveHabitLogsBulk: saveHabitLogsBulk,
   // ② 通用管道
   select: select,
   insert: insert,
   update: update,
   upsert: upsert,
+  remove: remove,
   // ③ 小工具
   mapPlanDay: mapPlanDay,
   mapCheckin: mapCheckin,
+  mapHabit: mapHabit,
   isDuplicateError: isDuplicateError,
   dbConfig: dbConfig,
   pickTotal: pickTotal,

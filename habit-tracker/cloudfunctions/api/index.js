@@ -14,7 +14,13 @@
  *   Day 22  PATCH  /api/checkins/:id  修改打卡项（打勾 / 改内容 / 改时间 / 改象限）
  *   Day 22  DELETE /api/checkins/:id  删除打卡项（**软删除**：只打标记，行仍在库里）
  *           → 到这一天，checkins 上的"增删改查"四类操作在公网全部闭环
- *   Day 23+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
+ *   Day 29  PUT    /api/day/:date/mood  写某天的心情（upsert）；POST /api/day/moods 批量迁移
+ *   Day 29  GET    /api/habits          打卡定义 + 指定日期各自的次数
+ *           PUT    /api/habits/:id      新建或修改一条打卡（upsert，前端本机 id 当主键用）
+ *           DELETE /api/habits/:id      删除一条打卡及其全部记录
+ *           PUT    /api/habits/:id/logs/:date  设置某天打了几次
+ *           POST   /api/habits/import   本机已有打卡一次性搬上云
+ *   Day 30+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
  *
  * 【Day 19 分层】本文件**不再直接读写数据库** —— 那是 db.js（数据访问层）的活。
  *   现在这个文件只管三件事：
@@ -41,7 +47,7 @@ const db = require('./db.js');
 
 // —— 服务身份：写进健康检查响应里，用来确认"公网地址返回的是我自己的服务" ——
 const SERVICE = 'Self discipline plan';
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 
 /**
  * 业务接口的统一响应形状（见 api-contract.md 1.2）：
@@ -110,7 +116,8 @@ const pickQuery = (event) => {
  */
 const pickBody = (event) => {
   const raw = event.body;
-  const PLAIN = ['date', 'text', 'time', 'quad', 'clientReqId', 'mood', 'items'];
+  const PLAIN = ['date', 'text', 'time', 'quad', 'clientReqId', 'mood', 'items',
+                  'name', 'perDay', 'start', 'end', 'count', 'habits', 'logs'];
 
   // 没有 body：可能是控制台把字段摊在了 event 顶层
   if (raw === undefined || raw === null || raw === '') {
@@ -665,7 +672,266 @@ const importMoods = async (event, context) => {
 };
 
 // ===========================================================================
-// 五、路由表
+// 五、打卡上云（Day 29 十四轮）：定义 + 每日次数
+// ===========================================================================
+// 打卡在数据上拆成两张表（见 db/schema-4.sql）：
+//   habits      一条定义 = "要打卡什么、每天几次、什么范围内有效"
+//   habit_logs  一天一行 = "这条打卡这一天打了几次"
+// 接口把两张表包在一起，前端看到的仍然是"一条打卡 + 今天的次数"，
+// 与它本机存的结构完全一样 —— 这样前端不用为"上云"改写任何数据形状。
+
+/** 打卡名称上限 20，与前端 maxlength、habits_name_len 约束一致 */
+const MAX_HABIT_NAME = 20;
+/** 每天次数上限 9，与前端步进器、habits_per_day_range 约束一致 */
+const MAX_PER_DAY = 9;
+/** 迁移时每批最多多少条（与契约 POST /api/habits/import 的上限一致） */
+const MAX_HABIT_IMPORT = 100;
+const MAX_HABIT_LOG_IMPORT = 500;
+
+/**
+ * client_id 格式：前端用 'h' + 时间戳，这里放宽到字母/数字/下划线/短横线 1~40 位。
+ * 为什么不限制成纯数字：老数据的 id、将来可能换的生成方式都得能用。
+ */
+const isClientId = (s) => /^[A-Za-z0-9_-]{1,40}$/.test(s);
+
+/** 每天次数必须是 1~9 的整数（字符串 '3' 也放行，前端从 data 属性读出来时可能是字符串） */
+const parsePerDay = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= MAX_PER_DAY ? n : null;
+};
+
+/**
+ * 校验一条打卡定义（新建 / 编辑 / 迁移三处共用）。
+ * 返回 { habit } 或 { error } —— 错误文案直接面向用户，带上出错字段的名字。
+ */
+const parseHabit = (raw, indexLabel) => {
+  const at = indexLabel ? indexLabel + '的' : '';
+  const src = raw && typeof raw === 'object' ? raw : {};
+
+  const id = String(src.id === undefined || src.id === null ? '' : src.id);
+  if (!isClientId(id)) return { error: at + '打卡 id 不合法（1~40 位字母/数字/下划线/短横线）' };
+
+  const name = String(src.name === undefined || src.name === null ? '' : src.name).trim();
+  if (!name) return { error: at + '打卡名称不能为空' };
+  if (name.length > MAX_HABIT_NAME) return { error: at + '打卡名称最多 ' + MAX_HABIT_NAME + ' 个字' };
+
+  const perDay = parsePerDay(src.perDay);
+  if (perDay === null) return { error: at + '每天次数必须是 1~' + MAX_PER_DAY + ' 的整数' };
+
+  const time = (src.time === undefined || src.time === null || src.time === '') ? null : String(src.time);
+  if (time !== null && !isTime(time)) return { error: at + '时间格式不对，应为 HH:mm' };
+
+  const quad = (src.quad === undefined || src.quad === null || src.quad === '') ? null : String(src.quad);
+  if (quad !== null && QUADS.indexOf(quad) < 0) return { error: at + '象限只能是 q1 / q2 / q3 / q4' };
+
+  const start = String(src.start === undefined || src.start === null ? '' : src.start);
+  if (!isDate(start)) return { error: at + '开始日期格式不对，应为 YYYY-MM-DD' };
+
+  const endRaw = (src.end === undefined || src.end === null || src.end === '') ? '' : String(src.end);
+  if (endRaw && !isDate(endRaw)) return { error: at + '结束日期格式不对，应为 YYYY-MM-DD' };
+  if (endRaw && endRaw < start) return { error: at + '结束日期不能早于开始日期' };
+
+  return { habit: { id: id, name: name, perDay: perDay, time: time, quad: quad,
+                    start: start, end: endRaw || null } };
+};
+
+/**
+ * GET /api/habits?date=YYYY-MM-DD —— 全部打卡定义 + 指定日期各自的次数（契约 4.9）
+ *
+ * 为什么把次数和定义放一个接口：首页那张清单要的是"这条打卡今天打了几次"，
+ * 分两个接口不仅多一次往返，还会出现"定义回来了、次数没回来"的中间态。
+ * date 不传就用服务端今天（和 GET /api/day 的口径一致）。
+ */
+const listHabits = async (event, context) => {
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const q = pickQuery(event);
+  const date = q.date || todayLocal();
+  if (!isDate(date)) return reply(400, '日期格式不对，应为 YYYY-MM-DD', null);
+
+  const habits = await db.listHabits(uid);
+  const logs = await db.listHabitLogsByDate(uid, date);
+
+  // 次数挂在每条定义上（count 默认 0），前端拿到就能直接渲染扇形进度
+  const items = habits.map((h) => Object.assign({}, h, { count: logs[h.id] || 0 }));
+
+  return reply(0, 'ok', { date: date, total: items.length, items: items });
+};
+
+/**
+ * PUT /api/habits/:clientId —— 新建或修改一条打卡定义（契约 4.10）
+ *
+ * 为什么"新建"也用 PUT 而不是 POST：本机 id 是前端生成的稳定标识（h+时间戳），
+ * 新建和编辑对服务端而言都是"把 id=X 的那行写成这样"，撞上就覆盖。
+ * 好处是断网重试天然幂等 —— 同一个请求发两遍不会变成两条打卡。
+ */
+const putHabit = async (event, context, idRaw) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const clientId = String(idRaw === undefined || idRaw === null ? '' : idRaw);
+  if (!isClientId(clientId)) return reply(400, '打卡 id 不合法', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+
+  // 路径里的 id 是权威的：body 里就算带了 id 也不采信（防止"路径改 A、内容改 B"）
+  const parsed = parseHabit(Object.assign({}, body, { id: clientId }), '');
+  if (parsed.error) return reply(400, parsed.error, null);
+
+  try {
+    const habit = await db.saveHabit(uid, parsed.habit);
+    logWrite('保存打卡成功', { uid: uid, perDay: parsed.habit.perDay,
+                             code: 0, ms: Date.now() - startedAt });
+    return reply(0, '已保存', habit);
+  } catch (err) {
+    console.error('[api] 保存打卡失败：' + err.message);
+    return reply(500, '打卡没存上，稍后再试一次', null);
+  }
+};
+
+/**
+ * DELETE /api/habits/:clientId —— 删除一条打卡**及其全部记录**（契约 4.11）
+ *
+ * 不做软删除：用户点删除就是"这个习惯我不要了"，留下的孤儿日志没有意义
+ * （理由写在 db.js 的 remove 注释里）。重复删除返回成功（幂等），前端重试不发愁。
+ */
+const deleteHabit = async (event, context, idRaw) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const clientId = String(idRaw === undefined || idRaw === null ? '' : idRaw);
+  if (!isClientId(clientId)) return reply(400, '打卡 id 不合法', null);
+
+  try {
+    const deleted = await db.deleteHabit(uid, clientId);
+    logWrite('删除打卡', { uid: uid, rows: deleted, code: 0, ms: Date.now() - startedAt });
+    // deleted = 0 也回成功：这条本来就不在云上（可能从没同步过，或是重复删除）——
+    // 用户的目的"让它在列表里消失"已经由本机删除达成了，没必要让他看见一个红叉。
+    return reply(0, '已删除', { id: clientId, removed: deleted });
+  } catch (err) {
+    console.error('[api] 删除打卡失败：' + err.message);
+    return reply(500, '删除没成功，稍后再试一次', null);
+  }
+};
+
+/**
+ * PUT /api/habits/:clientId/logs/:date —— 设置某天打了多少次（契约 4.12）
+ *
+ * 为什么是 PUT 而不是 POST(+1)：次数是"那一天的事实值"，不是"又来了一次"。
+ * 前端本地改完立刻把新值整条送上去，重发、乱序、并发都不会把次数叠错。
+ * count = 0 表示撤回干净 → 直接删掉那行。
+ */
+const putHabitLog = async (event, context, idRaw, dateRaw) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const clientId = String(idRaw === undefined || idRaw === null ? '' : idRaw);
+  if (!isClientId(clientId)) return reply(400, '打卡 id 不合法', null);
+
+  const date = String(dateRaw === undefined || dateRaw === null ? '' : dateRaw);
+  if (!isDate(date)) return reply(400, '日期格式不对，应为 YYYY-MM-DD', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+
+  const count = Number(body.count);
+  if (!Number.isInteger(count) || count < 0 || count > MAX_PER_DAY) {
+    return reply(400, '次数必须是 0~' + MAX_PER_DAY + ' 的整数', null);
+  }
+
+  try {
+    const saved = await db.saveHabitLog(uid, clientId, date, count);
+    logWrite('打卡计数', { uid: uid, date: date, count: saved, code: 0,
+                          ms: Date.now() - startedAt });
+    return reply(0, '已记录', { id: clientId, date: date, count: saved });
+  } catch (err) {
+    console.error('[api] 写打卡次数失败：' + err.message);
+    return reply(500, '这次打卡没记到云端，稍后再试一次', null);
+  }
+};
+
+/**
+ * POST /api/habits/import —— 把本机已有的打卡一次性搬上云（契约 4.13）
+ *
+ * 前端只在第一次连上云端时调一次（成功后打 meta.habitsSynced 标记）。
+ * 请求体：{ habits: [...], logs: [{ id, date, count }] }，两者都可省略，但不能都为空。
+ * 校验是"整批要么全过、要么全拒"：一批几十条，错一条就说不清到底搬了什么，
+ * 不如让前端先修好再来（前端的迁移函数会先把明显不合规的筛掉）。
+ */
+const importHabits = async (event, context) => {
+  const startedAt = Date.now();
+
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+
+  const rawHabits = body.habits === undefined ? [] : body.habits;
+  const rawLogs = body.logs === undefined ? [] : body.logs;
+  if (!Array.isArray(rawHabits) || !Array.isArray(rawLogs)) {
+    return reply(400, 'habits 与 logs 都必须是数组', null);
+  }
+  if (!rawHabits.length && !rawLogs.length) {
+    return reply(400, '没有可以搬的打卡', null);
+  }
+  if (rawHabits.length > MAX_HABIT_IMPORT) {
+    return reply(400, '一次最多搬 ' + MAX_HABIT_IMPORT + ' 条打卡', null);
+  }
+  if (rawLogs.length > MAX_HABIT_LOG_IMPORT) {
+    return reply(400, '一次最多搬 ' + MAX_HABIT_LOG_IMPORT + ' 条打卡记录', null);
+  }
+
+  const habits = [];
+  const seenHabit = new Set();
+  for (let i = 0; i < rawHabits.length; i++) {
+    const parsed = parseHabit(rawHabits[i], '第 ' + (i + 1) + ' 条');
+    if (parsed.error) return reply(400, parsed.error, null);
+    if (seenHabit.has(parsed.habit.id)) return reply(400, '第 ' + (i + 1) + ' 条打卡 id 重复', null);
+    seenHabit.add(parsed.habit.id);
+    habits.push(parsed.habit);
+  }
+
+  // 打卡次数：同 (id, date) 只留最后一条 —— PostgREST 的 upsert 不允许
+  // 一条语句里两次影响同一行（会报 "ON CONFLICT DO UPDATE command cannot affect row a second time"）
+  const logMap = new Map();
+  for (let i = 0; i < rawLogs.length; i++) {
+    const it = rawLogs[i] || {};
+    const id = String(it.id === undefined || it.id === null ? '' : it.id);
+    if (!isClientId(id)) return reply(400, '第 ' + (i + 1) + ' 条记录的打卡 id 不合法', null);
+    const date = String(it.date === undefined || it.date === null ? '' : it.date);
+    if (!isDate(date)) return reply(400, '第 ' + (i + 1) + ' 条记录的日期格式不对，应为 YYYY-MM-DD', null);
+    const count = Number(it.count);
+    if (!Number.isInteger(count) || count < 1 || count > MAX_PER_DAY) {
+      return reply(400, '第 ' + (i + 1) + ' 条记录的次数必须是 1~' + MAX_PER_DAY + ' 的整数', null);
+    }
+    logMap.set(id + '@' + date, { id: id, date: date, count: count });
+  }
+  const logs = [];
+  logMap.forEach((v) => logs.push(v));
+
+  try {
+    const habitRows = habits.length ? await db.saveHabitsBulk(uid, habits) : 0;
+    const logRows = logs.length ? await db.saveHabitLogsBulk(uid, logs) : 0;
+    logWrite('导入本机打卡', { uid: uid, habits: habitRows, logs: logRows,
+                              code: 0, ms: Date.now() - startedAt });
+    return reply(0, '已导入', { habits: habitRows, logs: logRows });
+  } catch (err) {
+    console.error('[api] 导入打卡失败：' + err.message);
+    return reply(500, '打卡没搬完，稍后再试一次', null);
+  }
+};
+
+// ===========================================================================
+// 六、路由表
 // ===========================================================================
 /**
  * 路由表：键 = 「方法 + 路径」，值 = 处理函数。
@@ -694,6 +960,11 @@ const routes = {
 
   // Day 29 十三轮：本机历史心情一次性迁移（固定路径，先于带参路由命中）
   'POST /api/day/moods': importMoods,
+
+  // Day 29 十四轮：打卡（定义 + 每日次数）
+  'GET /api/habits': listHabits,
+  // 「导入」写在固定路由表里，才不会先被 PUT/DELETE /api/habits/:clientId 抢走
+  'POST /api/habits/import': importHabits,
 };
 
 /**
@@ -713,6 +984,14 @@ const idRoutes = [
   // Day 29 十三轮：路径里带的是**日期**（YYYY-MM-DD），不是自增 id —— 正则同样用 ([^/]+)，
   // 让 2026-13-99 这种也能命中路由，好回一句"日期格式不对"，而不是笼统的 404。
   { method: 'PUT', re: /^\/api\/day\/([^/]+)\/mood$/, handler: putMood },
+
+  // Day 29 十四轮：打卡。注意顺序 —— 带 /logs/ 的那条（两个参数）必须排在
+  // 单参数的那条**前面**，否则 /api/habits/h123/logs/2026-10-27 会先被单参数正则
+  // 匹配失败……实际上单参数正则用的是 ([^/]+)$（末尾不许有斜杠），本来就匹配不上，
+  // 但把更具体的路由放前面是更稳的习惯，将来谁改了正则也不会踩。
+  { method: 'PUT', re: /^\/api\/habits\/([^/]+)\/logs\/([^/]+)$/, handler: putHabitLog },
+  { method: 'PUT', re: /^\/api\/habits\/([^/]+)$/, handler: putHabit },
+  { method: 'DELETE', re: /^\/api\/habits\/([^/]+)$/, handler: deleteHabit },
 ];
 // 注：不再有 allRoutes() —— Day 27 把 404 收口成最小响应后，路由清单的
 // 唯一权威是 api-contract.md，云函数不再向请求方输出它。
@@ -731,13 +1010,18 @@ exports.main = async (event = {}, context = {}) => {
     // ① 固定路径：精确命中
     let handler = routes[method + ' ' + path];
     let idRaw = null;
+    let idRaw2 = null;
 
-    // ② 带参数路径：正则命中，把 id 从路径里抽出来
+    // ② 带参数路径：正则命中，把参数从路径里抽出来
+    //    Day 29 十四轮起可能有**两个**参数（/api/habits/:id/logs/:date），
+    //    所以把整个匹配结果都取出来，第二个捕获组按需传给处理函数。
     if (!handler) {
       const hit = idRoutes.find((r) => r.method === method && r.re.test(path));
       if (hit) {
         handler = hit.handler;
-        idRaw = path.match(hit.re)[1];
+        const m = path.match(hit.re);
+        idRaw = m[1];
+        idRaw2 = m.length > 2 ? m[2] : null;
       }
     }
 
@@ -755,7 +1039,7 @@ exports.main = async (event = {}, context = {}) => {
     // 顺手打一行日志：出错时在 CloudBase 控制台"日志"里能看到每次请求的方法和路径
     console.log('[api] ' + method + ' ' + path + ' 命中路由，uid=' +
                 (resolveUid(context) || '匿名未注入'));
-    return await handler(event, context, idRaw);
+    return await handler(event, context, idRaw, idRaw2);
   } catch (err) {
     // 兜底：不把原始错误抛给前端（可能含内部信息），只在服务端日志里留全貌
     console.error('[api] 未捕获异常：', err && err.stack ? err.stack : err);
@@ -775,4 +1059,7 @@ exports.isDate = isDate;
 exports.isTime = isTime;
 exports.isReqId = isReqId;
 exports.parseId = parseId;
+exports.isClientId = isClientId;
+exports.parsePerDay = parsePerDay;
+exports.parseHabit = parseHabit;
 exports.todayLocal = todayLocal;

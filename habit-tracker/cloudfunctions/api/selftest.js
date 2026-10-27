@@ -594,7 +594,10 @@ const writeResponder = (opt) => {
       'isDuplicateError', 'listCheckins', 'listCheckinsByDay', 'mapCheckin', 'mapPlanDay',
       'pickTotal', 'select', 'softDeleteCheckin', 'update', 'updateCheckin',
       // Day 29 十三轮：心情上云新增的三个
-      'savePlanDayMood', 'savePlanDayMoods', 'upsert']
+      'savePlanDayMood', 'savePlanDayMoods', 'upsert',
+      // Day 29 十四轮：打卡上云新增的（含真删除原语 remove）
+      'listHabits', 'listHabitLogsByDate', 'saveHabit', 'deleteHabit', 'saveHabitLog',
+      'saveHabitsBulk', 'saveHabitLogsBulk', 'mapHabit', 'remove']
        .sort().join(','));
 
   // —— 9.3 数据访问层能脱离路由独立工作（这才是"拆干净了"的证明）——
@@ -1040,6 +1043,238 @@ const writeResponder = (opt) => {
   });
   eq('moods：心情值非法 → 400 且指出是第几条',
      { code: r.code, hasIndex: r.message.indexOf('第 1 条') > -1 }, { code: 400, hasIndex: true });
+
+  // =========================================================================
+  // 十二、打卡上云（Day 29 十四轮）
+  //   GET    /api/habits?date=            定义 + 当天次数（一个接口拼齐）
+  //   PUT    /api/habits/:clientId        新建/编辑（upsert，本机 id 当主键）
+  //   DELETE /api/habits/:clientId        删定义 + 全部记录（真删）
+  //   PUT    /api/habits/:clientId/logs/:date  设置某天次数（0 = 删行）
+  //   POST   /api/habits/import           本机打卡一次性迁移（批量、去重）
+  // =========================================================================
+  const HABIT_ROW = {
+    client_id: 'h1700000000000', name: '背单词', per_day: 2, time: '08:00', quad: 'q2',
+    start_date: '2026-10-20', end_date: null,
+    created_at: '2026-10-20T01:00:00+00:00', updated_at: '2026-10-20T02:00:00+00:00',
+  };
+  const HABIT_LOG_ROW = { client_id: 'h1700000000000', count: 1 };
+  // upsert 是"一次可写多行"的接口，写入体恒为数组 —— 断言单行时统一取第 0 条
+  const rowOf = (i) => { const b = bodyOf(i); return Array.isArray(b) ? b[0] : b; };
+
+  // —— 12.1 读取：定义 + 当天次数拼在一起 ——
+  installFakeFetch();
+  responder = (url, table) => (table === 'habits'
+    ? { rows: [HABIT_ROW] }
+    : { rows: [HABIT_LOG_ROW] });
+  r = await call({
+    httpMethod: 'GET', path: '/api/habits', queryStringParameters: { date: '2026-10-20' },
+  });
+  eq('habits：读取成功走信封', r.code, 0);
+  eq('habits：定义按 date 挂上当天次数', r.data.items, [{
+    id: 'h1700000000000', name: '背单词', perDay: 2, time: '08:00', quad: 'q2',
+    start: '2026-10-20', end: null,
+    createdAt: Date.parse(HABIT_ROW.created_at), updatedAt: Date.parse(HABIT_ROW.updated_at),
+    count: 1,
+  }]);
+  eq('habits：total 与 date 如实回传', [r.data.total, r.data.date], [1, '2026-10-20']);
+  ok('habits：只查这个人的定义（uid 条件必带）',
+     paramsOf(0).uid === 'eq.seed-demo-user' && captured[0].table === 'habits',
+     captured[0].url);
+  ok('habits：次数单独查当天（第二个请求带 date 条件）',
+     captured.length === 2 && captured[1].table === 'habit_logs'
+     && paramsOf(1).date === 'eq.2026-10-20' && paramsOf(1).uid === 'eq.seed-demo-user',
+     captured.map((c) => c.url).join(' | '));
+
+  installFakeFetch();
+  responder = (url, table) => (table === 'habits' ? { rows: [HABIT_ROW] } : { rows: [] });
+  r = await call({ httpMethod: 'GET', path: '/api/habits', queryStringParameters: { date: '2026-10-21' } });
+  eq('habits：那天还没打卡 → count 补 0（不是缺字段）', r.data.items[0].count, 0);
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'GET', path: '/api/habits', queryStringParameters: { date: '2026-13-99' } });
+  eq('habits：日期非法 → 400', r.code, 400);
+  eq('habits：日期非法时不查库', captured.length, 0);
+
+  delete process.env.DEMO_UID;
+  r = await call({ httpMethod: 'GET', path: '/api/habits' });
+  eq('habits：拿不到身份 → 401', r.code, 401);
+  process.env.DEMO_UID = 'seed-demo-user';
+
+  // —— 12.2 新建 / 编辑：同一个 PUT，撞 (uid, client_id) 就覆盖 ——
+  installFakeFetch();
+  responder = (url, table) => ({ rows: table === 'habits' ? [HABIT_ROW] : [] });
+  r = await call({
+    httpMethod: 'PUT', path: '/api/habits/h1700000000000',
+    body: JSON.stringify({ name: '背单词', perDay: 2, time: '08:00', quad: 'q2',
+                           start: '2026-10-20', end: '' }),
+  });
+  eq('habits：保存成功回契约形状的打卡', r.code, 0);
+  eq('habits：响应里的 id 就是前端那个 client_id', r.data.id, 'h1700000000000');
+  ok('habits：走 upsert（on_conflict=uid,client_id）—— 新建与编辑同一个接口',
+     captured.length === 1 && captured[0].method === 'POST'
+     && paramsOf(0).on_conflict === 'uid,client_id', captured[0].url);
+  const hWrite = rowOf(0);
+  ok('habits：写入体用数据库列名，end 空串归一成 null',
+     hWrite && hWrite.uid === 'seed-demo-user' && hWrite.client_id === 'h1700000000000'
+     && hWrite.per_day === 2 && hWrite.start_date === '2026-10-20' && hWrite.end_date === null,
+     JSON.stringify(hWrite));
+
+  installFakeFetch();
+  responder = (url, table) => ({ rows: table === 'habits' ? [HABIT_ROW] : [] });
+  r = await call({
+    httpMethod: 'PUT', path: '/api/habits/h999',
+    body: JSON.stringify({ id: 'h000', name: ' 早睡 ', perDay: '3', start: '2026-10-20' }),
+  });
+  ok('habits：路径里的 id 压过 body 里的 id（防止改 A 写 B）',
+     r.code === 0 && rowOf(0).client_id === 'h999', rowOf(0) && rowOf(0).client_id);
+  ok('habits：名称两端空格被 trim、次数接受字符串、"每天几次"落 per_day',
+     rowOf(0).name === '早睡' && rowOf(0).per_day === 3, JSON.stringify(rowOf(0)));
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  const badHabits = [
+    [{ name: '缺 id', perDay: 1, start: '2026-10-20' }, '/api/habits/%20', '打卡 id'],
+    [{ name: '', perDay: 1, start: '2026-10-20' }, '/api/habits/h1', '名称不能为空'],
+    [{ name: '每天 0 次', perDay: 0, start: '2026-10-20' }, '/api/habits/h2', '每天次数'],
+    [{ name: '每天 10 次', perDay: 10, start: '2026-10-20' }, '/api/habits/h3', '每天次数'],
+    [{ name: '时间乱写', perDay: 1, time: '8:00', start: '2026-10-20' }, '/api/habits/h4', '时间格式'],
+    [{ name: '象限乱写', perDay: 1, quad: 'q9', start: '2026-10-20' }, '/api/habits/h5', '象限'],
+    [{ name: '日期乱写', perDay: 1, start: '2026-02-30' }, '/api/habits/h6', '开始日期'],
+    [{ name: '结束早于开始', perDay: 1, start: '2026-10-20', end: '2026-10-19' }, '/api/habits/h7', '结束日期'],
+    [{ name: '名字超长超长超长超长超长超长超长超长超长超长', perDay: 1, start: '2026-10-20' }, '/api/habits/h8', '最多 20 个字'],
+  ];
+  let habitBadPass = 0;
+  let habitBadDetail = '';
+  for (const [payload, p, keyword] of badHabits) {
+    const rr = await call({ httpMethod: 'PUT', path: p, body: JSON.stringify(payload) });
+    if (rr.code === 400 && rr.message.indexOf(keyword) > -1) habitBadPass++;
+    else habitBadDetail += (habitBadDetail ? ' | ' : '') + p + ' → ' + rr.code + ' ' + rr.message;
+  }
+  ok('habits：九种非法输入全部 400 且指出错在哪个字段（9/9）',
+     habitBadPass === 9, habitBadPass + '/9 ' + habitBadDetail);
+  eq('habits：校验失败时一条都不写库', captured.length, 0);
+
+  r = await call({ httpMethod: 'PUT', path: '/api/habits/h1', body: '{not json' });
+  eq('habits：请求体不是 JSON → 400', r.code, 400);
+
+  // —— 12.3 删除：真删，且先删日志再删定义 ——
+  installFakeFetch();
+  responder = (url, table) => ({ rows: table === 'habit_logs'
+    ? [{ client_id: 'h1700000000000', date: '2026-10-20' }]
+    : [{ client_id: 'h1700000000000' }] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/habits/h1700000000000' });
+  eq('habits：删除成功走信封', r.code, 0);
+  eq('habits：回的 id 与删掉的条数', [r.data.id, r.data.removed], ['h1700000000000', 1]);
+  ok('habits：先删日志、再删定义（顺序反了会留下孤儿日志）',
+     captured.length === 2 && captured[0].table === 'habit_logs' && captured[1].table === 'habits'
+     && captured[0].method === 'DELETE' && captured[1].method === 'DELETE',
+     captured.map((c) => c.method + ' ' + c.table).join(' | '));
+  ok('habits：两次删除都带 uid + client_id（防越权删别人的）',
+     paramsOf(0).uid === 'eq.seed-demo-user' && paramsOf(0).client_id === 'eq.h1700000000000'
+     && paramsOf(1).uid === 'eq.seed-demo-user' && paramsOf(1).client_id === 'eq.h1700000000000',
+     captured[0].url + ' | ' + captured[1].url);
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'DELETE', path: '/api/habits/h404' });
+  ok('habits：删除云上本来没有的那条 → 仍回成功（幂等，重复删不报错）',
+     r.code === 0 && r.data.removed === 0, JSON.stringify(r.data));
+
+  // —— 12.4 每日次数：写次数 / 归零即删行 ——
+  installFakeFetch();
+  responder = (url, table) => ({ rows: table === 'habit_logs'
+    ? [{ uid: 'seed-demo-user', client_id: 'h1', date: '2026-10-20', count: 2 }] : [] });
+  r = await call({
+    httpMethod: 'PUT', path: '/api/habits/h1/logs/2026-10-20',
+    body: JSON.stringify({ count: 2 }),
+  });
+  eq('habitLog：写次数成功（不是 +1，是整值覆盖）', [r.code, r.data.count], [0, 2]);
+  ok('habitLog：upsert 到 (uid, client_id, date)',
+     captured.length === 1 && captured[0].method === 'POST'
+     && paramsOf(0).on_conflict === 'uid,client_id,date', captured[0].url);
+  ok('habitLog：写入体带 date 与 count',
+     rowOf(0).date === '2026-10-20' && rowOf(0).count === 2, JSON.stringify(rowOf(0)));
+
+  installFakeFetch();
+  responder = () => ({ rows: [{ client_id: 'h1', date: '2026-10-20' }] });
+  r = await call({
+    httpMethod: 'PUT', path: '/api/habits/h1/logs/2026-10-20',
+    body: JSON.stringify({ count: 0 }),
+  });
+  ok('habitLog：次数减到 0 → 直接删行（不留 count=0 的垃圾行）',
+     r.code === 0 && captured.length === 1 && captured[0].method === 'DELETE'
+     && r.data.count === 0, captured.map((c) => c.method).join(','));
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({
+    httpMethod: 'PUT', path: '/api/habits/h1/logs/2026-10-20',
+    body: JSON.stringify({ count: 99 }),
+  });
+  eq('habitLog：次数超上限 → 400', r.code, 400);
+  r = await call({ httpMethod: 'PUT', path: '/api/habits/h1/logs/2026-13-99', body: '{"count":1}' });
+  eq('habitLog：日期非法 → 400（路由不死板，能回人话）', r.code, 400);
+  eq('habitLog：非法请求不写库', captured.length, 0);
+
+  // —— 12.5 一次性迁移 ——
+  installFakeFetch();
+  responder = (url, table) => ({ rows: table === 'habits'
+    ? [{ client_id: 'h1' }, { client_id: 'h2' }]
+    : [{ count: 2 }] });
+  r = await call({
+    httpMethod: 'POST', path: '/api/habits/import',
+    body: JSON.stringify({
+      habits: [
+        { id: 'h1', name: '背单词', perDay: 2, start: '2026-10-20' },
+        { id: 'h2', name: '早睡', perDay: 1, start: '2026-10-21', end: '2026-11-01' },
+      ],
+      logs: [
+        { id: 'h1', date: '2026-10-20', count: 1 },
+        { id: 'h1', date: '2026-10-20', count: 2 },     // 同一条重复 → 只留最后一条
+      ],
+    }),
+  });
+  eq('importHabits：迁移成功并回报两边的条数', [r.code, r.data.habits, r.data.logs], [0, 2, 1]);
+  ok('importHabits：打卡定义与次数各一次批量写入（不是循环单条）',
+     captured.length === 2 && captured[0].table === 'habits' && captured[1].table === 'habit_logs'
+     && Array.isArray(bodyOf(0)) && bodyOf(0).length === 2, captured.map((c) => c.table).join(','));
+  ok('importHabits：同批同 (id,date) 先去重（否则 upsert 报 cannot affect row a second time）',
+     bodyOf(1).length === 1 && bodyOf(1)[0].count === 2, JSON.stringify(bodyOf(1)));
+
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'POST', path: '/api/habits/import', body: JSON.stringify({}) });
+  eq('importHabits：两样都空 → 400', r.code, 400);
+
+  r = await call({
+    httpMethod: 'POST', path: '/api/habits/import',
+    body: JSON.stringify({ habits: [
+      { id: 'h1', name: 'a', perDay: 1, start: '2026-10-20' },
+      { id: 'h1', name: 'b', perDay: 1, start: '2026-10-20' },
+    ] }),
+  });
+  ok('importHabits：同批打卡 id 重复 → 400 并指出第几条',
+     r.code === 400 && r.message.indexOf('第 2 条') > -1, r.message);
+
+  r = await call({
+    httpMethod: 'POST', path: '/api/habits/import',
+    body: JSON.stringify({ logs: [{ id: 'h1', date: '2026-10-20', count: 0 }] }),
+  });
+  ok('importHabits：次数 0 不该出现在迁移里 → 400（迁移只搬真打过的卡）',
+     r.code === 400 && r.message.indexOf('第 1 条') > -1, r.message);
+
+  const tooManyHabits = [];
+  for (let i = 0; i < 101; i++) tooManyHabits.push({ id: 'h' + i, name: 'x', perDay: 1, start: '2026-10-20' });
+  r = await call({ httpMethod: 'POST', path: '/api/habits/import', body: JSON.stringify({ habits: tooManyHabits }) });
+  eq('importHabits：一次超过 100 条 → 400', r.code, 400);
+  eq('importHabits：超限时一条都不写', captured.length, 0);
+
+  // —— 12.6 路由细节：/import 不能被单参数路由抢走 ——
+  installFakeFetch();
+  responder = () => ({ rows: [] });
+  r = await call({ httpMethod: 'POST', path: '/api/habits/import', body: '{"habits":[]}' });
+  eq('路由：POST /api/habits/import 命中固定路由（不是 PUT/DELETE 的单参数路由）', r.code, 400);
 
   global.fetch = realFetch;
   console.log = realLog;
