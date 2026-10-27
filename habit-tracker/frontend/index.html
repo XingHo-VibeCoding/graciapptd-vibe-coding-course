@@ -275,7 +275,10 @@
     .hm-title{ flex:1; text-align:left; font-size:16px; font-weight:600; color:var(--ink); }
     .hm-save{ border:none; background:transparent; color:var(--accent-deep); font-size:15px;
            font-weight:600; cursor:pointer; padding:6px 4px; }
-    .hm-name{ margin-bottom:2px; }
+    /* 结束时间两态：默认显示「永久 ›」，点开后才是日期选择（Day 29 五轮，用户拍板） */
+    .hforever, .hclear{ border:none; background:transparent; color:var(--ink);
+           font-size:13px; cursor:pointer; padding:2px 4px; }
+    .hclear{ color:var(--accent-deep); }
     .hrow{ display:flex; align-items:center; justify-content:space-between; gap:12px;
            padding:12px 0; border-bottom:1px solid var(--line); }
     .hrow.hcol{ flex-wrap:wrap; }
@@ -350,6 +353,9 @@
            padding:12px 14px; font-size:13px; line-height:1.8; color:var(--ink);
            min-height:76px; white-space:pre-wrap; text-align:left; }
     .iout .i-head{ color:var(--muted); font-size:11px; display:block; margin-bottom:6px; }
+    /* AI 洞察弹窗（Day 29 五轮）：✕ 在卡片左上角 */
+    .insight-modal{ position:relative; }
+    .i-x{ position:absolute; top:6px; left:6px; font-size:15px; }
 
     /* ===== 专注计时（Day 18，F6）===== */
     .timer-display{ font-size:64px; font-weight:700; letter-spacing:2px;
@@ -972,7 +978,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.5</b> · 2026-10-25</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.6</b> · 2026-10-25</footer>
 </div>
 
 <!-- FAB：添加今日待办（仅今天视图显示） -->
@@ -1042,22 +1048,16 @@
   </div>
 </div>
 
-<!-- 弹窗 5：AI 洞察（Day 15，F3，本地规则版） -->
+<!-- 弹窗 5：AI 洞察（Day 15；Day 29 五轮精简：只留默认洞察 + MBTI，关闭改左上 ✕，删「换一句」） -->
 <div class="overlay" id="insight-modal" hidden>
-  <div class="modal">
+  <div class="modal insight-modal">
+    <button id="i-close" type="button" class="hm-x i-x" aria-label="关闭">✕</button>
     <h3>AI 洞察</h3>
     <div class="imodes" id="imodes">
       <button type="button" data-mode="default" class="on">默认洞察</button>
-      <button type="button" data-mode="value">价值澄清</button>
       <button type="button" data-mode="mbti">MBTI</button>
-      <button type="button" data-mode="daily">每日回顾</button>
-      <button type="button" data-mode="wander">随机漫步</button>
     </div>
     <div class="iout" id="iout"></div>
-    <div class="row">
-      <button id="i-regen" type="button">换一句</button>
-      <button id="i-close" type="button">关闭</button>
-    </div>
     <p class="tip">本地规则版 · 只读你的数据，不上传</p>
   </div>
 </div>
@@ -1240,7 +1240,10 @@
       <b class="hm-title">新建打卡</b>
       <button id="habit-ok" type="button" class="hm-save">保存</button>
     </div>
-    <input id="habit-name" class="hm-name" placeholder="打卡什么？如：背单词" maxlength="20" />
+    <div class="hrow">
+      <label class="hl" for="habit-name">名称</label>
+      <span class="hv"><input id="habit-name" maxlength="20" /></span>
+    </div>
     <div class="hrow">
       <span class="hl">每天次数</span>
       <span class="hstepper" role="group" aria-label="每天次数">
@@ -1268,8 +1271,12 @@
       <span class="hv"><input id="habit-start" type="date" /></span>
     </div>
     <div class="hrow">
-      <label class="hl" for="habit-end">结束时间</label>
-      <span class="hv"><input id="habit-end" type="date" /><i id="habit-forever">永久</i></span>
+      <label class="hl">结束时间</label>
+      <span class="hv">
+        <button id="habit-forever" type="button" class="hforever">永久 ›</button>
+        <input id="habit-end" type="date" hidden />
+        <button id="habit-end-clear" type="button" class="hclear" hidden>恢复永久</button>
+      </span>
     </div>
   </div>
 </div>
@@ -2025,12 +2032,10 @@
     const unList = el('unassigned-list'); unList.textContent = '';
     untimed.forEach(t => unList.appendChild(createTodoCard(t, interactive)));
     hUntimed.forEach(h => unList.appendChild(createHabitRow(h, interactive)));
-    // 组名跟着内容走：只有打卡时叫「打卡」，混排时叫「未安排 · 打卡」
+    // 组名固定「未安排」：主页不再特意区分打卡/待办，就是同一张清单——
+    // 有时间的按时间排，没时间的排在后面（Day 29 五轮，用户拍板）
     const groupLabel = unList.parentElement.querySelector('.group-label');
-    if (groupLabel) {
-      groupLabel.textContent = untimed.length === 0 ? '打卡'
-                             : (hUntimed.length ? '未安排 · 打卡' : '未安排');
-    }
+    if (groupLabel) groupLabel.textContent = '未安排';
 
     const done = all.filter(t => t.done).length;
     el('today-count').textContent = all.length ? (done + '/' + all.length + ' 已完成') : '';
@@ -2277,27 +2282,45 @@
     return { total, done, quad, moods, notes };
   };
 
+  // Day 29 五轮：默认洞察重写为「人文关怀」路线——扫最近 7 天的待办/打卡名称，
+  // 命中生活场景（吃药/就医/学习/工作/运动/作息）就给一句走心的话，不只报数字。
+  const CARE_RULES = [
+    { re: /吃药|服药|用药|输液|打针/,
+      line: '看到你有按时吃药的安排。别把它当成负担——每一次按时吃药，都是你在认真照顾自己。记得配温水，慢慢来。' },
+    { re: /医院|看病|复诊|挂号|检查|体检/,
+      line: '要去医院或做检查的话，别太紧张。愿意面对、按时去查，这本身就是对自己负责。路上注意安全。' },
+    { re: /考试|复习|背单词|做题|作业|论文|读书|学习/,
+      line: '学习的事急不来，今天比昨天多懂一点，就已经在往前走了。累了就歇歇，脑子也需要喘气。' },
+    { re: /加班|开会|汇报|周报|项目|工作/,
+      line: '工作再忙，也记得定时喝口水、站起来走走。你已经在很努力了，别对自己太苛刻。' },
+    { re: /跑步|锻炼|运动|健身|散步|晨跑/,
+      line: '有在安排运动，这很好——身体是慢慢变好的，别急着看到结果。' },
+    { re: /早睡|睡觉|作息|早起|午休/,
+      line: '睡个好觉，比多完成一件事更重要。好好休息，也是一种自律。' },
+  ];
   const insightDefault = (s) => {
     if (!s.total) return '数据还不多。先安心用几天，再来这里看看自己。';
     const rate = Math.round(s.done / s.total * 100);
-    const topQuad = Object.entries(s.quad).sort((a, b) => b[1] - a[1])[0];
-    const lines = [`最近 7 天你安排了 ${s.total} 件事，完成了 ${s.done} 件（约 ${rate}%）。`];
-    if (topQuad[0] === 'q2') lines.push('其中"重要不紧急"的事最多——你在为未来铺路，这很自律。');
-    else if (topQuad[0] === 'q1') lines.push('紧急的事偏多，偶尔也留一块给"重要不紧急"，未来的你会感谢现在。');
-    else if (topQuad[0] === 'q0') lines.push('很多事没标象限，试试随手标一下，能看更清自己把时间花在了哪。');
-    else lines.push('象限用得挺匀称，说明你对自己的时间有自己的判断。');
+    const lines = [`最近 7 天你安排了 ${s.total} 件事，完成了 ${s.done} 件（约 ${rate}%）。`
+      + (rate >= 80 ? '这个节奏很稳，记得给自己一点肯定。'
+                    : rate >= 40 ? '有在认真推进，慢慢来就好。'
+                                 : '没做完也没关系，生活不只有清单。')];
+    // 走心关怀：扫待办与打卡名称，最多给两句，别刷屏
+    if (!demoMode && data) {
+      const texts = [];
+      for (let i = 6; i >= 0; i--) {
+        (getTodos(shiftDate(todayStr(), -i)) || []).forEach(t => texts.push(t.text || ''));
+      }
+      (data.habits || []).forEach(h => texts.push(h.name || ''));
+      CARE_RULES.forEach(r => {
+        if (lines.length >= 4) return;                       // 完成率 + 最多两句关怀 + 心情
+        if (texts.some(t => r.re.test(t))) lines.push(r.line);
+      });
+    }
     const topMood = Object.entries(s.moods).sort((a, b) => b[1] - a[1])[0];
     if (topMood && topMood[1] > 0) lines.push(`最近出现最多的心情是「${MOOD[topMood[0]].label}」——${MOOD[topMood[0]].copy}`);
+    if (lines.length < 3) lines.push('不管清单上还剩多少，先照顾好自己——你已经做得很好了。');
     return lines.join('\n');
-  };
-
-  const insightValue = (s) => {
-    if (!s.total) return '价值澄清需要一点数据。先记几件你真正想做的事，再来问自己。';
-    const q2 = s.quad.q2, q1 = s.quad.q1;
-    return `过去 7 天：${q1} 件"重要且紧急"，${q2} 件"重要不紧急"，${s.quad.q3 + s.quad.q4} 件其他。\n`
-         + '问自己一个问题：如果下周只能保留三件事，会是哪三件？\n'
-         + (q2 >= q1 ? '你最近把不少时间给了"重要不紧急"——那通常就是你真正在乎的东西。'
-                     : '紧急的事在挤占重要的事，本周试着每天先做一件"重要不紧急"。');
   };
 
   const insightMbti = (s) => {                          // 娱乐版，仅供自娱
@@ -2313,44 +2336,9 @@
          + '（本地规则拼装，仅供自娱，不是心理测评）';
   };
 
-  const insightDaily = (s) => {
-    if (demoMode) return '示例数据版本：今天 4 件事完成了 1 件，心情是 😄喜悦，想法流里有 3 条记录。';
-    const todos = getTodos(todayStr());
-    const done = todos.filter(t => t.done).length;
-    const mood = data.moods[todayStr()];
-    const notesToday = data.notes.filter(n => dateToStr(new Date(n.ts)) === todayStr()).length;
-    if (!todos.length && !mood && !notesToday)
-      return '今天还没留下记录。待会儿来回顾一下，也是一种对自己的照顾。';
-    const lines = [];
-    if (todos.length) lines.push(`今天安排了 ${todos.length} 件事，完成了 ${done} 件${done === todos.length && done > 0 ? '，全部完成，很棒' : ''}。`);
-    if (mood) lines.push(`今天的心情是「${MOOD[mood].label}」——${MOOD[mood].copy}`);
-    if (notesToday) lines.push(`今天写下了 ${notesToday} 条想法。`);
-    if (!lines.length) lines.push('今天还没有记录。');
-    return lines.join('\n');
-  };
-
-  const WANDER_POOL = [
-    '如果给今天起一个标题，会是什么？',
-    '最近哪件小事让你开心，但没来得及记下来？',
-    '这周想对谁说一声谢谢？',
-    '如果今天重来一次，你会改变什么？',
-    '最近在期待什么？',
-    '你今天为自己做了什么？',
-    '哪件事拖了很久，其实 10 分钟就能做完？',
-    '最近什么让你觉得"值得"？',
-  ];
-  const insightWander = (s) => {
-    let out = WANDER_POOL[Math.floor(Math.random() * WANDER_POOL.length)];
-    if (s.notes && data && data.notes.length) {
-      const n = data.notes[Math.floor(Math.random() * data.notes.length)];
-      out += `\n\n你曾写过：「${n.text.slice(0, 50)}${n.text.length > 50 ? '…' : ''}」`;
-    }
-    return out;
-  };
-
+  // Day 29 五轮：价值澄清 / 每日回顾 / 随机漫步按用户要求移除，只留默认洞察 + MBTI
   const INSIGHT_MODES = {
-    default: insightDefault, value: insightValue, mbti: insightMbti,
-    daily: insightDaily, wander: insightWander,
+    default: insightDefault, mbti: insightMbti,
   };
   let insightMode = 'default';
   const renderInsight = () => {
@@ -2554,19 +2542,30 @@
     el('habit-time').value = '';
     el('habit-start').value = todayStr();
     el('habit-end').value = '';
-    el('habit-forever').hidden = false;
+    setEndForever();                          // 结束时间默认回到「永久」
     el('habit-modal').hidden = false;
     el('habit-name').focus();
   });
+  // 结束时间两态：「永久 ›」⇄ 日期选择 + 恢复永久（Day 29 五轮）
+  const setEndForever = () => {
+    el('habit-end').value = '';
+    el('habit-end').hidden = true;
+    el('habit-end-clear').hidden = true;
+    el('habit-forever').hidden = false;
+  };
+  el('habit-forever').addEventListener('click', () => {
+    el('habit-forever').hidden = true;
+    el('habit-end').hidden = false;
+    el('habit-end-clear').hidden = false;
+    el('habit-end').focus();
+  });
+  el('habit-end-clear').addEventListener('click', setEndForever);
   el('habit-quad').querySelectorAll('button').forEach(b => {
     b.addEventListener('click', () => {
       habitQuad = b.dataset.quad;
       el('habit-quad').querySelectorAll('button').forEach(x =>
         x.classList.toggle('on', x === b));
     });
-  });
-  el('habit-end').addEventListener('input', () => {
-    el('habit-forever').hidden = !!el('habit-end').value;   // 选了结束日期就收起「永久」
   });
   el('habit-minus').addEventListener('click', () => {
     habitPerDay = Math.max(1, habitPerDay - 1);
@@ -2639,7 +2638,6 @@
     el('insight-modal').hidden = false;
   });
   el('i-close').addEventListener('click', () => { el('insight-modal').hidden = true; });
-  el('i-regen').addEventListener('click', renderInsight);
   document.querySelectorAll('#imodes button').forEach(b => {
     b.addEventListener('click', () => { insightMode = b.dataset.mode; renderInsight(); });
   });
