@@ -106,20 +106,11 @@
     .hero::after{ content:""; position:absolute; inset:0;
            background:linear-gradient(180deg, rgba(var(--veil-rgb),var(--veil-top)) 0%, rgba(var(--veil-rgb),0) 26%,
                        rgba(var(--veil-rgb),.55) 72%, rgba(var(--veil-rgb),.92) 94%, var(--bg) 100%); }
-    .hero header{ position:absolute; top:0; left:0; right:0; z-index:1;
-           display:flex; justify-content:space-between; align-items:center;
-           flex-wrap:wrap; gap:8px 10px; padding:16px 18px 0; }
-    .hero h1{ font-size:20px; margin:0; font-weight:700; color:var(--hero-ink);
-           text-shadow:var(--hero-shadow); }
-    .hero h1 small{ font-size:12px; color:var(--hero-ink); opacity:.92; font-weight:400;
-           margin-left:6px; text-shadow:var(--hero-shadow); }
-    .hero .icons button{ border:none; background:transparent; font-size:18px;
-           color:var(--hero-ink); cursor:pointer; padding:6px; margin-left:2px;
-           position:relative; text-shadow:var(--hero-shadow); }
-    .hero .icons button::after{ content:""; position:absolute; inset:-8px; }
+    /* v2.4：hero 内的标题行与两个图标样式随 DOM 一起删除 */
 
-    /* 其他视图的标题（黑底页面头部）*/
-    .vh{ font-size:20px; margin:18px 0 14px; font-weight:700; }
+    /* 其他视图的标题（黑底页面头部）——v2.4 起三页标题整块去掉，
+       用统一的顶部留白代替（原 .vh 的 18px 上间距） */
+    #view-thoughts, #view-apps, #view-me{ padding-top:18px; }
 
     /* ===== 周历条：周一~周日，今天高亮，可点切换查看日 ===== */
     .week{ display:flex; gap:4px; background:var(--card); border-radius:16px;
@@ -827,15 +818,9 @@
   <main>
     <!-- 今天视图：hero 落日图 + 周历条 + 筛选 + 四状态 + 今日待做 -->
     <section id="view-today" class="active">
-      <div class="hero">
-        <header>
-          <h1 id="month-title">自律计划<small id="today-label"></small></h1>
-          <div class="icons">
-            <button type="button" title="统计报告（后续版本）" aria-label="统计报告">📊</button>
-            <button type="button" title="设置（后续版本）" aria-label="设置">⚙️</button>
-          </div>
-        </header>
-      </div>
+      <!-- Day 30（v2.4）：hero 上的「年 月 · 自律计划 + 日期」标题与两个装饰图标
+           （📊 ⚙️ 皆无点击逻辑）按用户要求整块去掉，只留背景大图 -->
+      <div class="hero"></div>
 
       <div class="week" id="week-strip"></div>
 
@@ -886,7 +871,6 @@
 
     <!-- 思考视图（F3 MVP，Day 14）：卡片流，新的在上，长文折叠 -->
     <section id="view-thoughts">
-      <h2 class="vh">思考</h2>
       <div class="card insight-entry">
         <div class="ie-txt">
           <h2>AI 洞察 <span class="sub">2 种视角</span></h2>
@@ -905,7 +889,6 @@
 
     <!-- 应用视图（F6 骨架，Day 17）：入口列表，子功能按天逐个开放（Day 21 已开倒数日） -->
     <section id="view-apps">
-      <h2 class="vh">应用</h2>
       <div class="card">
         <div class="apps-list" id="apps-list">
         <button type="button" class="app-item" data-app="todo">
@@ -944,7 +927,6 @@
 
     <!-- 我的视图（F5 MVP）：头像/名字/使用天数/情绪板块/设置/指南 -->
     <section id="view-me">
-      <h2 class="vh">我的</h2>
       <div class="card">
         <div class="profile">
           <div class="avatar" id="me-avatar">🌱</div>
@@ -1016,7 +998,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.3</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.4</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -2142,7 +2124,6 @@
       });
       strip.appendChild(b);
     }
-    el('month-title').firstChild.textContent = y + ' 年 ' + m + ' 月 · 自律计划';
   };
 
   // ===== 可复用卡片组件：时间轴与"未安排"区共用（Day 8 余力加练）=====
@@ -2596,7 +2577,6 @@
   const renderAll = () => {
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
-    el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
     renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
     renderCloudHint();                                      // Day 20：数据来源 + 最后更新时间
     checkMemReminders();                                    // Day 21：提醒条随渲染刷新
@@ -2758,6 +2738,18 @@
     el('new-name').focus();
   };
 
+  // v2.4（用户拍板）：保存成功后不关窗，清掉刚填的内容、保留「类型 + 日期」，
+  // 让人可以接着写第二天条——一天本来就不止一件事，也常常不止一个打卡。
+  const resetNewForNext = () => {
+    el('new-name').value = '';
+    el('new-time').value = '';
+    nmTimes = 1; el('new-times').textContent = '1';
+    nmQuad = '';
+    el('new-quad').querySelectorAll('button').forEach(b =>
+      b.classList.toggle('on', b.dataset.quad === ''));
+    el('new-name').focus();
+  };
+
   // 编辑打卡：预填全部字段（含起止与次数），保存时原地更新而不是新增
   const openHabitEdit = (h) => {
     if (demoMode || !data) return;
@@ -2815,7 +2807,11 @@
       const date = el('new-date').value;
       if (!date) { showToast('选一个日期'); return; }
       const ok = await addTodo(name, time, quad, date);
-      if (ok) el('new-modal').hidden = true;      // 云端明确拒绝时不关窗，让人看得见原因
+      // v2.4：保存成功不关窗——复位输入留在这里，可以连着写好几条。
+      // 成功提示沿用 addTodo 自己的口径（「已添加到云端」/「…已先存本机」），
+      // 这里不再盖一层 toast，免得把「先存本机」这种重要信息冲掉。
+      // 云端明确拒绝时不复位也不关窗，让人看得见原因（原行为保留）
+      if (ok) resetNewForNext();
       return;
     }
 
@@ -2835,10 +2831,17 @@
                          quad: quad, created: Date.now() });
     }
     saveData(data);
-    el('new-modal').hidden = true;
     editingHabitId = null;                 // 关掉弹窗就回到新建模式，避免下次误改
     renderAll();
-    showToast(editing ? '已保存打卡「' + name + '」' : '已创建打卡「' + name + '」');
+    if (editing) {
+      // 编辑：改完就该回列表看结果 —— 关窗（v2.4 用户拍板）
+      el('new-modal').hidden = true;
+      showToast('已保存打卡「' + name + '」');
+    } else {
+      // 新建：留在卡里接着建下一个，日期与类型保留
+      resetNewForNext();
+      showToast('已创建打卡「' + name + '」，可以接着建');
+    }
   };
   el('new-ok').addEventListener('click', submitNew);
   el('new-name').addEventListener('keydown', (e) => {
