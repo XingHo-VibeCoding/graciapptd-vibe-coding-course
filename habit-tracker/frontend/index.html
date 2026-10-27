@@ -212,7 +212,7 @@
                          font-size:13px; cursor:pointer; }
 
     body.demo #add-form{ display:none; }
-    body.demo #fab{ display:none; }                  /* 假数据不落盘，演示模式只看 */
+    body.demo #pet-qa-add{ display:none; }           /* 假数据不落盘，演示模式只看 */
 
     /* ===== 自绘日历（Day 29 七轮）：替代原生 date picker，风格随主题 ===== */
     .cal{ position:relative; display:inline-flex; }
@@ -263,25 +263,29 @@
            color:var(--accent-deep); border-radius:999px; padding:7px 16px;
            font-size:13px; cursor:pointer; }
 
-    /* ===== 薯条助手按钮 + 问答框（P1.5）：72px 左下常驻，戳会喵，点开问答 ===== */
-    #pet-btn{ position:fixed; left:14px; bottom:14px; width:72px; height:72px;
+    /* ===== 薯条助手按钮 + 问答框（v2.1）：72px 右下常驻（顶替原 ＋），戳会喵，点开问答 ===== */
+    #pet-btn{ position:fixed; right:16px; bottom:16px; width:72px; height:72px;
               padding:0; border:none; background:transparent; z-index:70;
               cursor:pointer; -webkit-tap-highlight-color:transparent; }
     #pet-btn[hidden], #pet-qa[hidden]{ display:none; }
-    #pet-btn svg{ width:100%; height:100%; display:block; color:var(--ink);
-                  filter:drop-shadow(0 5px 9px rgba(0,0,0,.16));
+    #pet-btn img{ width:100%; height:100%; display:block; object-fit:contain;
+                  filter:drop-shadow(0 5px 9px rgba(0,0,0,.18));
+                  transform-origin:50% 88%;
+                  animation:pet-sway 5.5s ease-in-out infinite;
                   transition:transform .15s ease; }
-    #pet-btn.squash svg{ transform:scale(1.12,.88); }
-    .pet-bubble{ position:absolute; top:-6px; left:50%; transform:translate(-50%,-100%);
+    html[data-theme="dark"] #pet-btn img{
+                  filter:brightness(1.12) drop-shadow(0 3px 8px rgba(0,0,0,.55)); }
+    #pet-btn.squash img{ transform:scale(1.12,.88); animation:none; }
+    .pet-bubble{ position:absolute; top:-6px; right:50%; transform:translate(50%,-100%);
                  background:var(--card); border:1px solid var(--line); color:var(--ink);
                  font-size:12px; padding:3px 10px; border-radius:12px; white-space:nowrap;
                  box-shadow:0 2px 6px rgba(0,0,0,.1); pointer-events:none; }
-    #pet-qa{ position:fixed; left:14px; bottom:96px; z-index:70;
+    #pet-qa{ position:fixed; right:14px; bottom:96px; z-index:70;
              width:min(320px, calc(100vw - 28px)); box-sizing:border-box;
              background:var(--card); border:1px solid var(--line); border-radius:16px;
              padding:14px; box-shadow:0 10px 28px rgba(0,0,0,.18); }
     .pet-qa-head{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
-    .pet-qa-head svg{ width:30px; height:30px; color:var(--ink); }
+    .pet-qa-face{ width:30px; height:30px; object-fit:contain; }
     .pet-qa-head b{ font-size:14px; color:var(--ink); flex:1; }
     .pet-x{ border:none; background:transparent; color:var(--muted); font-size:15px;
             cursor:pointer; padding:2px 6px; }
@@ -297,18 +301,10 @@
     .pet-ans button{ margin-top:8px; border:none; background:var(--accent);
                      color:var(--accent-ink); font-size:12.5px; border-radius:999px;
                      padding:6px 14px; cursor:pointer; }
-    /* 薯条动效：晃头 / 舔毛 / 尾巴摇 / 星星闪（按钮内联克隆后生效） */
-    .pet-head{ transform-origin:60px 60px; animation:pet-tilt 6.5s ease-in-out infinite; }
-    .pet-tongue{ transform-origin:60px 64px; animation:pet-lick 6.5s ease-in-out infinite; }
-    .pet-tail{ transform-origin:82px 94px; animation:pet-tail 3.2s ease-in-out infinite alternate; }
-    .pet-star{ animation:pet-twinkle 2.8s ease-in-out infinite; }
-    .pet-star.s2{ animation-delay:1.4s; }
-    @keyframes pet-tilt{ 0%,58%,100%{ transform:rotate(0); } 66%{ transform:rotate(-5deg); } 74%{ transform:rotate(4deg); } 82%{ transform:rotate(0); } }
-    @keyframes pet-lick{ 0%,78%,100%{ transform:scaleY(1); } 84%{ transform:scaleY(1.45); } 90%{ transform:scaleY(1.05); } }
-    @keyframes pet-tail{ from{ transform:rotate(-4deg); } to{ transform:rotate(7deg); } }
-    @keyframes pet-twinkle{ 0%,100%{ opacity:.25; } 50%{ opacity:1; } }
+    /* 薯条整体轻摇（C 版原图整体动，不再拆件）；系统「减弱动态」时关停 */
+    @keyframes pet-sway{ 0%,70%,100%{ transform:rotate(0); } 78%{ transform:rotate(-3.5deg); } 86%{ transform:rotate(3deg); } }
     @media (prefers-reduced-motion:reduce){
-      .pet-head,.pet-tongue,.pet-tail,.pet-star{ animation:none; } }
+      #pet-btn img{ animation:none; } }
 
     /* ===== 卡片 ===== */
     .card{ background:var(--card); border-radius:16px; padding:16px;
@@ -723,11 +719,10 @@
     .guide .dot{ display:inline-block; width:8px; height:8px; border-radius:50%;
                  margin-right:2px; vertical-align:1px; }
 
-    /* ===== FAB：右下角 +，今天视图右下角，添加待办（写入当前查看的日期） ===== */
-    #fab{ position:fixed; bottom:78px; right:max(18px, calc(50% - 224px));
-          width:54px; height:54px; border-radius:50%; border:none;
-          background:var(--accent); color:var(--accent-ink); font-size:28px; cursor:pointer;
-          box-shadow:0 4px 14px rgba(0,0,0,.5); z-index:30; }
+    /* 「＋写待办」：问答框顶部的琥珀金大按钮（v2.1 起顶替原右下角 ＋） */
+    .pet-qa-add{ width:100%; border:none; background:var(--accent); color:var(--accent-ink);
+                 font-size:13.5px; font-weight:600; border-radius:10px; padding:9px 0;
+                 cursor:pointer; margin-bottom:10px; }
 
     /* ===== Toast 轻提示（Day 11 交互反馈）：底部居中，自动消失 ===== */
     #toast{ position:fixed; bottom:92px; left:50%; transform:translateX(-50%) translateY(8px);
@@ -838,63 +833,6 @@
       <path d="M24 21c0-5-3.5-8-8-8 0 5 3.5 8 8 8z" fill="currentColor"/>
       <path d="M24 21c0-5 3.5-8 8-8 0 5-3.5 8-8 8z" fill="currentColor"/>
       <path d="M15 29h18l-2.2 9h-13.6z" fill="currentColor"/>
-    </symbol>
-    <!-- 薯条 · 完整版吉祥物 v2（P1.5 重绘，贴 C 融合版设计稿：胖矮水滴坐姿 / 淡定斜眼 /
-         头顶虎斑 / 胸口白毛 / 小舌头）。描边 currentColor（随 --ink），毛色走 --pet-*；
-         分组带 .pet-head/.pet-tongue/.pet-tail/.pet-star 类 → 按钮内联克隆后由 CSS 驱动动效。 -->
-    <symbol id="pet-fries" viewBox="0 0 120 120">
-      <!-- 地面软影 -->
-      <ellipse cx="60" cy="114" rx="26" ry="3" fill="currentColor" opacity=".12"/>
-      <!-- 尾巴（身后，可摇摆） -->
-      <g class="pet-tail">
-        <path d="M82 96 C101 94 106 76 96 66 C91 61 84 64 87 70 C93 74 92 87 79 91 Z"
-              fill="var(--pet-fur)" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-      </g>
-      <!-- 身体（水滴坐姿）+ 白胸毛 + 前爪 -->
-      <path d="M60 60 C38 60 28 78 29 98 C29.5 108 34 112 44 112 L76 112 C86 112 90.5 108 91 98 C92 78 82 60 60 60 Z"
-            fill="var(--pet-fur)" stroke="currentColor" stroke-width="3"/>
-      <path d="M60 78 C48 78 43 90 44 100 C44.5 107 50 110 60 110 C70 110 75.5 107 76 100 C77 90 72 78 60 78 Z"
-            fill="var(--pet-cream)"/>
-      <ellipse cx="46" cy="109" rx="8" ry="4.4" fill="var(--pet-fur)" stroke="currentColor" stroke-width="2.4"/>
-      <ellipse cx="74" cy="109" rx="8" ry="4.4" fill="var(--pet-fur)" stroke="currentColor" stroke-width="2.4"/>
-      <!-- 耳朵（耳内粉） -->
-      <path d="M35 30 Q26 8 36 11 Q48 15 52 24 Z" fill="var(--pet-fur)" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M85 30 Q94 8 84 11 Q72 15 68 24 Z" fill="var(--pet-fur)" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
-      <path d="M38 26 Q33.5 15 38.5 17.5 Q43.5 20 45.5 24.5 Z" fill="var(--pet-pink)"/>
-      <path d="M82 26 Q86.5 15 81.5 17.5 Q76.5 20 74.5 24.5 Z" fill="var(--pet-pink)"/>
-      <!-- 头（可晃动） -->
-      <g class="pet-head">
-        <ellipse cx="60" cy="47" rx="32" ry="28" fill="var(--pet-fur)" stroke="currentColor" stroke-width="3"/>
-        <!-- 头顶虎斑三道 + 脸侧虎斑 -->
-        <path d="M50 21 q2.5 7 .5 12 M60 19 q2 8 0 13 M70 21 q-2.5 7 -.5 12"
-              fill="none" stroke="var(--pet-stripe)" stroke-width="3" stroke-linecap="round"/>
-        <path d="M31 52 q4 1.5 7 .5 M32.5 57.5 q3.5 1 6 .3 M89 52 q-4 1.5 -7 .5 M87.5 57.5 q-3.5 1 -6 .3"
-              fill="none" stroke="var(--pet-stripe)" stroke-width="2.4" stroke-linecap="round"/>
-        <!-- 淡定斜眼：琥珀底 + 右偏瞳 + 奶油高光 + 压半上眼皮 -->
-        <ellipse cx="48" cy="50" rx="6.2" ry="5.6" fill="var(--pet-eye)"/>
-        <ellipse cx="72" cy="50" rx="6.2" ry="5.6" fill="var(--pet-eye)"/>
-        <circle cx="49.8" cy="51" r="2.8" fill="currentColor"/>
-        <circle cx="73.8" cy="51" r="2.8" fill="currentColor"/>
-        <circle cx="46.6" cy="48" r="1.1" fill="var(--pet-cream)"/>
-        <circle cx="70.6" cy="48" r="1.1" fill="var(--pet-cream)"/>
-        <rect x="40.4" y="42.5" width="15.4" height="6.6" fill="var(--pet-fur)"/>
-        <rect x="64.4" y="42.5" width="15.4" height="6.6" fill="var(--pet-fur)"/>
-        <path d="M41.5 49.2 Q48.2 47.2 54.9 49.2 M65.1 49.2 Q71.8 47.2 78.5 49.2"
-              fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
-        <!-- 鼻 + 嘴 ω + 小舌头（可舔） -->
-        <path d="M57.6 56.5 h4.8 q1.6 0 .7 1.5 l-2.4 2.9 q-.7 .9 -1.4 0 l-2.4 -2.9 q-.9 -1.5 .7 -1.5 z" fill="var(--pet-pink)"/>
-        <path d="M60 61 v1.6 M60 62.6 q-2.4 3.2 -5.4 .8 M60 62.6 q2.4 3.2 5.4 .8"
-              fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-        <g class="pet-tongue">
-          <path d="M57.4 64 q2.6 4.6 5.2 0 q-.5 3 -2.6 3 q-2.1 0 -2.6 -3 z"
-                fill="var(--pet-pink)" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-        </g>
-      </g>
-      <!-- 细线四角星（点缀，可闪烁） -->
-      <path class="pet-star" d="M100 24 q1.5 4.6 5.6 5.6 q-4.1 1 -5.6 5.6 q-1.5 -4.6 -5.6 -5.6 q4.1 -1 5.6 -5.6 z"
-            fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-      <path class="pet-star s2" d="M14 34 q1.2 3.8 4.6 4.6 q-3.4 .8 -4.6 4.6 q-1.2 -3.8 -4.6 -4.6 q3.4 -.8 4.6 -4.6 z"
-            fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
     </symbol>
   </defs>
 </svg>
@@ -1126,11 +1064,10 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.0</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.1</b> · 2026-10-27</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
-<button id="fab" type="button" hidden title="添加待办" aria-label="添加待办">＋</button>
 
 <!-- FAB：记一条想法（仅思考视图显示，底部居中；Day 14 F3） -->
 <button id="note-fab" type="button" hidden title="记一条想法" aria-label="记一条想法">＋</button>
@@ -1472,7 +1409,7 @@
 <div class="overlay" id="ob-modal" hidden>
   <div class="modal ob-card" role="dialog" aria-label="薯条的新手引导">
     <div class="ob-head">
-      <svg class="ob-face" viewBox="0 0 120 120" aria-hidden="true"><use href="#pet-fries"/></svg>
+      <img class="ob-face" src="assets/pet-fries.png" alt="" draggable="false">
       <div class="ob-bubble" id="ob-bubble"></div>
     </div>
     <p class="ob-sub" id="ob-sub"></p>
@@ -1495,16 +1432,17 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 薯条助手（P1.5）：左下常驻按钮（戳会喵）→ 点开问答搜索框（本地关键词匹配，零上传） -->
-<button id="pet-btn" type="button" aria-label="薯条助手，点我或问我问题" hidden>
-  <svg viewBox="0 0 120 120" aria-hidden="true"></svg>
+<button id="pet-btn" type="button" aria-label="薯条助手，点我或问我问题">
+  <img src="assets/pet-fries.png" alt="" draggable="false">
   <span class="pet-bubble" id="pet-bubble" hidden>喵～</span>
 </button>
 <div id="pet-qa" hidden role="dialog" aria-label="问薯条">
   <div class="pet-qa-head">
-    <svg viewBox="0 0 120 120" aria-hidden="true"><use href="#pet-fries"/></svg>
+    <img class="pet-qa-face" src="assets/pet-fries.png" alt="" draggable="false">
     <b>问薯条</b>
     <button id="pet-qa-close" type="button" class="pet-x" aria-label="关闭">✕</button>
   </div>
+  <button id="pet-qa-add" type="button">＋ 写待办</button>
   <input id="pet-qa-input" type="search" placeholder="例如：我想设置打卡该怎么弄" autocomplete="off" />
   <div class="pet-chips" id="pet-chips"></div>
   <div class="pet-ans" id="pet-qa-ans"></div>
@@ -2744,10 +2682,8 @@
       : '点今天的格子可以重新选心情，历史日期只看不改';
   };
 
-  // ===== FAB 显隐：今天视图右下角＋ / 思考视图底部居中＋（Day 14），均非演示模式 =====
+  // ===== FAB 显隐：思考视图底部居中＋（Day 14）；右下角＋已被薯条顶替（v2.1） =====
   const syncFab = () => {
-    el('fab').hidden = !(currentView === 'today'
-                      && !demoMode && data);          // 七轮：任何日期都能加（写入当前查看的那天）
     el('note-fab').hidden = !(currentView === 'thoughts'
                            && !demoMode && data);
   };
@@ -2837,8 +2773,9 @@
   });
   el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
 
-  // FAB → 添加待办弹窗（含象限；写入当前查看的日期）
-  el('fab').addEventListener('click', () => {
+  // 「问薯条」框顶的「＋写待办」→ 添加待办弹窗（顶替原右下角 ＋；写入当前查看的日期）
+  el('pet-qa-add').addEventListener('click', () => {
+    el('pet-qa').hidden = true;
     el('tm-modal').hidden = false;
     el('tm-text').value = ''; el('tm-time').value = ''; el('tm-quad').value = '';
     el('tm-text').focus();
@@ -4339,12 +4276,6 @@
   document.addEventListener('click', (e) => {
     if (!el('pet-qa').hidden && !e.target.closest('#pet-qa,#pet-btn')) el('pet-qa').hidden = true;
   });
-  // 把 symbol 内容克隆进按钮：<use> 的影子 DOM 不吃 CSS 动画，内联后晃头/舔毛才生效
-  {
-    const sym = document.getElementById('pet-fries');
-    if (sym) el('pet-btn').querySelector('svg').innerHTML = sym.innerHTML;
-    el('pet-btn').hidden = false;
-  }
 
   // ===== 启动 =====
   refreshDay().then(() => {
