@@ -204,14 +204,33 @@
     #demo-banner button{ border:none; background:transparent; color:var(--accent-deep);
                          font-size:13px; cursor:pointer; }
 
-    /* 只读提示：查看非今天时 */
-    #readonly-hint{ display:none; background:var(--card2); color:var(--muted); font-size:13px;
-                    padding:8px 12px; border-radius:10px; margin-bottom:12px; }
-    body.readonly #readonly-hint{ display:block; }
-    body.readonly #add-form{ display:none; }        /* 非今天不添加，防边界问题 */
-    body.readonly #fab{ display:none; }
     body.demo #add-form{ display:none; }
     body.demo #fab{ display:none; }                  /* 假数据不落盘，演示模式只看 */
+
+    /* ===== 自绘日历（Day 29 七轮）：替代原生 date picker，风格随主题 ===== */
+    .cal{ position:relative; display:inline-flex; }
+    .cal-field{ border:none; background:transparent; padding:0; text-align:right;
+           color:var(--ink); font-size:13px; cursor:pointer; font-family:inherit; }
+    .cal-field.empty{ color:var(--muted); }
+    .cal-field::after{ content:' ▾'; color:var(--muted); font-size:11px; }
+    .cal-pop{ position:absolute; top:calc(100% + 8px); right:0; z-index:60;
+           background:var(--card); border:1px solid var(--line); border-radius:14px;
+           box-shadow:0 8px 28px rgba(92,74,61,.16); padding:12px; width:248px;
+           color:var(--ink); }
+    .cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+    .cal-title{ font-size:14px; font-weight:600; color:var(--ink); }
+    .cal-nav{ display:flex; gap:4px; }
+    .cal-nav button, .cal-today{ border:1px solid var(--line); background:var(--card2);
+           color:var(--ink); border-radius:8px; font-size:12px; cursor:pointer; padding:3px 8px; }
+    .cal-today{ color:var(--accent-deep); border-color:var(--accent); }
+    .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+    .cal-wd{ font-size:11px; color:var(--muted); text-align:center; padding:4px 0; }
+    .cal-day{ border:none; background:transparent; color:var(--ink); font-size:12px;
+           border-radius:8px; padding:6px 0; cursor:pointer; text-align:center; }
+    .cal-day:hover{ background:var(--card2); }
+    .cal-day.muted{ color:var(--muted); opacity:.55; }
+    .cal-day.today-cell{ box-shadow:inset 0 0 0 1px var(--accent); color:var(--accent-deep); }
+    .cal-day.sel{ background:var(--accent); color:var(--accent-ink); font-weight:600; }
 
     /* ===== 卡片 ===== */
     .card{ background:var(--card); border-radius:16px; padding:16px;
@@ -626,7 +645,7 @@
     .guide .dot{ display:inline-block; width:8px; height:8px; border-radius:50%;
                  margin-right:2px; vertical-align:1px; }
 
-    /* ===== FAB：右下角 +，仅"今天"视图显示，添加今日待办 ===== */
+    /* ===== FAB：右下角 +，今天视图右下角，添加待办（写入当前查看的日期） ===== */
     #fab{ position:fixed; bottom:78px; right:max(18px, calc(50% - 224px));
           width:54px; height:54px; border-radius:50%; border:none;
           background:var(--accent); color:var(--accent-ink); font-size:28px; cursor:pointer;
@@ -772,8 +791,6 @@
         <span id="filter-status-text"></span>
         <button type="button" id="filter-clear">清空筛选</button>
       </div>
-
-      <div id="readonly-hint">这一天只能查看，添加和勾选仅限今天</div>
 
       <!-- 状态① 加载中 -->
       <div id="state-loading" class="state" hidden>加载中…</div>
@@ -976,11 +993,11 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v1.7</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v1.8</b> · 2026-10-27</footer>
 </div>
 
-<!-- FAB：添加今日待办（仅今天视图显示） -->
-<button id="fab" type="button" hidden title="添加今日待办" aria-label="添加今日待办">＋</button>
+<!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
+<button id="fab" type="button" hidden title="添加待办" aria-label="添加待办">＋</button>
 
 <!-- FAB：记一条想法（仅思考视图显示，底部居中；Day 14 F3） -->
 <button id="note-fab" type="button" hidden title="记一条想法" aria-label="记一条想法">＋</button>
@@ -1001,10 +1018,10 @@
   </div>
 </div>
 
-<!-- 弹窗 2：添加今日待办（含四象限） -->
+<!-- 弹窗 2：添加待办（含四象限） -->
 <div class="overlay" id="tm-modal" hidden>
   <div class="modal">
-    <h3>添加今日待办</h3>
+    <h3>添加待办</h3>
     <input id="tm-text" placeholder="今天要做什么？" maxlength="60" />
     <input id="tm-time" type="time" title="可选：几点做" />
     <select id="tm-quad" title="可选：四象限分类">
@@ -1052,7 +1069,13 @@
     </div>
     <div class="hrow">
       <label class="hl" for="te-date">日期</label>
-      <span class="hv"><input id="te-date" type="date" /><i>改了就移过去</i></span>
+      <span class="hv">
+        <span class="cal">
+          <button type="button" class="cal-field" data-cal="te-date" aria-label="选择日期"></button>
+          <input id="te-date" type="date" hidden />
+          <span class="cal-pop" hidden></span>
+        </span>
+      </span>
     </div>
   </div>
 </div>
@@ -1289,13 +1312,23 @@
     </div>
     <div class="hrow">
       <label class="hl" for="habit-start">开始时间</label>
-      <span class="hv"><input id="habit-start" type="date" /></span>
+      <span class="hv">
+        <span class="cal">
+          <button type="button" class="cal-field" data-cal="habit-start" aria-label="选择开始日期"></button>
+          <input id="habit-start" type="date" hidden />
+          <span class="cal-pop" hidden></span>
+        </span>
+      </span>
     </div>
     <div class="hrow">
       <label class="hl">结束时间</label>
       <span class="hv">
         <button id="habit-forever" type="button" class="hforever">永久 ›</button>
-        <input id="habit-end" type="date" hidden />
+        <span class="cal" id="habit-end-cal" hidden>
+          <button type="button" class="cal-field" data-cal="habit-end" aria-label="选择结束日期"></button>
+          <input id="habit-end" type="date" hidden />
+          <span class="cal-pop" hidden></span>
+        </span>
         <button id="habit-end-clear" type="button" class="hclear" hidden>恢复永久</button>
       </span>
     </div>
@@ -1775,7 +1808,6 @@
   const addTodo = async (text, time, quad) => {
     if (adding) return false;                         // 防连点：上一次还没落地，忽略这一次
     if (!data || demoMode) return false;
-    if (currentDate !== todayStr()) return false;     // FAB/表单只在今天视图可见，双保险
     const date = currentDate;
     const item = { text: (text || '').trim(), time: time || null,
                    quad: (quad && QUADS[quad]) ? quad : null };   // 象限可空 = 未分类
@@ -1841,14 +1873,16 @@
     const row = document.querySelector('.todo[data-id="' + id + '"]');
     if (row && done) row.classList.add('just');      // Day 11 反馈：重渲染不会波及其他卡片
     const n = getTodos(currentDate).filter(t => t.done).length;
-    showToast(done ? '✓ 已完成 · 今天 ' + n + ' 件事' : '已恢复为未完成');
+    const when = currentDate === todayStr() ? '今天' : fmtDateLabel(currentDate);
+    showToast(done ? '✓ 已完成 · ' + when + ' ' + n + ' 件事' : '已恢复为未完成');
   };
 
   // Day 22：勾选改为"云端优先"（PATCH /api/checkins/:id），刷新后状态还在。
-  // 前端这道"只能对今天打勾"的拦截是**体验层**；真正的承诺由服务端兑现
-  // （给未来日期的待办打勾，服务端会回 409）—— 两层都要有，因为前端拦不住手写的请求。
+  // Day 29 七轮：放开"只能今天打勾"的前端拦截——任何日期都能勾；
+  // 给未来日期的云端待办打勾由服务端拦（409「这一天还没到」，契约 §三），
+  // 前端 business 分支会把这句话原样转述。本机记录则照常切换。
   const toggleTodo = async (id) => {
-    if (demoMode || currentDate !== todayStr()) return;   // 只能对今天打勾（A5 的第一道防线）
+    if (demoMode || !data) return;
     const todo = getTodos(currentDate).find(t => t.id === id);
     if (!todo) return;
     const next = !todo.done;
@@ -1892,6 +1926,85 @@
     showToast('已删除');
   };
 
+  // ===== 自绘日历（Day 29 七轮）：替代原生 date picker，风格随主题 =====
+  // 真正的 <input type="date"> 仍留在 DOM 里（hidden），只是不再露脸——
+  // 旧代码与测试直接读写 input.value 的路径全部照旧，零迁移成本。
+  // 点字段展开月历（周一打头），‹ › 翻月、「今天」跳回本月，选中即写入 input 并收起。
+  const CALS = {};
+  const closeAllCals = (except) => {
+    Object.values(CALS).forEach(c => { if (c.pop !== except) c.pop.hidden = true; });
+  };
+  const setupCal = (inputId) => {
+    const input = el(inputId);
+    const wrap = input.closest('.cal');
+    const field = wrap.querySelector('.cal-field');
+    const pop = wrap.querySelector('.cal-pop');
+    let vy = 0, vm = 0;                     // 日历正在展示的年 / 月
+    const syncField = () => {
+      if (!input.value) { field.textContent = '未选择'; field.classList.add('empty'); return; }
+      const [y, m, d] = input.value.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      field.textContent = m + '月' + d + '日 · 周' + '一二三四五六日'[(dt.getDay() + 6) % 7];
+      field.classList.remove('empty');
+    };
+    const renderPop = () => {
+      pop.textContent = '';
+      const head = document.createElement('div'); head.className = 'cal-head';
+      const title = document.createElement('span'); title.className = 'cal-title';
+      title.textContent = vy + ' 年 ' + vm + ' 月';
+      const nav = document.createElement('span'); nav.className = 'cal-nav';
+      const prev = document.createElement('button'); prev.type = 'button'; prev.textContent = '‹';
+      const next = document.createElement('button'); next.type = 'button'; next.textContent = '›';
+      const todayBtn = document.createElement('button'); todayBtn.type = 'button';
+      todayBtn.className = 'cal-today'; todayBtn.textContent = '今天';
+      nav.append(prev, next, todayBtn);
+      head.append(title, nav);
+      const grid = document.createElement('div'); grid.className = 'cal-grid';
+      '一二三四五六日'.split('').forEach(w2 => {
+        const s = document.createElement('span'); s.className = 'cal-wd'; s.textContent = w2;
+        grid.appendChild(s);
+      });
+      const lead = (new Date(vy, vm - 1, 1).getDay() + 6) % 7;   // 周一打头的补位天数
+      const start = new Date(vy, vm - 1, 1 - lead);
+      for (let i = 0; i < 42; i++) {
+        const dt = new Date(start); dt.setDate(start.getDate() + i);
+        const ds = dateToStr(dt);
+        const b = document.createElement('button'); b.type = 'button';
+        b.className = 'cal-day'; b.textContent = dt.getDate();
+        if (dt.getMonth() + 1 !== vm) b.classList.add('muted');
+        if (ds === todayStr()) b.classList.add('today-cell');
+        if (ds === input.value) b.classList.add('sel');
+        b.addEventListener('click', () => {
+          input.value = ds; syncField(); pop.hidden = true;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        grid.appendChild(b);
+      }
+      prev.addEventListener('click', () => { if (vm === 1) { vy--; vm = 12; } else vm--; renderPop(); });
+      next.addEventListener('click', () => { if (vm === 12) { vy++; vm = 1; } else vm++; renderPop(); });
+      todayBtn.addEventListener('click', () => {
+        const [y2, m2] = todayStr().split('-').map(Number); vy = y2; vm = m2; renderPop();
+      });
+      pop.append(head, grid);
+    };
+    field.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const opening = pop.hidden;
+      closeAllCals(pop);
+      if (opening) {
+        const from = input.value || todayStr();
+        const parts = from.split('-').map(Number); vy = parts[0]; vm = parts[1];
+        renderPop(); pop.hidden = false;
+      }
+    });
+    CALS[inputId] = { sync: syncField, pop };
+    syncField();
+  };
+  ['te-date', 'habit-start', 'habit-end'].forEach(setupCal);
+  document.addEventListener('click', (e) => {     // 点日历以外的地方 = 收起所有月历
+    if (!e.target.closest('.cal')) closeAllCals(null);
+  });
+
   // ===== 编辑待办（Day 29 六轮）：顶替原来的「移动」 =====
   // 一张卡改四件事：名称 / 时间 / 象限 / 日期。前三个是云端字段（PATCH 支持），
   // 日期不是（契约 §三 明确忽略 date）——所以改日期退化为本机移动，
@@ -1899,12 +2012,13 @@
   let editingTodo = null;              // { id, date } —— 正在编辑哪一条、它原来在哪一天
   let teQuad = '';                     // 弹窗内当前选中的象限（'' = 未分类）
   const openTodoEdit = (todo) => {
-    if (demoMode || currentDate !== todayStr()) return;   // 与勾选一致：只能编辑今天
+    if (demoMode || !data) return;                        // 演示模式只看；任何日期都能编辑（七轮）
     editingTodo = { id: todo.id, date: currentDate };
     teQuad = QUADS[todo.quad] ? todo.quad : '';
     el('te-name').value = todo.text;
     el('te-time').value = todo.time || '';
     el('te-date').value = currentDate;
+    CALS['te-date'].sync();
     el('te-quad').querySelectorAll('button').forEach(b =>
       b.classList.toggle('on', b.dataset.quad === teQuad));
     el('te-modal').hidden = false;
@@ -2017,7 +2131,7 @@
   const renderToday = () => {
     const isToday = currentDate === todayStr();
     const all = demoMode ? mockToday() : getTodos(currentDate);
-    const interactive = isToday && !demoMode;
+    const interactive = !demoMode;        // 七轮：任何日期都可交互（云端规则由服务端兜底）
     const habits = (demoMode || !data) ? [] :
       data.habits.filter(h => currentDate >= h.start && (!h.end || currentDate <= h.end));
     const isHabitView = filter === 'habit';
@@ -2091,10 +2205,10 @@
     }
     // 态③数据本身为空（清空筛选后一并回落到这里；打卡视图由专属卡自己交代空态）
     el('today-empty').hidden = all.length > 0 || isHabitView;
-    // 「全部」里没有添加行，空状态就别再叫人"写一条"——把去哪写说清楚（Day 29 六轮）
-    el('empty-text').textContent = isToday
-      ? (filter === 'all' ? '今天还没有安排，切到「时间轴」写一条' : '今天还没有安排，写一条试试')
-      : '这一天没有安排';
+    // 七轮：非今天也全功能（可添加可勾选），空状态文案不再分今天/别天
+    el('empty-text').textContent = filter === 'all'
+      ? '这一天还没有安排，切到「时间轴」写一条'
+      : '这一天还没有安排，写一条试试';
     el('load-demo').hidden = !isToday;
   };
 
@@ -2155,7 +2269,7 @@
     if (interactive) {
       row.setAttribute('role', 'button');
       row.setAttribute('tabindex', '0');
-      row.setAttribute('aria-label', h.name + '：今天 ' + count + '/' + h.perDay
+      row.setAttribute('aria-label', h.name + '：' + count + '/' + h.perDay
         + (full ? '，已完成' : '，点一下打卡一次'));
       row.addEventListener('click', (e) => {
         if (e.target.closest('.menu')) return;
@@ -2168,16 +2282,18 @@
     return row;
   };
   // 点行 = 打卡一次；打满后再点 = 撤回一次（误触兜底，不用进菜单找撤销）
+  // Day 29 七轮：放开"仅限今天"——查看哪天就记到哪天（打卡记录本就按日期存）
   const checkInHabit = (id) => {
-    if (demoMode || currentDate !== todayStr()) return;
+    if (demoMode || !data) return;
     const h = data.habits.find(x => x.id === id);
     if (!h) return;
     const logs = (data.habitLogs[id] = data.habitLogs[id] || {});
     const cur = logs[currentDate] || 0;
     logs[currentDate] = cur >= h.perDay ? cur - 1 : cur + 1;
     saveData(data); renderAll();
+    const doneWord = currentDate === todayStr() ? '今天完成' : fmtDateLabel(currentDate) + '完成';
     showToast(logs[currentDate] >= h.perDay
-      ? '✓ ' + h.name + ' · 今天完成'
+      ? '✓ ' + h.name + ' · ' + doneWord
       : h.name + ' ' + logs[currentDate] + '/' + h.perDay);
   };
   const deleteHabit = (id) => {
@@ -2456,16 +2572,13 @@
   // ===== FAB 显隐：今天视图右下角＋ / 思考视图底部居中＋（Day 14），均非演示模式 =====
   const syncFab = () => {
     el('fab').hidden = !(currentView === 'today'
-                      && currentDate === todayStr()
-                      && !demoMode && data);
+                      && !demoMode && data);          // 七轮：任何日期都能加（写入当前查看的那天）
     el('note-fab').hidden = !(currentView === 'thoughts'
                            && !demoMode && data);
   };
 
   // ===== 总渲染 =====
   const renderAll = () => {
-    const isToday = currentDate === todayStr();
-    document.body.classList.toggle('readonly', !isToday && !demoMode);
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
     el('today-label').textContent = fmtDateLabel(todayStr()); // 中文短日期+星期，避免原始 ISO
@@ -2549,7 +2662,7 @@
   });
   el('mood-close').addEventListener('click', () => { el('mood-modal').hidden = true; });
 
-  // FAB → 添加今日待办弹窗（含象限）
+  // FAB → 添加待办弹窗（含象限；写入当前查看的日期）
   el('fab').addEventListener('click', () => {
     el('tm-modal').hidden = false;
     el('tm-text').value = ''; el('tm-time').value = ''; el('tm-quad').value = '';
@@ -2627,11 +2740,14 @@
   let habitQuad = '';                     // '' = 未分类
   let editingHabitId = null;              // null = 新建；有值 = 正在编辑这条打卡
   // 把「结束时间」拨回永久态（两态控件的小工具，新建与编辑都要用）
+  // 七轮：日期露脸的载体从裸 input 换成 .cal 组件，wrapper 与 input 一起切换
   const setEndForever = () => {
     el('habit-end').value = '';
     el('habit-end').hidden = true;
+    el('habit-end-cal').hidden = true;
     el('habit-end-clear').hidden = true;
     el('habit-forever').hidden = false;
+    if (CALS['habit-end']) CALS['habit-end'].sync();
   };
   // 编辑打卡：预填全部字段（含起止与次数），保存时原地更新而不是新增
   const openHabitEdit = (h) => {
@@ -2646,11 +2762,14 @@
     el('habit-name').value = h.name;
     el('habit-time').value = h.time || '';
     el('habit-start').value = h.start;
+    CALS['habit-start'].sync();
     if (h.end) {                          // 有结束日期 → 展开日期态；没有 → 「永久 ›」
       el('habit-forever').hidden = true;
       el('habit-end').hidden = false;
+      el('habit-end-cal').hidden = false;
       el('habit-end-clear').hidden = false;
       el('habit-end').value = h.end;
+      CALS['habit-end'].sync();
     } else {
       setEndForever();
     }
@@ -2668,6 +2787,7 @@
     el('habit-name').value = '';
     el('habit-time').value = '';
     el('habit-start').value = todayStr();
+    CALS['habit-start'].sync();
     el('habit-end').value = '';
     setEndForever();                          // 结束时间默认回到「永久」
     el('habit-modal').hidden = false;
@@ -2677,8 +2797,8 @@
   el('habit-forever').addEventListener('click', () => {
     el('habit-forever').hidden = true;
     el('habit-end').hidden = false;
+    el('habit-end-cal').hidden = false;
     el('habit-end-clear').hidden = false;
-    el('habit-end').focus();
   });
   el('habit-end-clear').addEventListener('click', setEndForever);
   el('habit-quad').querySelectorAll('button').forEach(b => {
