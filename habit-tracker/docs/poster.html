@@ -4,111 +4,116 @@
 <meta charset="utf-8" />
 <title>自律计划 · 参赛海报</title>
 <style>
-  /* ===== 奶油暖阳（与产品主题同源）：底 #FEFDF9 / 卡 #FFF / 主色 #E6A23C / 正文 #5C4A3D ===== */
+  /* ===== 编辑风海报：宋体大字 + 细线 + 大留白。纸 #FBF7EF / 墨 #3E3428 / 琥珀 #B8761E ===== */
   *{ margin:0; padding:0; box-sizing:border-box; }
-  html,body{ width:1080px; background:#FEFDF9; color:#5C4A3D;
-             font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
-  .poster{ width:1080px; min-height:1620px; display:flex; flex-direction:column; padding:56px 80px 44px; position:relative; overflow:hidden;
-           background:linear-gradient(180deg,#FEFDF9 0%,#FBF6EA 58%,#FEFDF9 100%); }
-  /* 装饰：暖色圆斑，避开文字区 */
-  .blob{ position:absolute; border-radius:50%; opacity:.16; }
-  .b1{ width:420px; height:420px; right:-140px; top:-120px; background:#E6A23C; }
-  .b2{ width:260px; height:260px; left:-100px; top:520px; background:#F5C46A; }
-  .b3{ width:300px; height:300px; right:-90px; bottom:220px; background:#F0D878; }
+  html,body{ width:1080px; background:#FBF7EF; color:#3E3428;
+             font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;
+             -webkit-font-smoothing:antialiased; }
+  .serif{ font-family:"Noto Serif SC","Source Han Serif SC","STZHONGS","STSONG",serif; }
+  .mono{ font-family:"Source Code Pro",Consolas,monospace; }
+  .poster{ width:1080px; min-height:1620px; display:flex; flex-direction:column;
+           padding:64px 84px 48px; position:relative;
+           background:linear-gradient(180deg,#FCF9F2 0%,#FAF4E8 100%); }
 
-  .kicker{ display:inline-block; font-size:20px; letter-spacing:6px; color:#9C6812;
-           border:2px solid #EACB8C; border-radius:999px; padding:8px 26px; background:#FFF;
-           position:relative; }
-  h1{ font-size:92px; font-weight:800; letter-spacing:10px; margin:24px 0 8px; position:relative; }
-  h1 .em{ color:#E6A23C; }
-  .slogan{ font-size:31px; color:#9C6812; letter-spacing:3px; position:relative; }
+  /* 顶部小字行 */
+  .meta{ display:flex; justify-content:space-between; align-items:baseline;
+         font-size:17px; letter-spacing:4px; color:#8A7A63; }
+  .meta b{ color:#3E3428; letter-spacing:6px; font-weight:600; }
+  .rule{ border:none; border-top:1px solid #D9C9A8; margin:18px 0 0; }
 
-  /* 初心 */
-  .creed{ margin:36px 0 34px; background:#FFF; border:1px solid #F0E3C4; border-radius:24px;
-          padding:22px 32px; position:relative; box-shadow:0 10px 30px rgba(230,162,60,.10); }
-  .creed .tag{ font-size:20px; color:#FFF; background:#E6A23C; border-radius:8px;
-               padding:4px 14px; letter-spacing:4px; }
-  .creed p{ font-size:27px; line-height:1.65; margin-top:12px; }
-  .creed p b{ color:#9C6812; }
+  /* 大字报头 */
+  .hero{ margin-top:64px; }
+  .hero h1{ font-size:92px; line-height:1.32; font-weight:600; letter-spacing:4px; }
+  .hero h1 .am{ color:#B8761E; }
+  .hero p{ margin-top:30px; font-size:22px; line-height:1.9; color:#6E5F4B;
+           letter-spacing:2px; max-width:760px; }
 
-  /* 四页主线 */
-  .flow{ display:flex; align-items:stretch; gap:0; margin-bottom:30px; position:relative; }
-  .step{ flex:1; background:#FFF; border:1px solid #F0E3C4; border-radius:20px;
-         padding:16px 12px 16px; text-align:center; position:relative; z-index:1; }
-  .step .no{ width:44px; height:44px; line-height:44px; border-radius:50%; margin:0 auto 10px;
-             background:#F5E7C8; color:#9C6812; font-weight:800; font-size:22px; }
-  .step .t{ font-size:24px; font-weight:700; }
-  .step .s{ font-size:17px; color:#A08A76; margin-top:6px; }
-  .arr{ align-self:center; font-size:30px; color:#E6A23C; padding:0 10px; font-weight:800; }
+  /* 中部：左文右图 */
+  .main{ display:flex; gap:56px; margin-top:58px; align-items:flex-start; }
+  .left{ flex:1; min-width:0; }
+  .tag{ display:inline-block; font-size:16px; letter-spacing:6px; color:#B8761E;
+        border:1px solid #C9A96E; padding:6px 16px 6px 22px; }
+  .left .creed{ margin-top:26px; font-size:23px; line-height:2.0; letter-spacing:1px; }
+  .left .creed b{ font-weight:600; border-bottom:3px solid #EACB8C; }
+  .points{ margin-top:40px; }
+  .pt{ display:flex; gap:18px; padding:20px 0; border-top:1px solid #E4D7BC; }
+  .pt:last-child{ border-bottom:1px solid #E4D7BC; }
+  .pt .no{ font-size:15px; color:#B8761E; letter-spacing:2px; padding-top:6px; }
+  .pt .t{ font-size:21px; font-weight:600; letter-spacing:1px; }
+  .pt .s{ font-size:17px; color:#8A7A63; margin-top:5px; line-height:1.7; letter-spacing:.5px; }
 
-  /* 功能亮点 */
-  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:30px; position:relative; }
-  .feat{ background:#FFF; border:1px solid #F0E3C4; border-left:8px solid #E6A23C;
-         border-radius:16px; padding:14px 22px; }
-  .feat .t{ font-size:23px; font-weight:700; }
-  .feat .s{ font-size:18px; color:#A08A76; margin-top:6px; line-height:1.5; }
-  .feat.alt{ border-left-color:#F5C46A; }
+  .shot{ flex-shrink:0; width:318px; text-align:center; }
+  .shot .phone{ width:318px; border-radius:34px; border:1px solid #DECBA4;
+                box-shadow:0 24px 60px rgba(62,52,40,.18), 0 4px 14px rgba(62,52,40,.10);
+                display:block; }
+  .shot .cap{ margin-top:16px; font-size:14px; letter-spacing:3px; color:#8A7A63; }
 
-  /* 底部：薯条 + 数据 */
-  .bottom{ display:flex; align-items:center; gap:30px; position:relative; }
-  .bottom img{ width:150px; height:150px; object-fit:contain; flex-shrink:0; }
-  .nums{ flex:1; background:#FFF; border:1px solid #F0E3C4; border-radius:20px; padding:18px 28px; }
-  .nums .row{ display:flex; gap:26px; justify-content:space-between; }
-  .num{ text-align:center; flex:1; }
-  .num .v{ font-size:38px; font-weight:800; color:#E6A23C; }
-  .num .k{ font-size:18px; color:#A08A76; margin-top:2px; }
-  .nums .cap{ font-size:17px; color:#B49B85; margin-top:14px; text-align:center; letter-spacing:1px; }
-  .url{ margin-top:auto; padding-top:20px; text-align:center; font-size:21px; color:#9C6812; letter-spacing:1px;
-        position:relative; }
-  .url b{ font-size:23px; }
+  /* 数据行 */
+  .stats{ margin-top:auto; padding-top:44px; }
+  .stats .row{ display:flex; border-top:1px solid #C9B58C; border-bottom:1px solid #C9B58C; }
+  .st{ flex:1; text-align:center; padding:24px 0 20px; border-right:1px solid #E4D7BC; }
+  .st:last-child{ border-right:none; }
+  .st .v{ font-size:44px; color:#3E3428; }
+  .st .v i{ font-style:normal; font-size:20px; color:#B8761E; margin-left:2px; }
+  .st .k{ font-size:15px; letter-spacing:3px; color:#8A7A63; margin-top:8px; }
+  .stats .cap{ text-align:center; font-size:15px; letter-spacing:2px; color:#8A7A63; margin-top:18px; }
+  .stats .cap b{ color:#6E5F4B; font-weight:600; }
+
+  /* 底部 */
+  .foot{ margin-top:34px; display:flex; justify-content:space-between; align-items:center;
+         font-size:15px; letter-spacing:2px; color:#8A7A63; }
+  .foot .u{ color:#3E3428; }
+  .mascot{ position:absolute; right:66px; top:566px; width:118px; opacity:.98; }
 </style>
 </head>
 <body>
 <div class="poster">
-  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+  <div class="meta">
+    <span><b>自律计划</b>&ensp;SELF·DISCIPLINE&ensp;PLANNER</span>
+    <span>2026&ensp;·&ensp;VIBECODING&ensp;独立作品</span>
+  </div>
+  <hr class="rule" />
 
-  <span class="kicker">VIBECODING 课程作品 · 独立开发</span>
-  <h1>自律<span class="em">计划</span></h1>
-  <div class="slogan">看清时间 · 记住心情 · 和薯条一起把日子过明白</div>
-
-  <div class="creed">
-    <span class="tag">初心</span>
-    <p>做给<b>已经在自律、不需要被激励的人</b>——他们真正缺的，是看清今天的时间怎么安排，<b>记得今天感觉怎样</b>。所以这里没有排行榜和打卡焦虑，只有一张安静的清单、一条想法流，和一只可以随便戳的薯条。</p>
+  <div class="hero">
+    <h1 class="serif">看清今天的<span class="am">时间</span>，<br />记住今天的<span class="am">心情</span>。</h1>
+    <p>自律不需要被催。这里没有排行榜，也没有打卡焦虑——<br />
+       只有一张安静的清单、一条想法流，和一只陪你戳的薯条。</p>
   </div>
 
-  <div class="flow">
-    <div class="step"><div class="no">1</div><div class="t">今天做什么</div><div class="s">待办·时间轴·打卡<br>一张清单</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="no">2</div><div class="t">想了什么</div><div class="s">想法流+情绪<br>本地洞察</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="no">3</div><div class="t">用什么工具</div><div class="s">专注·倒数日·肯定语<br>中英表达练习</div></div>
-    <div class="arr">→</div>
-    <div class="step"><div class="no">4</div><div class="t">我是谁</div><div class="s">情绪周视图·主题换肤<br>成员总览</div></div>
-  </div>
-
-  <div class="grid">
-    <div class="feat"><div class="t">🗂 一张清单装下三件事</div><div class="s">待办、时间轴、打卡混排，带时间按时间排，没时间归「未安排」——少一次选择，多一分清爽</div></div>
-    <div class="feat alt"><div class="t">🎯 四象限，讲人话</div><div class="s">重要且紧急 / 重要不紧急……每个象限都配一句「下一步怎么办」</div></div>
-    <div class="feat alt"><div class="t">🧠 想法不出设备</div><div class="s">本地规则拼装的 AI 洞察：换角度看你的想法流，数据不离开手机</div></div>
-    <div class="feat"><div class="t">🎤 中文 / English 表达练习</div><div class="s">随机抽题 → 准备 → 开讲（可录音），练表达也练口语</div></div>
-    <div class="feat"><div class="t">🍟 薯条，活的</div><div class="s">可以拖着走、戳一下会喵、不懂就问——它是这个 App 的记忆点</div></div>
-    <div class="feat alt"><div class="t">👥 多用户账号体系</div><div class="s">令牌鉴权 + 邀请码注册，各人数据各人看；管理员总览只看数字不看内容</div></div>
-  </div>
-
-  <div class="bottom">
-    <img src="../frontend/assets/pet-fries.png" alt="薯条" />
-    <div class="nums">
-      <div class="row">
-        <div class="num"><div class="v">6</div><div class="k">张数据表</div></div>
-        <div class="num"><div class="v">19</div><div class="k">条云端接口</div></div>
-        <div class="num"><div class="v">903</div><div class="k">条自动化断言</div></div>
-        <div class="num"><div class="v">100%</div><div class="k">测试全绿</div></div>
+  <div class="main">
+    <div class="left">
+      <span class="tag">初&ensp;心</span>
+      <p class="creed serif">做给<b>已经在自律、不需要被激励的人</b>。<br />他们缺的从来不是道理，<br />而是看清时间怎么安排、记得自己感觉怎样。</p>
+      <div class="points">
+        <div class="pt"><span class="no">01</span><div><div class="t">一张清单装下三件事</div><div class="s">待办 · 时间轴 · 打卡混排一处，四象限每个都配一句「下一步怎么办」</div></div></div>
+        <div class="pt"><span class="no">02</span><div><div class="t">想法不出设备</div><div class="s">本地规则拼装的洞察换角度看你的想法流，数据不离开手机</div></div></div>
+        <div class="pt"><span class="no">03</span><div><div class="t">各人数据各人看</div><div class="s">令牌账号 + 邀请码注册，成员总览只看数字不看内容</div></div></div>
       </div>
-      <div class="cap">零框架 vanilla JS 单文件前端 · 云函数 + PostgreSQL 后端 · 96 次提交全程可回滚</div>
+    </div>
+    <div class="shot">
+      <img class="phone" src="poster-shot.png" alt="真实界面" />
+      <div class="cap">真机界面 · 待办与打卡云端同步</div>
     </div>
   </div>
 
-  <div class="url">线上体验：<b>habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com</b></div>
+  <img class="mascot" src="../frontend/assets/pet-fries.png" alt="薯条" />
+
+  <div class="stats">
+    <div class="row">
+      <div class="st"><div class="v mono">6</div><div class="k">数据表</div></div>
+      <div class="st"><div class="v mono">19</div><div class="k">云端接口</div></div>
+      <div class="st"><div class="v mono">903</div><div class="k">自动化断言</div></div>
+      <div class="st"><div class="v mono">100<i>%</i></div><div class="k">测试全绿</div></div>
+      <div class="st"><div class="v mono">96</div><div class="k">次提交可回滚</div></div>
+    </div>
+    <div class="cap">零框架 vanilla JS 单文件前端&ensp;·&ensp;云函数 + PostgreSQL 后端&ensp;·&ensp;<b>全程版本化，每一步都能回到昨天</b></div>
+  </div>
+
+  <div class="foot">
+    <span>线上体验</span>
+    <span class="u mono">habit-tracker-d9gh0mjel767ff0d2-1499348397.tcloudbaseapp.com</span>
+    <span>2026.10</span>
+  </div>
 </div>
 </body>
 </html>
