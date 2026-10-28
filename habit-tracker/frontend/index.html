@@ -375,6 +375,8 @@
            border-radius:999px; padding:5px 14px; font-size:13px; cursor:pointer; }
     .hseg button.on{ background:var(--accent); border-color:var(--accent);
            color:var(--accent-ink); font-weight:600; }
+    /* 四象限说明行：选中哪个象限就解释哪个（Q1-Q4 本身没语义，光看字母猜不出来） */
+    .quad-hint{ font-size:12px; color:var(--muted); margin:4px 0 0; line-height:1.6; }
     /* ===== 待办操作菜单（Day 13）：点 ··· 弹出，一次只开一个 =====
        精进 2：菜单选择器同时作用于思考卡片（.note），样式共用 */
     .todo .menu, .note .menu{ position:absolute; right:8px; top:calc(100% - 2px); background:var(--card);
@@ -1058,7 +1060,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v3.0</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v3.1</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1110,6 +1112,7 @@
         <button type="button" data-quad="q4">Q4</button>
         <button type="button" data-quad="" class="on">未分类</button>
       </div>
+      <p class="quad-hint" id="te-quad-hint" role="status"></p>
     </div>
     <div class="hrow">
       <label class="hl" for="te-date">日期</label>
@@ -1405,6 +1408,7 @@
         <button type="button" data-quad="q4">Q4</button>
         <button type="button" data-quad="" class="on">未分类</button>
       </div>
+      <p class="quad-hint" id="new-quad-hint" role="status"></p>
     </div>
     <div class="hrow" id="new-date-row">
       <label class="hl">日期</label>
@@ -1729,6 +1733,24 @@
   };
   const quadOf = (todo) => (todo && todo.quad && QUADS[todo.quad]) ? todo.quad : null;
   const quadInfo = (todo) => QUADS[quadOf(todo)] || { label: '普通待办（未分类）', color: 'var(--q5)' };
+
+  // 弹窗里象限按钮的说明文案：Q1-Q4 只是代号，新用户猜不出意思，
+  // 所以按钮下面常驻一行小字——选中哪个解释哪个，没选中就给出速查。
+  const QUAD_HINTS = {
+    q1: 'Q1 重要且紧急 —— 马上做',
+    q2: 'Q2 重要不紧急 —— 排进计划做',
+    q3: 'Q3 紧急不重要 —— 尽快处理或交给别人',
+    q4: 'Q4 不重要不紧急 —— 有空再做或删掉',
+    '':  '按重要 / 紧急给待办分类：Q1 重要且紧急 · Q2 重要不紧急 · Q3 紧急不重要 · Q4 不重要不紧急',
+  };
+  // 同步某组象限按钮下面的说明行（以当前带 .on 的按钮为准）
+  const syncQuadHint = (segId) => {
+    const box = el(segId);
+    if (!box) return;
+    const on = box.querySelector('button.on');
+    const hint = el(segId + '-hint');
+    if (hint) hint.textContent = QUAD_HINTS[on ? on.dataset.quad : ''] || QUAD_HINTS[''];
+  };
 
   // ===== mock 示例数据（内容全部编造，只演示渲染，永不落盘；R6 隐私红线）=====
   const mockToday = () => ([
@@ -2266,6 +2288,7 @@
     CALS['te-date'].sync();
     el('te-quad').querySelectorAll('button').forEach(b =>
       b.classList.toggle('on', b.dataset.quad === teQuad));
+    syncQuadHint('te-quad');
     el('te-modal').hidden = false;
     el('te-name').focus();
   };
@@ -3120,6 +3143,7 @@
     b.addEventListener('click', () => {
       teQuad = b.dataset.quad;
       el('te-quad').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+      syncQuadHint('te-quad');
     });
   });
   const submitTodoEdit = async () => {
@@ -3200,6 +3224,7 @@
     nmQuad = '';
     el('new-quad').querySelectorAll('button').forEach(b =>
       b.classList.toggle('on', b.dataset.quad === ''));
+    syncQuadHint('new-quad');
     el('new-name').value = '';
     el('new-time').value = '';
     // 日期都默认「正在看的这一天」：看今天时就是今天，看 28 号时新建也落在 28 号
@@ -3221,6 +3246,7 @@
     nmQuad = '';
     el('new-quad').querySelectorAll('button').forEach(b =>
       b.classList.toggle('on', b.dataset.quad === ''));
+    syncQuadHint('new-quad');
     el('new-name').focus();
   };
 
@@ -3233,6 +3259,7 @@
     nmQuad = QUADS[h.quad] ? h.quad : '';
     el('new-quad').querySelectorAll('button').forEach(b =>
       b.classList.toggle('on', b.dataset.quad === nmQuad));
+    syncQuadHint('new-quad');
     el('new-name').value = h.name;
     el('new-time').value = h.time || '';
     el('new-start').value = h.start;
@@ -3253,6 +3280,7 @@
       nmQuad = b.dataset.quad;
       el('new-quad').querySelectorAll('button').forEach(x =>
         x.classList.toggle('on', x === b));
+      syncQuadHint('new-quad');
     });
   });
   el('new-minus').addEventListener('click', () => {
