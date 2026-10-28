@@ -717,6 +717,23 @@
     .theme-info{ font-size:12px; color:var(--muted); margin-top:8px; }
     .theme-info .tdot{ display:inline-block; width:10px; height:10px; border-radius:50%;
                         background:var(--accent); margin:0 4px 0 2px; vertical-align:-1px; }
+    /* ===== 账号卡与成员总览（Day 31 二轮，多用户） ===== */
+    .acct-tip{ font-size:12px; color:var(--muted); line-height:1.6; margin:0 0 10px; }
+    .acct-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+    .acct-actions button{ flex:1; min-width:96px; border:1px solid var(--line); background:var(--card2);
+                          color:var(--ink); border-radius:10px; padding:9px 0; font-size:13px;
+                          font-family:inherit; cursor:pointer; }
+    .acct-actions button.acct-main{ border:none; background:var(--accent); color:var(--accent-ink);
+                          font-weight:600; }
+    .acct-actions button:disabled{ opacity:.5; cursor:default; }
+    .auth-err{ font-size:12px; color:#c0392b; min-height:16px; margin:8px 0 0; }
+    .ov-row{ display:flex; align-items:center; gap:8px; padding:10px 0; border-bottom:1px solid var(--line); }
+    .ov-row:last-child{ border-bottom:none; }
+    .ov-name{ flex:1; font-size:14px; color:var(--ink); }
+    .ov-name .ov-tag{ font-size:10px; color:var(--accent-deep); border:1px solid var(--line);
+                      border-radius:999px; padding:0 5px; margin-left:6px; }
+    .ov-num{ font-size:12px; color:var(--muted); text-align:right; line-height:1.5; }
+    .ov-num b{ color:var(--ink); font-size:14px; }
     .guide li{ font-size:13px; color:var(--ink); margin:0 0 8px; line-height:1.6; }
     .guide{ margin:0; padding-left:18px; }
     .guide li b{ color:var(--accent-deep); }
@@ -962,6 +979,28 @@
         </div>
       </div>
 
+      <!-- Day 31 二轮：账号卡（多用户）。没登录 = 游客，行为和以前完全一致（看公共数据）；
+           登录后服务端按令牌认人，只有自己能看见自己写的东西。 -->
+      <div class="card" id="acct-card">
+        <h2>账号 <span class="sub" id="acct-sub">游客</span></h2>
+        <div id="acct-guest">
+          <p class="acct-tip">现在是游客身份，看到的是公共数据——别人写的东西你也能看见，你写的别人也看得见。登录后就只有你自己能看。</p>
+          <div class="acct-actions">
+            <button type="button" class="acct-main" id="acct-login">登录</button>
+            <button type="button" id="acct-register">用邀请码注册</button>
+          </div>
+        </div>
+        <div id="acct-user" hidden>
+          <div class="set-row"><span>当前账号</span><span class="sv" id="acct-name">—</span></div>
+          <div class="set-row"><span>角色</span><span class="sv" id="acct-role">—</span></div>
+          <div class="acct-actions">
+            <button type="button" id="acct-overview" hidden>成员总览</button>
+            <button type="button" id="acct-logout">退出登录</button>
+          </div>
+          <p class="acct-tip">已登录：你的待办、心情与打卡只有这个账号能看到。</p>
+        </div>
+      </div>
+
       <div class="card">
         <h2>本周情绪 <span class="sub" id="mood-week-range"></span></h2>
         <div class="mood-week" id="mood-week"></div>
@@ -1019,7 +1058,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.8</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v3.0</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1219,6 +1258,47 @@
       <button id="affirm-bg" type="button" title="切换背景图">换背景 1/5</button>
       <button id="affirm-like" type="button">♡</button>
     </div>
+  </div>
+</div>
+
+<!-- Day 31 二轮：登录 / 注册弹窗。注册要邀请码（服务端环境变量），挡住陌生人乱注册 -->
+<div class="overlay" id="auth-modal" hidden>
+  <div class="modal" id="auth-box">
+    <div class="hm-head">
+      <button id="auth-close" type="button" class="hm-x" aria-label="关闭">✕</button>
+      <b class="hm-title" id="auth-title">登录</b>
+      <span class="hm-save" id="auth-submit" role="button" tabindex="0">确定</span>
+    </div>
+    <div class="nm-seg" id="auth-seg" role="group" aria-label="登录或注册">
+      <button type="button" data-auth="login" class="on" aria-pressed="true">登录</button>
+      <button type="button" data-auth="register" aria-pressed="false">注册</button>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="auth-name">用户名</label>
+      <span class="hv"><input id="auth-name" maxlength="20" autocomplete="username" placeholder="2–20 个字" /></span>
+    </div>
+    <div class="hrow">
+      <label class="hl" for="auth-pass">密码</label>
+      <span class="hv"><input id="auth-pass" type="password" maxlength="64" autocomplete="current-password" placeholder="至少 6 位" /></span>
+    </div>
+    <div class="hrow" id="auth-invite-row" hidden>
+      <label class="hl" for="auth-invite">邀请码</label>
+      <span class="hv"><input id="auth-invite" maxlength="40" placeholder="问管理员要" /></span>
+    </div>
+    <p class="auth-err" id="auth-err" role="status"></p>
+  </div>
+</div>
+
+<!-- Day 31 二轮：成员总览（仅管理员）。只显示数字，看不到别人写了什么 -->
+<div class="overlay" id="ov-modal" hidden>
+  <div class="modal" id="ov-box">
+    <div class="hm-head">
+      <button id="ov-close" type="button" class="hm-x" aria-label="关闭">✕</button>
+      <b class="hm-title">成员总览</b>
+      <span class="hm-save" id="ov-date">—</span>
+    </div>
+    <div id="ov-body"></div>
+    <p class="acct-tip">只显示数字（完成数 / 打卡数 / 最后活跃），看不到别人具体写了什么。</p>
   </div>
 </div>
 
@@ -1478,6 +1558,27 @@
   };
   const saveData = (d) => localStorage.setItem(KEY, JSON.stringify(d));
 
+  // ===== 登录态（Day 31 二轮：多用户）=====
+  // 只存服务端发的令牌 + 用户名/角色，**不存 uid 也不存密码**。
+  // 令牌是 64 位 hex：格式不对的直接当没登录，免得拿着垃圾串去骚扰服务端。
+  const AUTH_KEY = 'habit-tracker-auth';
+  let auth = null;
+  try {
+    const rawAuth = localStorage.getItem(AUTH_KEY);
+    const o = rawAuth ? JSON.parse(rawAuth) : null;
+    if (o && typeof o.token === 'string' && /^[0-9a-f]{64}$/.test(o.token)) {
+      auth = { token: o.token, username: String(o.username || ''), role: o.role === 'admin' ? 'admin' : 'member' };
+    }
+  } catch (e) { auth = null; }
+  const saveAuth = (o) => {
+    auth = { token: o.token, username: o.username, role: o.role === 'admin' ? 'admin' : 'member' };
+    try { localStorage.setItem(AUTH_KEY, JSON.stringify(auth)); } catch (e) { /* 存不下就只在本次会话有效 */ }
+  };
+  const clearAuth = () => {
+    auth = null;
+    try { localStorage.removeItem(AUTH_KEY); } catch (e) { /* 忽略 */ }
+  };
+
   // ===== 云端接口客户端（Day 20 接线；Day 22 补齐改与删）=====
   // 为什么要有这一段：从 Day 20 起，页面的数据来源从"只有浏览器本机"变成"云端优先、本机兜底"。
   // 铁律：前端所有网络请求**只走这里**（apiGet / apiPost / apiPatch / apiDelete），别处不许直接 fetch ——
@@ -1512,9 +1613,14 @@
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT) : null;
     let res;
+    // Day 31：所有请求在这里统一带上令牌（铁律的另一半 —— 别处不许自己拼 Authorization）。
+    // 令牌只存本机，且服务端只认 sha256；前端拿不到别人的 uid，就没法冒充。
+    const opts = Object.assign({}, options);
+    opts.headers = Object.assign({}, (options && options.headers) || {});
+    if (auth && auth.token) opts.headers.Authorization = 'Bearer ' + auth.token;
     try {
       res = await fetch(API_BASE + path,
-        Object.assign(ctrl ? { signal: ctrl.signal } : {}, options));
+        Object.assign(ctrl ? { signal: ctrl.signal } : {}, opts));
     } catch (e) {
       // 第一类：请求本身就没走通 —— 断网 / 超时 / 跨域被浏览器拦
       if (timer) clearTimeout(timer);
@@ -1533,6 +1639,8 @@
                  message: (body && body.message) || '' };
       }
       if (!body || body.code !== 0) {
+        // Day 31：令牌过期/失效 → 清掉本机令牌并回游客态，别让页面一直拿着废牌请求
+        if (code === 401 && auth && auth.token) onAuthExpired();
         // 第三类：业务拒绝 —— 服务端的中文原因原样带出去
         return { ok: false, kind: 'business', offline: false, status: res.status,
                  code: code, message: (body && body.message) || ERR_FALLBACK };
@@ -2657,6 +2765,153 @@
       b.classList.toggle('on', b.dataset.mode === insightMode));
   };
 
+  // ===== 账号：登录 / 注册 / 退出 / 成员总览（Day 31 二轮，多用户）=====
+  // 设计前提：**登录不是墙**。没登录仍然是游客（看到公共数据，与 v2.8 完全一样），
+  // 所以正在用这个页面的同学不会因为这次上线被打断；登录之后才换成自己的身份。
+  // 前端只持有令牌，uid 与"谁的数据"全由服务端按令牌判定 —— 前端没有任何办法冒充别人。
+  let authMode = 'login';
+  let authBusy = false;
+  const escTxt = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  const renderAcct = () => {
+    const on = !!(auth && auth.token);
+    el('acct-sub').textContent = on ? (auth.role === 'admin' ? '管理员' : '已登录') : '游客';
+    el('acct-guest').hidden = on;
+    el('acct-user').hidden = !on;
+    if (on) {
+      el('acct-name').textContent = auth.username || '—';
+      el('acct-role').textContent = auth.role === 'admin' ? '管理员（可以看总览）' : '成员';
+      el('acct-overview').hidden = auth.role !== 'admin';
+    }
+  };
+
+  /** 令牌失效的统一出口：清本机令牌 → 回游客态 → 说清楚为什么（apiFetch 里调） */
+  const onAuthExpired = () => {
+    if (!auth) return;
+    clearAuth();
+    renderAcct();
+    showToast('登录已过期，请重新登录');
+  };
+
+  const setAuthMode = (m) => {
+    authMode = m === 'register' ? 'register' : 'login';
+    el('auth-seg').querySelectorAll('button').forEach(b => {
+      const on = b.dataset.auth === authMode;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    el('auth-title').textContent = authMode === 'register' ? '注册' : '登录';
+    el('auth-invite-row').hidden = authMode !== 'register';
+    el('auth-submit').textContent = authMode === 'register' ? '注册' : '确定';
+    el('auth-pass').setAttribute('autocomplete', authMode === 'register' ? 'new-password' : 'current-password');
+    el('auth-err').textContent = '';
+  };
+
+  const openAuth = (mode) => {
+    setAuthMode(mode);
+    el('auth-pass').value = '';
+    el('auth-modal').hidden = false;
+    setTimeout(() => { try { el('auth-name').focus(); } catch (e) { /* 忽略 */ } }, 30);
+  };
+
+  /** 提交登录/注册。成功后立刻 refreshDay() —— 身份变了，数据必须重新按新身份取一遍 */
+  const submitAuth = async () => {
+    if (authBusy) return;
+    const username = el('auth-name').value.trim();
+    const password = el('auth-pass').value;
+    const invite = el('auth-invite').value.trim();
+    const err = el('auth-err');
+    err.textContent = '';
+    if (!username || !password) { err.textContent = '用户名和密码都要填'; return; }
+    if (authMode === 'register' && !invite) { err.textContent = '注册需要邀请码（问管理员要）'; return; }
+    authBusy = true;
+    const btn = el('auth-submit');
+    btn.textContent = '请稍等…';
+    try {
+      const r = authMode === 'register'
+        ? await apiPost('/auth/register', { username: username, password: password, invite: invite })
+        : await apiPost('/auth/login', { username: username, password: password });
+      if (!r.ok) { err.textContent = r.message || '没成功，再试一次'; return; }
+      saveAuth({ token: r.data.token, username: r.data.user.username, role: r.data.user.role });
+      el('auth-modal').hidden = true;
+      renderAcct();
+      showToast(authMode === 'register' ? '注册成功，以后用这个名字登录' : '已登录：' + auth.username);
+      await refreshDay();
+    } finally {
+      authBusy = false;
+      btn.textContent = authMode === 'register' ? '注册' : '确定';
+    }
+  };
+
+  const logout = async () => {
+    if (!auth) return;
+    try { await apiPost('/auth/logout', {}); } catch (e) { /* 删令牌失败也要让本机退出 */ }
+    clearAuth();
+    renderAcct();
+    showToast('已退出登录，现在看到的是公共数据');
+    await refreshDay();
+  };
+
+  /** 用本机令牌换回最新身份（改名/角色变更时页面不至于显示旧的） */
+  const syncMe = async () => {
+    if (!auth || !apiReady()) return;
+    const r = await apiGet('/auth/me');
+    if (r.ok && r.data && r.data.user) {
+      saveAuth({ token: auth.token, username: r.data.user.username, role: r.data.user.role });
+      renderAcct();
+    }
+    // 401 由 apiFetch 统一处理（清令牌 + 提示），这里不重复
+  };
+
+  const seenText = (ms) => {
+    if (!ms) return '还没上线过';
+    const d = new Date(ms);
+    const p = (n) => String(n).padStart(2, '0');
+    return '最后活跃 ' + (d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  };
+
+  const renderOverview = (d) => {
+    el('ov-date').textContent = d.date;
+    const rows = (d && d.users) || [];
+    if (!rows.length) { el('ov-body').textContent = '还没有人注册'; return; }
+    el('ov-body').innerHTML = rows.map(u =>
+      '<div class="ov-row"><span class="ov-name">' + escTxt(u.username)
+      + (u.role === 'admin' ? '<span class="ov-tag">管理员</span>' : '') + '</span>'
+      + '<span class="ov-num">待办 <b>' + u.done + '/' + u.total + '</b><br>'
+      + '打卡 <b>' + u.habitDone + '/' + u.habitTotal + '</b><br>' + seenText(u.lastSeenAt) + '</span></div>'
+    ).join('');
+  };
+
+  const openOverview = async () => {
+    el('ov-modal').hidden = false;
+    el('ov-body').textContent = '正在读取…';
+    const r = await apiGet('/admin/overview');
+    if (!r.ok) {
+      el('ov-body').textContent = r.message || '没读出来，稍后再试';
+      return;
+    }
+    renderOverview(r.data);
+  };
+
+  el('acct-login').addEventListener('click', () => openAuth('login'));
+  el('acct-register').addEventListener('click', () => openAuth('register'));
+  el('acct-logout').addEventListener('click', logout);
+  el('acct-overview').addEventListener('click', openOverview);
+  el('auth-close').addEventListener('click', () => { el('auth-modal').hidden = true; });
+  el('ov-close').addEventListener('click', () => { el('ov-modal').hidden = true; });
+  el('auth-submit').addEventListener('click', submitAuth);
+  el('auth-seg').querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => setAuthMode(b.dataset.auth));
+  });
+  ['auth-name', 'auth-pass', 'auth-invite'].forEach(id => {
+    el(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') submitAuth(); });
+  });
+  // 点遮罩空白处关闭（与其它弹窗一致）
+  ['auth-modal', 'ov-modal'].forEach(id => {
+    el(id).addEventListener('click', (e) => { if (e.target === el(id)) el(id).hidden = true; });
+  });
+
   // ===== 我的（F5 MVP）：名字 / 使用天数 / 最近 7 天情绪 =====
   const renderMe = () => {
     // 名字：编辑态时不覆盖输入框
@@ -2725,6 +2980,7 @@
     document.body.classList.toggle('demo', demoMode);
     el('demo-banner').hidden = !demoMode;
     renderWeek(); renderToday(); renderMe(); renderThoughts(); syncFab();
+    renderAcct();                                           // Day 31：账号卡随渲染刷新
     renderCloudHint();                                      // Day 20：数据来源 + 最后更新时间
     checkMemReminders();                                    // Day 21：提醒条随渲染刷新
   };
@@ -4666,7 +4922,8 @@
   });
 
   // ===== 启动 =====
-  refreshDay().then(() => {
+  refreshDay().then(async () => {
+    await syncMe();          // Day 31：有令牌就换回最新身份（角色/改名），没有就保持游客
     // 数据就绪后再摆一次薯条：上次拖到的位置存在 data.pet.pos 里（首帧只能先摆默认位）
     initPetPos();
     // 首访：数据就绪且没看过引导 → 薯条自动登场（演示模式不打扰；

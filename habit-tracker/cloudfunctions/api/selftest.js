@@ -597,7 +597,10 @@ const writeResponder = (opt) => {
       'savePlanDayMood', 'savePlanDayMoods', 'upsert',
       // Day 29 十四轮：打卡上云新增的（含真删除原语 remove）
       'listHabits', 'listHabitLogsByDate', 'saveHabit', 'deleteHabit', 'saveHabitLog',
-      'saveHabitsBulk', 'saveHabitLogsBulk', 'mapHabit', 'remove']
+      'saveHabitsBulk', 'saveHabitLogsBulk', 'mapHabit', 'remove',
+      // Day 31 二轮：多用户账号新增的（账号 / 令牌 / 总览聚合）
+      'countUsers', 'createUser', 'findUserByName', 'findUserByUid', 'listUsers',
+      'listAllTokens', 'saveToken', 'findToken', 'deleteToken', 'touchUser', 'overviewRows']
        .sort().join(','));
 
   // —— 9.3 数据访问层能脱离路由独立工作（这才是"拆干净了"的证明）——
@@ -1275,6 +1278,170 @@ const writeResponder = (opt) => {
   responder = () => ({ rows: [] });
   r = await call({ httpMethod: 'POST', path: '/api/habits/import', body: '{"habits":[]}' });
   eq('路由：POST /api/habits/import 命中固定路由（不是 PUT/DELETE 的单参数路由）', r.code, 400);
+
+  // =========================================================================
+  // 13. 多用户账号（Day 31 二轮）：注册 / 登录 / 令牌 / 隔离 / 总览
+  // =========================================================================
+  // 这一组要证明的核心只有一句：**带着 A 的令牌，改不到 B 的数据**。
+  // 其余（邀请码、大小写重名、密码错同一句、过期回 401）都是围绕这句的护栏。
+  installFakeFetch();
+  {                     // 用块作用域把这一组的变量圈起来（外层已有同名的 r）
+  const store = { users: [], tokens: [], checkins: [], habits: [], logs: [] };
+  const parseQ = (url) => {
+    const out = {};
+    (url.split('?')[1] || '').split('&').filter(Boolean).forEach((kv) => {
+      const i = kv.indexOf('=');
+      const k = decodeURIComponent(kv.slice(0, i));
+      const v = decodeURIComponent(kv.slice(i + 1) || '');
+      out[k] = v;
+    });
+    return out;
+  };
+  const eqVal = (s) => String(s || '').replace(/^eq\./, '');
+  responder = (url, table, init) => {
+    const method = String(init.method || 'GET').toUpperCase();
+    const q = parseQ(url);
+    const rowsOf = (arr) => ({ rows: arr, total: arr.length });
+
+    if (table === 'app_users') {
+      if (method === 'POST') {
+        const raw = JSON.parse(init.body);
+        const row = Array.isArray(raw) ? raw[0] : raw;
+        store.users.push(row);
+        return rowsOf([row]);
+      }
+      if (method === 'PATCH') {
+        store.users.forEach((u) => { if (u.uid === eqVal(q.uid)) Object.assign(u, JSON.parse(init.body)); });
+        return rowsOf([]);
+      }
+      let rows = store.users.slice();
+      if (q.username_lc) rows = rows.filter((u) => String(u.username_lc || '').toLowerCase() === eqVal(q.username_lc));
+      if (q.uid) rows = rows.filter((u) => u.uid === eqVal(q.uid));
+      return rowsOf(rows);
+    }
+    if (table === 'auth_tokens') {
+      if (method === 'POST') {
+        const raw = JSON.parse(init.body);
+        const list = Array.isArray(raw) ? raw : [raw];
+        list.forEach((row) => {
+          const i = store.tokens.findIndex((t) => t.token_hash === row.token_hash);
+          if (i >= 0) store.tokens[i] = row; else store.tokens.push(row);
+        });
+        return rowsOf(list);
+      }
+      if (method === 'DELETE') {
+        const before = store.tokens.length;
+        store.tokens = store.tokens.filter((t) => t.token_hash !== eqVal(q.token_hash));
+        return rowsOf(new Array(before - store.tokens.length).fill({}));
+      }
+      let rows = store.tokens.slice();
+      if (q.token_hash) rows = rows.filter((t) => t.token_hash === eqVal(q.token_hash));
+      return rowsOf(rows);
+    }
+    if (table === 'checkins') {
+      if (method === 'POST') {
+        const raw = JSON.parse(init.body);
+        const list = Array.isArray(raw) ? raw : [raw];
+        list.forEach((row) => store.checkins.push(Object.assign({ id: store.checkins.length + 1 }, row)));
+        return rowsOf(list.map((r, i) => Object.assign({ id: store.checkins.length - list.length + i + 1 }, r)));
+      }
+      let rows = store.checkins.slice();
+      if (q.uid) rows = rows.filter((r) => r.uid === eqVal(q.uid));
+      if (q.date) rows = rows.filter((r) => r.date === eqVal(q.date));
+      return rowsOf(rows);
+    }
+    if (table === 'habits') return rowsOf(store.habits.slice());
+    if (table === 'habit_logs') return rowsOf(store.logs.slice());
+    return rowsOf([]);
+  };
+
+  const callWith = (event, token) => {
+    if (token) event.headers = Object.assign({}, event.headers, { Authorization: 'Bearer ' + token });
+    return call(event);
+  };
+
+  // 13.1 邀请码：没配置 → 拒绝；配了但不对 → 403
+  delete process.env.INVITE_CODE;
+  let r = await call({ httpMethod: 'POST', path: '/api/auth/register', body: JSON.stringify({ username: '小王', password: 'secret123', invite: 'x' }) });
+  ok('注册：服务端没配邀请码时拒绝（不开放裸注册）', r.code === 403 && r.message.indexOf('邀请码') > -1, r.message);
+
+  process.env.INVITE_CODE = 'team-only-2026';
+  r = await call({ httpMethod: 'POST', path: '/api/auth/register', body: JSON.stringify({ username: '小王', password: 'secret123', invite: 'wrong' }) });
+  eq('注册：邀请码不对 → 403', r.code, 403);
+  eq('注册：邀请码不对时一个账号都不建', store.users.length, 0);
+
+  // 13.2 第一个注册者是管理员
+  const regA = await call({ httpMethod: 'POST', path: '/api/auth/register', body: JSON.stringify({ username: '小王', password: 'secret123', invite: 'team-only-2026' }) });
+  eq('注册：第一个账号成功', regA.code, 0);
+  ok('注册：返回 64 位 hex 令牌', typeof regA.data.token === 'string' && /^[0-9a-f]{64}$/.test(regA.data.token));
+  eq('注册：第一个注册者自动成为管理员', regA.data.user.role, 'admin');
+  ok('注册：响应里没有密码哈希与 salt', !('pass_hash' in regA.data.user) && !('passSalt' in regA.data.user));
+  ok('注册：库里存的是哈希不是明文', store.users[0].pass_hash !== 'secret123' && store.users[0].pass_salt.length >= 16);
+
+  const regB = await call({ httpMethod: 'POST', path: '/api/auth/register', body: JSON.stringify({ username: '小李', password: 'secret456', invite: 'team-only-2026' }) });
+  eq('注册：第二个账号角色是普通成员', regB.data.user.role, 'member');
+
+  // 13.3 校验分支
+  r = await call({ httpMethod: 'POST', path: '/api/auth/register', body: JSON.stringify({ username: '小李', password: 'secret456', invite: 'team-only-2026' }) });
+  eq('注册：重名（含大小写不同）→ 400', r.code, 400);
+  r = await call({ httpMethod: 'POST', path: '/api/auth/register', body: JSON.stringify({ username: '阿明', password: '123', invite: 'team-only-2026' }) });
+  ok('注册：密码太短 → 400 且说明位数', r.code === 400 && r.message.indexOf('密码') > -1, r.message);
+
+  // 13.4 登录：成功 / 密码错与用户不存在回同一句
+  const loginA = await call({ httpMethod: 'POST', path: '/api/auth/login', body: JSON.stringify({ username: '小王', password: 'secret123' }) });
+  eq('登录：正确凭据成功', loginA.code, 0);
+  const wrongPwd = await call({ httpMethod: 'POST', path: '/api/auth/login', body: JSON.stringify({ username: '小王', password: 'nope-nope' }) });
+  const noUser = await call({ httpMethod: 'POST', path: '/api/auth/login', body: JSON.stringify({ username: '查无此人', password: 'nope-nope' }) });
+  eq('登录：密码错 → 401', wrongPwd.code, 401);
+  eq('登录：用户不存在 → 401（与密码错同一句，不给撞库者区分依据）', noUser.message, wrongPwd.message);
+
+  // 13.5 me / 无效令牌 / 登出
+  const tokenA = loginA.data.token;
+  const tokenB = regB.data.token;
+  r = await callWith({ httpMethod: 'GET', path: '/api/auth/me' }, tokenA);
+  eq('me：带令牌能换回自己', r.code === 0 ? r.data.user.username : null, '小王');
+  r = await callWith({ httpMethod: 'GET', path: '/api/auth/me' }, 'deadbeef');
+  eq('me：令牌格式非法 → 401（不静默当游客）', r.code, 401);
+  r = await callWith({ httpMethod: 'GET', path: '/api/auth/me' }, 'a'.repeat(64));
+  eq('me：令牌查不到 → 401（不静默当游客）', r.code, 401);
+  r = await call({ httpMethod: 'GET', path: '/api/auth/me' });
+  eq('me：游客调用 → 401', r.code, 401);
+
+  // 13.6 隔离：A 写的待办 B 读不到，写入体里的 uid 由服务端按令牌决定
+  const addA = await callWith({
+    httpMethod: 'POST', path: '/api/checkins',
+    body: JSON.stringify({ date: '2026-10-28', text: 'A 的私事', quad: 'q1', clientReqId: 'req-a-1' }),
+  }, tokenA);
+  eq('隔离：A 带令牌建待办成功', addA.code, 0);
+  eq('隔离：写入体的 uid 是 A 的（不是 DEMO_UID，也不是前端传的）', store.checkins[store.checkins.length - 1].uid, regA.data.user.uid);
+  const listB = await callWith({ httpMethod: 'GET', path: '/api/checkins?date=2026-10-28' }, tokenB);
+  const bTexts = JSON.stringify(listB.data === null ? [] : listB.data);
+  ok('隔离：B 读不到 A 的待办', bTexts.indexOf('A 的私事') < 0, bTexts.slice(0, 120));
+
+  // 13.7 总览：游客 401、普通成员 403、管理员能拿到数字、且**不含内容字段**
+  r = await call({ httpMethod: 'GET', path: '/api/admin/overview?date=2026-10-28' });
+  eq('总览：游客 → 401', r.code, 401);
+  r = await callWith({ httpMethod: 'GET', path: '/api/admin/overview?date=2026-10-28' }, tokenB);
+  eq('总览：普通成员 → 403', r.code, 403);
+  r = await callWith({ httpMethod: 'GET', path: '/api/admin/overview', queryStringParameters: { date: '2026-10-28' } }, tokenA);
+  eq('总览：管理员能读', r.code, 0, r.message);
+  const meRow = ((r.data && r.data.users) || []).find((u) => u.username === '小王') || {};
+  ok('总览：数字正确（A 今天 0/1）', meRow.done === 0 && meRow.total === 1, JSON.stringify(meRow));
+  ok('总览：只有数字，没有待办文本 / 心情（隐私边界）',
+     !('text' in meRow) && !('mood' in meRow) && !('uid' in meRow), JSON.stringify(meRow));
+  ok('总览：带最后活跃时间（毫秒数或 null）', meRow.lastSeenAt === null || typeof meRow.lastSeenAt === 'number');
+  r = await callWith({ httpMethod: 'GET', path: '/api/admin/overview', queryStringParameters: { date: '2026-13-99' } }, tokenA);
+  eq('总览：日期非法 → 400', r.code, 400);
+
+  // 13.8 登出只删当前令牌
+  r = await callWith({ httpMethod: 'POST', path: '/api/auth/logout' }, tokenA);
+  eq('登出：成功', r.code, 0);
+  r = await callWith({ httpMethod: 'GET', path: '/api/auth/me' }, tokenA);
+  eq('登出：旧令牌立刻失效（401）', r.code, 401);
+  r = await callWith({ httpMethod: 'GET', path: '/api/auth/me' }, tokenB);
+  eq('登出：别的设备的令牌不受影响', r.code === 0 ? r.data.user.username : null, '小李');
+  delete process.env.INVITE_CODE;
+  }
 
   global.fetch = realFetch;
   console.log = realLog;

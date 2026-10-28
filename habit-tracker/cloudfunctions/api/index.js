@@ -44,10 +44,12 @@
 
 // —— 数据访问层（Day 19 从本文件拆出去的那一层）：所有数据库读写的唯一入口 ——
 const db = require('./db.js');
+// —— 密码与令牌只依赖 Node 内置 crypto（零依赖铁律，见文件头） ——
+const crypto = require('crypto');
 
 // —— 服务身份：写进健康检查响应里，用来确认"公网地址返回的是我自己的服务" ——
 const SERVICE = 'Self discipline plan';
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 
 /**
  * 业务接口的统一响应形状（见 api-contract.md 1.2）：
@@ -117,7 +119,8 @@ const pickQuery = (event) => {
 const pickBody = (event) => {
   const raw = event.body;
   const PLAIN = ['date', 'text', 'time', 'quad', 'clientReqId', 'mood', 'items',
-                  'name', 'perDay', 'start', 'end', 'count', 'habits', 'logs'];
+                  'name', 'perDay', 'start', 'end', 'count', 'habits', 'logs',
+                  'username', 'password', 'invite'];
 
   // 没有 body：可能是控制台把字段摊在了 event 顶层
   if (raw === undefined || raw === null || raw === '') {
@@ -148,11 +151,29 @@ const pickBody = (event) => {
 /**
  * 取当前身份 uid。见文件头「身份从哪来」。
  * 注意：**永远不从请求参数里取 uid**（契约 1.4 的第一道闸）。
+ *
+ * Day 31：`context.__authUid` 由 main() 在入口处用令牌解析后注入（异步查库只能在那一层做），
+ * 这里保持同步 —— 十几个 handler 都直接调它，改成 async 会牵一发动全身。
  */
 const resolveUid = (context) => {
+  if (context && context.__authUid) return String(context.__authUid);
   const fromAuth = (context && context.userInfo && context.userInfo.uid) || '';
   if (fromAuth) return String(fromAuth);
   return String(process.env.DEMO_UID || '');
+};
+
+/** 当前登录账号（游客 = null）。角色判断一律看库里的 role，不看请求参数 */
+const currentUser = (context) => (context && context.__authUser) || null;
+
+/**
+ * 管理员闸门：通过返回 null，不通过返回**已经拼好的响应**。
+ * 用法：`const no = requireAdmin(context); if (no) return no;`
+ */
+const requireAdmin = (context) => {
+  const u = currentUser(context);
+  if (!u) return reply(401, '还没有登录', null);
+  if (u.role !== 'admin') return reply(403, '需要管理员权限', null);
+  return null;
 };
 
 // ===========================================================================
@@ -939,6 +960,246 @@ const importHabits = async (event, context) => {
  * **固定路径**写在这张表里（精确匹配，一眼看得出有哪些接口）；
  * 带路径参数的路由（`:id`）在下面另一张表 `idRoutes` 里，用正则匹配。
  */
+// ===========================================================================
+// 七、账号与令牌（Day 31 多用户 · 契约 §1.4 / §三）
+// ===========================================================================
+// 为什么要有这一节：在此之前没有登录，云函数只能退化到环境变量里那个固定的
+// DEMO_UID —— 所有人都是同一个人，同学写的待办在我这里也看得见。
+//
+// 安全设计（四条，改动时逐条核对）：
+//   ① 密码只存 scrypt 派生值 + 随机 salt，响应里永不出现；
+//   ② 令牌是 32 字节随机串，库里只存 sha256；退出登录删行即失效（不用 JWT 就是不想要"撤销不掉"）；
+//   ③ 「我是谁」只由令牌决定，`resolveUid` 已不再读任何请求参数；
+//   ④ 带令牌但令牌无效/过期 → 401，**绝不静默当游客**（否则"过期"会变成"看到别人的数据"）。
+const TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;   // 令牌 30 天
+const PASS_MIN = 6;
+const PASS_MAX = 64;
+const NAME_MIN = 2;
+const NAME_MAX = 20;
+
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+const randomHex = (bytes) => crypto.randomBytes(bytes).toString('hex');
+/** 账号 uid：u_ + 12 位 hex。不用用户名当 uid —— 改名不搬数据，中文/空格也不会污染业务表 */
+const newUid = () => 'u_' + randomHex(6);
+
+/** 密码哈希：scrypt + 随机 salt（salt 必须与 hash 一起存，校验时重算） */
+const hashPassword = (password, saltHex) => {
+  const salt = saltHex || randomHex(16);
+  const hash = crypto.scryptSync(password, Buffer.from(salt, 'hex'), 32).toString('hex');
+  return { salt: salt, hash: hash };
+};
+
+/** 校验密码：先重算再**定长比较**，避免按字节提前返回带来的计时侧信道 */
+const passwordMatches = (password, saltHex, hashHex) => {
+  const got = crypto.scryptSync(password, Buffer.from(saltHex, 'hex'), 32);
+  const want = Buffer.from(String(hashHex), 'hex');
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+};
+
+/** 从请求头取 Bearer 令牌（网关给的头名大小写不固定，两种都认） */
+const pickBearer = (event) => {
+  const h = (event && event.headers) || {};
+  const raw = h.Authorization || h.authorization || '';
+  const m = /^Bearer\s+(\S+)$/i.exec(String(raw).trim());
+  return m ? m[1] : '';
+};
+
+/**
+ * 用令牌换身份。三种结果：
+ *   null         —— 没带令牌（游客，按老行为继续用 DEMO_UID）
+ *   {invalid:true} —— 带了但无效/过期（调用方必须回 401）
+ *   {uid,user,tokenHash} —— 有效
+ * 令牌格式先按正则挡一道：不查库就能拒掉乱七八糟的串，省一次查询也少一个探测面。
+ */
+const resolveAuth = async (event) => {
+  const token = pickBearer(event);
+  if (!token) return null;
+  if (!/^[0-9a-f]{64}$/.test(token)) return { invalid: true };
+  const tokenHash = sha256(token);
+  const row = await db.findToken(tokenHash);
+  if (!row) return { invalid: true };
+  if (Date.parse(row.expires_at) <= Date.now()) {
+    try { await db.deleteToken(tokenHash); } catch (e) { /* 顺手清理，失败不影响判定 */ }
+    return { invalid: true };
+  }
+  const user = await db.findUserByUid(row.uid);
+  if (!user) return { invalid: true };
+  return { uid: user.uid, user: user, tokenHash: tokenHash };
+};
+
+/** 发一个令牌，返回明文（只在这一刻存在，之后库里只有 sha256） */
+const issueToken = async (uid) => {
+  const token = randomHex(32);
+  await db.saveToken({
+    tokenHash: sha256(token),
+    uid: uid,
+    expiresAt: new Date(Date.now() + TOKEN_TTL_MS).toISOString(),
+  });
+  return token;
+};
+
+/** 登录/注册成功后的统一返回形状（uid 给自己的，pass_hash 永不出现在这里） */
+const authData = (token, user) => ({
+  token: token,
+  user: { uid: user.uid, username: user.username, role: user.role },
+});
+
+/** 用户名 / 密码的公共校验，返回中文错误文案或 null */
+const checkCredential = (username, password) => {
+  if (username.length < NAME_MIN || username.length > NAME_MAX) {
+    return '用户名要 ' + NAME_MIN + '–' + NAME_MAX + ' 个字';
+  }
+  if (password.length < PASS_MIN || password.length > PASS_MAX) {
+    return '密码要 ' + PASS_MIN + '–' + PASS_MAX + ' 位';
+  }
+  return null;
+};
+
+/**
+ * POST /api/auth/register —— 注册（契约 §三）
+ * 邀请码从环境变量 INVITE_CODE 读：它留在服务端，前端拿不到，挡住陌生人乱注册。
+ * 没配置邀请码时**拒绝注册**（宁可暂时不能注册，也不能变成谁都进得来）。
+ */
+const register = async (event) => {
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法 JSON', null);
+
+  const username = String(body.username === undefined || body.username === null ? '' : body.username).trim();
+  const password = String(body.password === undefined || body.password === null ? '' : body.password);
+  const invite = String(body.invite === undefined || body.invite === null ? '' : body.invite).trim();
+
+  const expected = String(process.env.INVITE_CODE || '').trim();
+  if (!expected) return reply(403, '注册暂未开放：服务端还没配置邀请码', null);
+  if (invite !== expected) return reply(403, '邀请码不对', null);
+
+  const bad = checkCredential(username, password);
+  if (bad) return reply(400, bad, null);
+
+  try {
+    const exists = await db.findUserByName(username);
+    if (exists) return reply(400, '这个名字已经有人用了，换一个', null);
+
+    // 第一个注册者自动成为管理员：不用再配一个环境变量，也不会出现"没有管理员"的尴尬
+    const total = await db.countUsers();
+    const role = total === 0 ? 'admin' : 'member';
+
+    const pwd = hashPassword(password);
+    const uid = newUid();
+    await db.createUser({ uid: uid, username: username, passHash: pwd.hash, passSalt: pwd.salt, role: role });
+
+    const user = { uid: uid, username: username, role: role };
+    const token = await issueToken(uid);
+    try { await db.touchUser(uid); } catch (e) { /* 非关键 */ }
+    logWrite('注册', { uid: uid, role: role, code: 0 });
+    return reply(0, '注册成功', authData(token, user));
+  } catch (err) {
+    // 并发注册同名：唯一索引会抛 23505，同样回"名字被占用"而不是 500
+    if (db.isDuplicateError(err)) return reply(400, '这个名字已经有人用了，换一个', null);
+    console.error('[api] 注册失败：' + err.message);
+    return reply(500, '注册没成功，稍后再试一次', null);
+  }
+};
+
+/** POST /api/auth/login —— 登录（契约 §三）。密码错与用户不存在回同一句，不给撞库者区分依据 */
+const login = async (event) => {
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法 JSON', null);
+
+  const username = String(body.username === undefined || body.username === null ? '' : body.username).trim();
+  const password = String(body.password === undefined || body.password === null ? '' : body.password);
+  if (!username || !password) return reply(400, '用户名和密码都要填', null);
+
+  try {
+    const row = await db.findUserByName(username);
+    const ok = row && passwordMatches(password, row.pass_salt, row.pass_hash);
+    if (!ok) return reply(401, '用户名或密码不对', null);
+
+    const token = await issueToken(row.uid);
+    try {
+      await db.touchUser(row.uid);
+      // 顺手清掉过期令牌：登录是低频动作，放在这里不会拖慢日常请求
+      const all = await db.listAllTokens();
+      const now = Date.now();
+      for (const t of all) {
+        if (Date.parse(t.expires_at) <= now) await db.deleteToken(t.token_hash);
+      }
+    } catch (e) { /* 清理失败不影响这次登录 */ }
+
+    logWrite('登录', { uid: row.uid, code: 0 });
+    return reply(0, '登录成功', authData(token, { uid: row.uid, username: row.username, role: row.role }));
+  } catch (err) {
+    console.error('[api] 登录失败：' + err.message);
+    return reply(500, '登录没成功，稍后再试一次', null);
+  }
+};
+
+/** GET /api/auth/me —— 用本机令牌换回"我是谁"（游客调用回 401，前端据此显示登录入口） */
+const me = async (event, context) => {
+  const user = currentUser(context);
+  if (!user) return reply(401, '还没有登录', null);
+  try { await db.touchUser(user.uid); } catch (e) { /* 非关键 */ }
+  return reply(0, 'ok', { user: { uid: user.uid, username: user.username, role: user.role } });
+};
+
+/** POST /api/auth/logout —— 只删当前这一个令牌；不带令牌也回成功（幂等） */
+const logout = async (event, context) => {
+  const hash = context && context.__authTokenHash;
+  if (hash) {
+    try { await db.deleteToken(hash); } catch (e) { console.error('[api] 退出登录删令牌失败：' + e.message); }
+  }
+  return reply(0, '已退出登录', null);
+};
+
+/**
+ * GET /api/admin/overview?date= —— 成员总览（仅管理员）
+ * 契约承诺：**只返回数字**，不返回别人的待办文本与心情值 —— 隐私边界靠响应形状保证，
+ * 不是靠"前端不显示"。要看内容就得先改契约，这一条别顺手放开。
+ */
+const adminOverview = async (event, context) => {
+  const no = requireAdmin(context);
+  if (no) return no;
+
+  const q = pickQuery(event);
+  const date = q.date ? String(q.date) : todayLocal();
+  if (!isDate(date)) return reply(400, '日期格式不对，要 YYYY-MM-DD', null);
+
+  try {
+    const [rows, users] = await Promise.all([db.overviewRows(date), db.listUsers()]);
+    const stat = {};
+    const slot = (uid) => {
+      if (!stat[uid]) stat[uid] = { done: 0, total: 0, habitDone: 0, habitTotal: 0 };
+      return stat[uid];
+    };
+    rows.checkins.forEach((r) => {
+      if (r.is_deleted) return;                       // 软删除不算进总数（与页面口径一致）
+      const s = slot(r.uid);
+      s.total += 1;
+      if (r.done) s.done += 1;
+    });
+    rows.habits.forEach((r) => { slot(r.uid).habitTotal += 1; });
+    rows.logs.forEach((r) => {
+      if (Number(r.count) > 0) slot(r.uid).habitDone += 1;
+    });
+
+    const list = users.map((u) => {
+      const s = stat[u.uid] || { done: 0, total: 0, habitDone: 0, habitTotal: 0 };
+      return {
+        username: u.username,                          // 契约：不返回 uid（用户名足够认人）
+        role: u.role,
+        done: s.done,
+        total: s.total,
+        habitDone: s.habitDone,
+        habitTotal: s.habitTotal,
+        lastSeenAt: u.last_seen_at ? Date.parse(u.last_seen_at) : null,
+      };
+    });
+    return reply(0, 'ok', { date: date, users: list });
+  } catch (err) {
+    console.error('[api] 总览读取失败：' + err.message);
+    return reply(500, '总览没读出来，稍后再试', null);
+  }
+};
+
 const routes = {
   /**
    * 健康检查：不读数据库、不依赖任何外部服务，只证明"函数活着、能返回合法 JSON"。
@@ -954,6 +1215,13 @@ const routes = {
 
   'GET /api/day': getDay,
   'GET /api/checkins': listCheckins,
+
+  // Day 31 二轮：账号（固定路径，无参数）
+  'POST /api/auth/register': register,
+  'POST /api/auth/login': login,
+  'GET /api/auth/me': me,
+  'POST /api/auth/logout': logout,
+  'GET /api/admin/overview': adminOverview,
 
   // Day 18：第一个写入接口。方法区分大小写（平台给的是大写）
   'POST /api/checkins': createCheckin,
@@ -1007,6 +1275,25 @@ exports.main = async (event = {}, context = {}) => {
   const path = pickPath(event);
 
   try {
+    // ⓪ 令牌 → 身份（Day 31）。放在最前面做一次，之后所有 handler 通过
+    //    resolveUid(context) 同步拿到 uid —— 十几个 handler 不用各自改签名。
+    //    令牌无效就当场 401：如果这里放行成游客，"登录过期"会变成"看到别人的数据"。
+    let auth = null;
+    try {
+      auth = await resolveAuth(event);
+    } catch (err) {
+      // 查令牌失败（数据库抖动）——不能当成"游客放行"，否则会把用户的数据视图切走
+      console.error('[api] 令牌校验失败：' + (err && err.message ? err.message : err));
+      return reply(500, '服务端出了点问题，稍后再试', null);
+    }
+    if (auth && auth.invalid) return reply(401, '登录已过期，请重新登录', null);
+
+    const ctx = Object.assign({}, context || {}, {
+      __authUid: auth ? auth.uid : '',
+      __authUser: auth ? auth.user : null,
+      __authTokenHash: auth ? auth.tokenHash : '',
+    });
+
     // ① 固定路径：精确命中
     let handler = routes[method + ' ' + path];
     let idRaw = null;
@@ -1038,8 +1325,8 @@ exports.main = async (event = {}, context = {}) => {
     }
     // 顺手打一行日志：出错时在 CloudBase 控制台"日志"里能看到每次请求的方法和路径
     console.log('[api] ' + method + ' ' + path + ' 命中路由，uid=' +
-                (resolveUid(context) || '匿名未注入'));
-    return await handler(event, context, idRaw, idRaw2);
+                (resolveUid(ctx) || '匿名未注入') + (ctx.__authUser ? '（账号 ' + ctx.__authUser.username + '）' : '（游客）'));
+    return await handler(event, ctx, idRaw, idRaw2);
   } catch (err) {
     // 兜底：不把原始错误抛给前端（可能含内部信息），只在服务端日志里留全貌
     console.error('[api] 未捕获异常：', err && err.stack ? err.stack : err);

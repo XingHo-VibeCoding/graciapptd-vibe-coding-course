@@ -1,6 +1,6 @@
 # 自律计划 · 数据库（db/）
 
-- 版本：v1.5（2026-10-27 Day 29 十四轮：新增 `schema-4.sql`（`habits` / `habit_logs` 两张打卡表）并在真库执行、复核字段与约束；v1.4（2026-10-09 Day 22：新增 `schema-3.sql`（`checkins.is_deleted` 软删除标记列）与真库执行记录 §4.5；v1.3 于 2026-10-08 Day 20 补：`seed-shift.sql` 复跑记录 §4.4 —— 演示数据必须"当天"才有效；v1.2 于 2026-10-07 Day 20 增补 `seed-shift.sql`；v1.1 于 2026-10-04 Day 18）
+- 版本：v1.6（2026-10-28 Day 31 三轮：新增 `schema-5.sql`（多用户身份表 `app_users` / `auth_tokens`，含 `username_lc` 列与唯一索引、令牌只存 sha256、`role` CHECK 约束），真库逐条执行并复核 2 表 4 索引；**四张业务表零改动**；v1.5（2026-10-27 Day 29 十四轮：新增 `schema-4.sql`（`habits` / `habit_logs` 两张打卡表）并在真库执行、复核字段与约束；v1.4（2026-10-09 Day 22：新增 `schema-3.sql`（`checkins.is_deleted` 软删除标记列）与真库执行记录 §4.5；v1.3 于 2026-10-08 Day 20 补：`seed-shift.sql` 复跑记录 §4.4 —— 演示数据必须"当天"才有效；v1.2 于 2026-10-07 Day 20 增补 `seed-shift.sql`；v1.1 于 2026-10-04 Day 18）
 - 环境：CloudBase PostgreSQL（**默认数据库类型，创建环境时已定，之后不可切换**）
 - 本目录七个文件：
 
@@ -11,6 +11,7 @@
 | `verify.sql` | SELECT 验证（证明结构可用） | 种子之后 |
 | `schema-2.sql` | **增量**建表 / 改表（Day 18 起；按日期分节追加） | 在 `schema.sql` 之后，需要时执行 |
 | `schema-3.sql` | **增量**（Day 22：`checkins.is_deleted` 软删除标记列） | 同上，可重复执行 |
+| `schema-5.sql` | **身份表**（Day 31：`app_users` 账号 + `auth_tokens` 登录令牌）——**多用户**的数据隔离靠业务表里已有的 `uid`，身份表只回答"这个令牌是谁" | 做多用户时执行（逐条执行，见 §4.6） |
 | `schema-4.sql` | **增量**（Day 29：新建 `habits` 打卡定义 / `habit_logs` 每日次数） | 同上，可重复执行 |
 | `seed-shift.sql` | **把种子数据的日期整体平移到「以今天为最后一天」**（Day 20 起） | 想让首页（今天）看到真实数据时执行，可重复执行 |
 

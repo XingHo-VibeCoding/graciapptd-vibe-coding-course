@@ -788,6 +788,134 @@ const saveHabitLogsBulk = async (uid, items) => {
   return rows.length;
 };
 
+// ===========================================================================
+// 四、身份与总览（Day 31 多用户）
+// ===========================================================================
+// 为什么身份也放在这一层：账号、令牌都是**表**，读写它们和读写待办没有本质区别。
+// index.js 只该出现「用户名对不对、令牌过期没」这种业务判断，不该出现 table 名。
+//
+// 安全红线（三处都要守住）：
+//   ① 响应里**永不出现** pass_hash / pass_salt —— mapUser 只挑三个字段；
+//   ② 令牌只存 sha256，明文仅在登录/注册响应里出现一次；
+//   ③ 「谁是管理员」由库里的 role 决定，不由请求参数决定。
+
+/** 账号对外形状：只出不敏感的三样（uid 也不给前端，用户名足够认人） */
+const mapUser = (r) => ({
+  uid: r.uid,
+  username: r.username,
+  role: r.role,
+});
+
+/** 库里共几个账号 —— 用来判定"第一个注册者当管理员" */
+const countUsers = async () => {
+  const res = await select('app_users', { select: 'uid', limit: 1 });
+  // total 是 Content-Range 里的真实总数（不是本页行数）；拿不到就退回本页行数
+  return Number.isFinite(res.total) ? res.total : res.rows.length;
+};
+
+/**
+ * 按用户名查（大小写不敏感）；查不到返回 null。
+ * 为什么查 `username_lc` 而不是 `lower(username)`：PostgREST 的过滤只认**列名**，
+ * 表达式过滤会被数据库回 400（实测踩过：注册接口 500，日志里是"failed to parse filter"）。
+ * 所以注册时把 trim+lower 的结果写进 `username_lc`，唯一索引也建在这一列上。
+ */
+const findUserByName = async (username) => {
+  const res = await select('app_users', {
+    username_lc: 'eq.' + String(username).trim().toLowerCase(),
+    select: 'uid,username,pass_hash,pass_salt,role',
+    limit: 1,
+  });
+  return res.rows.length ? res.rows[0] : null;
+};
+
+/** 按 uid 查（令牌换身份后用）；查不到返回 null */
+const findUserByUid = async (uid) => {
+  const res = await select('app_users', {
+    uid: 'eq.' + uid,
+    select: 'uid,username,pass_hash,pass_salt,role',
+    limit: 1,
+  });
+  return res.rows.length ? res.rows[0] : null;
+};
+
+/** 建账号（uid / hash / salt 都由上层算好） */
+const createUser = async (row) => {
+  const out = await insert('app_users', {
+    uid: row.uid,
+    username: row.username,
+    username_lc: String(row.username).trim().toLowerCase(),
+    pass_hash: row.passHash,
+    pass_salt: row.passSalt,
+    role: row.role,
+  });
+  return out && out.length ? out[0] : null;
+};
+
+/** 全部账号（总览用，按注册时间正序） */
+const listUsers = async () => {
+  const res = await select('app_users', {
+    select: 'uid,username,role,last_seen_at,created_at',
+    order: 'created_at.asc',
+    limit: 200,
+  });
+  return res.rows;
+};
+
+/** 全部令牌（登录时顺手清过期行，避免表无限增长） */
+const listAllTokens = async () => {
+  const res = await select('auth_tokens', { select: 'token_hash,uid,expires_at', limit: 500 });
+  return res.rows;
+};
+
+/** 发令牌：库里只落 sha256，明文由上层返回给前端且不再保存 */
+const saveToken = async (row) => {
+  const out = await upsert('auth_tokens', {
+    token_hash: row.tokenHash,
+    uid: row.uid,
+    expires_at: row.expiresAt,
+  }, 'token_hash');
+  return out && out.length ? out[0] : null;
+};
+
+/** 用 sha256 找令牌；过期与否交给上层判断（这一层只认数据） */
+const findToken = async (tokenHash) => {
+  const res = await select('auth_tokens', {
+    token_hash: 'eq.' + tokenHash,
+    select: 'token_hash,uid,expires_at',
+    limit: 1,
+  });
+  return res.rows.length ? res.rows[0] : null;
+};
+
+/** 删一个令牌（退出登录只影响当前设备） */
+const deleteToken = async (tokenHash) => {
+  const rows = await remove('auth_tokens', { token_hash: 'eq.' + tokenHash });
+  return rows.length;
+};
+
+/** 记一下"这个人刚来过"（总览的 lastSeenAt） */
+const touchUser = async (uid) => {
+  await update('app_users', { uid: 'eq.' + uid }, { last_seen_at: new Date().toISOString() });
+};
+
+/**
+ * 总览的三张原始表（不在这一层做聚合）。
+ * 为什么按"整天 / 全部"拉而不按 uid 过滤：这一层拿不到账号列表里的 uid 集合，
+ * 拼 `in.(a,b)` 反而更绕；当天行数最多是「人数 × 每人十几条」，一次拉全更简单。
+ */
+const overviewRows = async (date) => {
+  const [checkins, habits, logs] = await Promise.all([
+    select('checkins', { date: 'eq.' + date, select: 'uid,done,is_deleted', limit: 2000 }),
+    select('habits', { select: 'uid', limit: 2000 }),
+    select('habit_logs', { date: 'eq.' + date, select: 'uid,count', limit: 2000 }),
+  ]);
+  return { checkins: checkins.rows, habits: habits.rows, logs: logs.rows };
+};
+
+// ===========================================================================
+// 五、导出
+// ===========================================================================
+
 module.exports = {
   // ① 表级函数
   findPlanDay: findPlanDay,
@@ -813,6 +941,18 @@ module.exports = {
   saveHabitLog: saveHabitLog,
   saveHabitsBulk: saveHabitsBulk,
   saveHabitLogsBulk: saveHabitLogsBulk,
+  // ① 表级函数 · Day 31 增补（多用户：账号 + 令牌 + 总览聚合）
+  countUsers: countUsers,
+  createUser: createUser,
+  findUserByName: findUserByName,
+  findUserByUid: findUserByUid,
+  listUsers: listUsers,
+  listAllTokens: listAllTokens,
+  saveToken: saveToken,
+  findToken: findToken,
+  deleteToken: deleteToken,
+  touchUser: touchUser,
+  overviewRows: overviewRows,
   // ② 通用管道
   select: select,
   insert: insert,
