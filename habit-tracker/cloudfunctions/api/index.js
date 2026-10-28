@@ -20,6 +20,7 @@
  *           DELETE /api/habits/:id      删除一条打卡及其全部记录
  *           PUT    /api/habits/:id/logs/:date  设置某天打了几次
  *           POST   /api/habits/import   本机已有打卡一次性搬上云
+ *   v3.6    POST   /api/plan        薯条按问卷排一段日期的训练计划（只生成、不写库）
  *   Day 30+ 其余写入接口与读取接口，按 api-contract.md 逐个加。
  *
  * 【Day 19 分层】本文件**不再直接读写数据库** —— 那是 db.js（数据访问层）的活。
@@ -49,7 +50,7 @@ const crypto = require('crypto');
 
 // —— 服务身份：写进健康检查响应里，用来确认"公网地址返回的是我自己的服务" ——
 const SERVICE = 'Self discipline plan';
-const VERSION = '0.7.0';
+const VERSION = '0.8.0';
 
 /**
  * 业务接口的统一响应形状（见 api-contract.md 1.2）：
@@ -120,7 +121,9 @@ const pickBody = (event) => {
   const raw = event.body;
   const PLAIN = ['date', 'text', 'time', 'quad', 'clientReqId', 'mood', 'items',
                   'name', 'perDay', 'start', 'end', 'count', 'habits', 'logs',
-                  'username', 'password', 'invite'];
+                  'username', 'password', 'invite',
+                  // v3.6 薯条排计划（控制台测试时字段会摊在 event 顶层，这里要认得）
+                  'goal', 'perWeek', 'weeks', 'place', 'startDate', 'note'];
 
   // 没有 body：可能是控制台把字段摊在了 event 顶层
   if (raw === undefined || raw === null || raw === '') {
@@ -952,7 +955,298 @@ const importHabits = async (event, context) => {
 };
 
 // ===========================================================================
-// 六、路由表
+// 六、薯条排计划（Day 31 九轮 / v3.6）：问卷答案 → 一段日期的训练安排
+// ===========================================================================
+/**
+ * `POST /api/plan` —— 薯条照问卷排一份计划，**只生成不写库**。
+ *
+ * 为什么不在这里顺便写待办：
+ *   ① 计划是"建议"，用户看过预览才决定要不要落到日历上；不想写就一条都不留。
+ *   ② 落库仍走 `POST /api/checkins`（幂等键、软删除、四象限规则都只有那一份实现），
+ *      这里再造一套批量写会把同一批规则写第二遍——两份规则迟早对不上。
+ *
+ * 两条生成路径，`engine` 字段如实告诉前端这次是谁想的：
+ *   llm       配了 `LLM_API_KEY` → 调模型（能听懂 note 里的特殊情况，如"膝盖不好"）
+ *   template  没配 key / 调用超时 / 模型返回不合规 → 回落内置课程表
+ * 回落不是糊弄：响应里的 `engine` 与 `fallback` 都写明原因，前端照实展示，不假装是模型排的。
+ */
+
+/** 目标 / 场地的取值 —— 与前端分段按钮一一对应 */
+const PLAN_GOALS = ['fat', 'muscle', 'move'];
+const PLAN_PLACES = ['home', 'dumbbell', 'gym'];
+/** 每周 2~5 次、周期 1~8 周：下限 2 是"运动"的最低门槛，上限 8 周是为了别把清单铺到两个月后 */
+const PLAN_PERWEEK_MIN = 2;
+const PLAN_PERWEEK_MAX = 5;
+const PLAN_WEEKS_MIN = 1;
+const PLAN_WEEKS_MAX = 8;
+/** 补充说明的长度（复用待办的 60 字上限，它最终会被拼进模型提示词） */
+const MAX_PLAN_NOTE = 60;
+/** 等模型的上限：宁可回落模板，也不让用户盯着转圈 —— 函数超时是 20s，见 cloudbaserc.json */
+const LLM_TIMEOUT = 12000;
+
+/** 纯日期加减（全程按 UTC 算，服务器在哪个时区都不影响） */
+const addDays = (ds, n) => {
+  const d = new Date(ds + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+/** 一周里的第几天：1=周一 … 7=周日（挑训练日用它，比 0=周日 好算） */
+const isoDow = (ds) => ((new Date(ds + 'T00:00:00Z').getUTCDay() + 6) % 7) + 1;
+
+/**
+ * 每周练几次 → 练哪几天（1=周一…7=周日）。
+ * 一律挑**隔天**：连续两天练同一部位没有恢复，对新手是受伤的主要来源。
+ */
+const PLAN_DOWS = {
+  2: [2, 5],
+  3: [1, 3, 5],
+  4: [1, 2, 4, 6],
+  5: [1, 2, 3, 5, 6],
+};
+
+/**
+ * 内置课程表：三种场地 × 五个主题。
+ * 每条都要能塞进 60 字（待办内容上限），且写完一眼看得出"练什么、做几组"——
+ * 只写「练腿部」不算计划，用户第二天打开还是不知道从哪儿下手。
+ */
+const PLAN_LIB = {
+  home: {
+    cardio: '有氧 · 快走或原地踏步 35 分钟（能说话、不能唱歌）+ 拉伸 5 分钟',
+    lower:  '下肢 · 深蹲 3×15 + 臀桥 3×15 + 靠墙静蹲 3×30 秒',
+    upper:  '上肢 · 跪姿俯卧撑 3×10 + 毛巾划船 3×12 + 平板支撑 2×30 秒',
+    core:   '核心 · 死虫 3×12 + 臀桥 3×15 + 侧支撑 2×20 秒',
+    full:   '全身 · 开合跳 3×30 秒 + 深蹲 3×12 + 跪姿俯卧撑 3×8',
+  },
+  dumbbell: {
+    cardio: '有氧 · 快走 30 分钟 + 哑铃农夫走 3×30 米（每手 5~8 公斤）',
+    lower:  '下肢 · 高脚杯深蹲 3×12 + 哑铃罗马尼亚硬拉 3×12 + 箭步蹲 2×10',
+    upper:  '上肢 · 哑铃卧推 3×10 + 单臂划船 3×12 + 哑铃推举 3×10',
+    core:   '核心 · 哑铃死虫 3×12 + 俄罗斯转体 3×20 + 侧支撑 2×20 秒',
+    full:   '全身 · 哑铃深蹲 3×12 + 俯身划船 3×12 + 开合跳 3×30 秒',
+  },
+  gym: {
+    cardio: '有氧 · 椭圆机或快走 30 分钟（心率稳住、能说短句）+ 拉伸 5 分钟',
+    lower:  '下肢 · 腿举 3×12 + 坐姿腿弯举 3×12 + 提踵 3×15',
+    upper:  '上肢 · 高位下拉 3×12 + 坐姿划船 3×12 + 器械推胸 3×10',
+    core:   '核心 · 卷腹 3×15 + 悬垂举腿 2×8 + 平板支撑 2×40 秒',
+    full:   '全身 · 腿举 3×12 + 高位下拉 3×12 + 器械推胸 3×10',
+  },
+};
+
+/** 目标 → 主题顺序。减脂把有氧排在前面，增肌以力量为主，"动起来"混合且偏轻 */
+const PLAN_ORDER = {
+  fat:    ['cardio', 'lower', 'core', 'cardio', 'full'],
+  muscle: ['lower', 'upper', 'core', 'full', 'upper'],
+  move:   ['cardio', 'core', 'lower', 'full', 'cardio'],
+};
+
+/** 每种目标一句方法论 —— 用户要的是"怎么练"，不是动作清单堆砌 */
+const PLAN_TIP = {
+  fat:    '先保次数、再谈强度：能一直做下去的强度才有效。',
+  muscle: '每个动作留 2 次余力，动作标准比重量重要。',
+  move:   '目标不是练到累，是让身体习惯"该动了"。',
+};
+
+/**
+ * 模板生成：条数恒等于 perWeek × weeks，日期全部落在 [startDate, startDate+weeks*7-1]。
+ * 每周的主题往后错一位（(k + week) % len），避免"每周一永远练同一样"。
+ */
+const buildTemplatePlan = (p) => {
+  const lib = PLAN_LIB[p.place];
+  const order = PLAN_ORDER[p.goal];
+  const dows = PLAN_DOWS[p.perWeek];
+  const days = [];
+  let k = 0;                                    // 第几次训练，从 0 数
+  for (let i = 0; i < p.weeks * 7; i++) {
+    const date = addDays(p.startDate, i);
+    if (dows.indexOf(isoDow(date)) < 0) continue;
+    const week = Math.floor(i / 7);
+    days.push({ date: date, text: lib[order[(k + week) % order.length]] });
+    k++;
+  }
+  return days;
+};
+
+/** 日期区间：有 endDate 更好展示，也省得前端再算一遍 */
+const planEndDate = (p) => addDays(p.startDate, p.weeks * 7 - 1);
+
+/**
+ * 模型返回的内容要当"不可信的输入"处理 —— 它可能：
+ *   日期越界 / 同一天两条 / 内容是空串 / 超 60 字 / 干脆返回一段 markdown 而不是 JSON。
+ * 这里只放行"能直接当待办用"的条目，其余丢掉；丢太多（不足期望的 6 成）就整份判废、回落模板。
+ */
+const sanitizePlanDays = (raw, p) => {
+  if (!Array.isArray(raw)) return null;
+  const lo = p.startDate;
+  const hi = planEndDate(p);
+  const seen = {};
+  const out = [];
+  raw.forEach((it) => {
+    if (!it || typeof it !== 'object') return;
+    const date = String(it.date || '');
+    if (!isDate(date) || date < lo || date > hi || seen[date]) return;
+    let text = String(it.text === undefined || it.text === null ? '' : it.text)
+      .replace(/\s+/g, ' ').trim();
+    if (!text) return;
+    if (text.length > MAX_TEXT) text = text.slice(0, MAX_TEXT);
+    seen[date] = true;
+    out.push({ date: date, text: text });
+  });
+  out.sort((a, b) => (a.date < b.date ? -1 : 1));
+  const want = p.perWeek * p.weeks;
+  return out.length >= Math.max(1, Math.ceil(want * 0.6)) ? out : null;
+};
+
+/** 从模型输出里抠出 JSON：它常常裹一层 ```json 或加一句"好的，以下是计划"。 */
+const extractJson = (s) => {
+  const a = s.indexOf('{');
+  const b = s.lastIndexOf('}');
+  if (a < 0 || b <= a) return null;
+  try { return JSON.parse(s.slice(a, b + 1)); } catch (e) { return null; }
+};
+
+/**
+ * 交给模型排一版。任何一步不顺都 return null（由调用方回落模板），
+ * 不抛异常 —— 计划排不出来不该让整个接口 500，用户要的是"有东西可练"。
+ */
+const planViaLLM = async (p) => {
+  const key = process.env.LLM_API_KEY;
+  if (!key) return { skipped: 'no-key' };
+  const url = process.env.LLM_BASE_URL || 'https://api.deepseek.com/v1/chat/completions';
+  const model = process.env.LLM_MODEL || 'deepseek-chat';
+  const goalText = { fat: '减脂', muscle: '增肌', move: '只是想让身体动起来' }[p.goal];
+  const placeText = { home: '家里，没有器械', dumbbell: '家里，有一对哑铃', gym: '健身房' }[p.place];
+  const want = p.perWeek * p.weeks;
+
+  const sys = '你是一位谨慎的健身教练，为手机待办应用排训练计划。只输出 JSON，不要任何解释、不要 markdown 代码块。';
+  const usr = [
+    '需求：' + goalText + '；每周练 ' + p.perWeek + ' 次；连续 ' + p.weeks + ' 周；场地：' + placeText + '。',
+    p.note ? ('补充说明（务必照顾）：' + p.note) : '',
+    '日期范围：' + p.startDate + ' 至 ' + planEndDate(p) + '（含）。',
+    '硬性要求：',
+    '1) 恰好 ' + want + ' 条，一条一个训练日，同一日期最多一条；',
+    '2) 训练日之间至少隔一天，不要连续排；',
+    '3) text 是待办标题，6~28 个汉字，写清练什么、做几组，例：「下肢 · 深蹲 3×12 + 臀桥 3×15」；',
+    '4) 强度保守，不写极限重量、不写断食/节食/体重目标、不写需要教练保护的复杂动作；',
+    '5) 每 7 天安排一次轻量日（快走 + 拉伸），避免连续高强度；',
+    '6) 输出格式：{"summary":"一句话总述（30 字内）","days":[{"date":"YYYY-MM-DD","text":"..."}]}',
+  ].filter(Boolean).join('\n');
+
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), LLM_TIMEOUT) : null;
+  try {
+    const res = await fetch(url, Object.assign(ctrl ? { signal: ctrl.signal } : {}, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
+      body: JSON.stringify({
+        model: model,
+        temperature: 0.4,
+        max_tokens: 1600,
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: usr }],
+      }),
+    }));
+    if (!res.ok) return { skipped: 'http-' + res.status };
+    const body = await res.json();
+    const content = body && body.choices && body.choices[0]
+      && body.choices[0].message && body.choices[0].message.content;
+    if (!content) return { skipped: 'empty' };
+    const parsed = extractJson(content);
+    if (!parsed) return { skipped: 'bad-json' };
+    const days = sanitizePlanDays(parsed.days, p);
+    if (!days) return { skipped: 'bad-days' };
+    let summary = String(parsed.summary || '').replace(/\s+/g, ' ').trim();
+    if (summary.length > 40) summary = summary.slice(0, 40);
+    return { days: days, summary: summary };
+  } catch (e) {
+    // 超时 / DNS / 模型服务挂了 —— 一律回落，不把技术错误甩给用户
+    console.error('[api] 计划模型调用失败：' + e.message);
+    return { skipped: 'error' };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+};
+
+/**
+ * `POST /api/plan` 处理函数。参数校验口径与待办写入保持一致：
+ * 错得早、中文提示、不猜用户想干嘛。
+ */
+const makePlan = async (event, context) => {
+  const startedAt = Date.now();
+  const uid = resolveUid(context);
+  if (!uid) return reply(401, '登录状态失效，请刷新页面', null);
+
+  const body = pickBody(event);
+  if (body === null) return reply(400, '请求体不是合法的 JSON', null);
+
+  const goal = body.goal === undefined || body.goal === null || body.goal === '' ? 'fat' : String(body.goal);
+  if (PLAN_GOALS.indexOf(goal) < 0) {
+    return reply(400, '目标只能是 fat（减脂）/ muscle（增肌）/ move（动起来）', null);
+  }
+  const place = body.place === undefined || body.place === null || body.place === '' ? 'home' : String(body.place);
+  if (PLAN_PLACES.indexOf(place) < 0) {
+    return reply(400, '场地只能是 home（家里）/ dumbbell（有哑铃）/ gym（健身房）', null);
+  }
+  const perWeek = Number(body.perWeek);
+  if (!Number.isInteger(perWeek) || perWeek < PLAN_PERWEEK_MIN || perWeek > PLAN_PERWEEK_MAX) {
+    return reply(400, '每周次数只能是 2~5 之间的整数', null);
+  }
+  const weeks = Number(body.weeks);
+  if (!Number.isInteger(weeks) || weeks < PLAN_WEEKS_MIN || weeks > PLAN_WEEKS_MAX) {
+    return reply(400, '周期只能是 1~8 周', null);
+  }
+  // 起始日由**前端传本机日期**，服务端不自己取"今天" —— 用户在别的时区时，
+  // 服务端的今天可能比他的今天早一天，计划就会从昨天开始。
+  const startDate = (body.startDate === undefined || body.startDate === null || body.startDate === '')
+    ? todayLocal() : String(body.startDate);
+  if (!isDate(startDate)) {
+    return reply(400, '开始日期格式不对，应为 YYYY-MM-DD', null);
+  }
+  const today = todayLocal();
+  if (startDate < addDays(today, -1) || startDate > addDays(today, 60)) {
+    return reply(400, '开始日期要在今天前后 60 天内', null);
+  }
+  let note = typeof body.note === 'string' ? body.note.replace(/\s+/g, ' ').trim() : '';
+  if (note.length > MAX_PLAN_NOTE) {
+    return reply(400, '补充说明不超过 60 字', null);
+  }
+
+  const p = { goal: goal, place: place, perWeek: perWeek, weeks: weeks, startDate: startDate, note: note };
+  const endDate = planEndDate(p);
+
+  let days = null;
+  let engine = 'template';
+  let summary = '';
+  let fallback = '';
+  const llm = await planViaLLM(p);
+  if (llm && llm.days) {
+    engine = 'llm';
+    days = llm.days;
+    summary = llm.summary || '';
+  } else {
+    // 没配 key 是"设计如此"，不算失败；配了 key 却没用上，说明原因要留痕（日志 + 响应）
+    fallback = (llm && llm.skipped) || 'no-key';
+    days = buildTemplatePlan(p);
+  }
+  if (!summary) {
+    summary = p.weeks + ' 周、每周 ' + p.perWeek + ' 次，共 ' + days.length + ' 次训练。' + PLAN_TIP[p.goal];
+  }
+
+  logWrite('薯条排计划', { uid: uid, engine: engine, days: days.length,
+                           fallback: fallback || '-', ms: Date.now() - startedAt });
+  return reply(0, '计划排好了', {
+    engine: engine,
+    fallback: fallback,                     // '' = 没回落；no-key / http-xxx / bad-json / error
+    goal: p.goal, place: p.place, perWeek: p.perWeek, weeks: p.weeks,
+    startDate: p.startDate, endDate: endDate,
+    summary: summary,
+    // 固定提示：模型不一定说这句，所以由服务端无条件带上（健康建议的护城河）
+    caution: '有伤病、孕期或慢性病，先问医生再照这个练。',
+    days: days,
+  });
+};
+
+// ===========================================================================
+// 七、路由表
 // ===========================================================================
 /**
  * 路由表：键 = 「方法 + 路径」，值 = 处理函数。
@@ -1228,6 +1522,9 @@ const routes = {
 
   // Day 29 十三轮：本机历史心情一次性迁移（固定路径，先于带参路由命中）
   'POST /api/day/moods': importMoods,
+
+  // v3.6：薯条排计划（只生成、不写库；落库仍走 POST /api/checkins）
+  'POST /api/plan': makePlan,
 
   // Day 29 十四轮：打卡（定义 + 每日次数）
   'GET /api/habits': listHabits,

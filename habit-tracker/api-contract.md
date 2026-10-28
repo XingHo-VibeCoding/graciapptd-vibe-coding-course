@@ -1,9 +1,9 @@
 # 自律计划 · API 接口契约（api-contract.md）
 
-- 版本：v2.0（2026-10-28 Day 31 二轮：**多用户账号体系**——新增 `db/schema-5.sql`（`app_users` / `auth_tokens` 两张**身份表**，四张业务表零改动），§1.4 身份约定改为「令牌优先」：`Authorization: Bearer <token>` → 平台 uid → `DEMO_UID` 游客兜底（带令牌但无效一律 401，不回落游客）；§三 追加五条认证接口 `POST /api/auth/register|login|logout`、`GET /api/auth/me`、`GET /api/admin/overview`；密码 scrypt + salt（内置 crypto，无第三方依赖），令牌表只存 sha256、30 天过期；注册需环境变量 `INVITE_CODE` 邀请码，**第一个注册者自动 admin**；总览**只返回数字**（完成数 / 打卡数 / 最后活跃），不含待办文本与心情值）。v1.9（2026-10-27 Day 29 十四轮：**打卡上云**——新建 `db/schema-4.sql`（`habits` / `habit_logs` 两表），§三 追加五条接口：`GET /api/habits?date=`、`PUT/DELETE /api/habits/:clientId`、`PUT /api/habits/:clientId/logs/:date`、`POST /api/habits/import`；`plan_days` / `checkins` 零改动。设计要点：**用前端生成的 `client_id` 当业务主键**（避免 id 映射）；新建与编辑共用 `PUT`（upsert 幂等）；每日次数推**整值**而非 `+1`（重发不叠错）；删除是**真删**且连日志一起删（与 `checkins` 软删除的差异写在接口注释里）。v1.8（2026-10-29 Day 29 十三轮：**心情上云**——新增 §三 `PUT /api/day/:date/mood`（upsert 覆盖）与 `POST /api/day/moods`（本机历史一次性批量导入，1–200 条，整批原子），`plan_days` 表与 `mood` 枚举**零改动**（Day 16 建表时就留好了这一列）；响应用于修正"选了心情刷新就丢"的旧行为（前端原先只写本机，云端空值会把它覆盖掉）。v1.7（2026-10-10 Day 23：**新增 §1.8「错误提示分级约定」**——把"网络层 / 服务端故障 / 业务拒绝"三类的判定口径、统一文案出口 `errKindText()` 与"不许出现的形状"写进契约；**接口路径、字段名、响应信封、错误码一个没动**（`offline` 布尔字段保留，仅新增 `kind`），按 §五 变更规则属兼容性变更，故只升文档版本。v1.6 于 2026-10-09 Day 22：**PATCH / DELETE 两个接口落地**——新增 §1.7「软删除约定」（删除不真删行，只置 `checkins.is_deleted`，查询默认跳过）、§三 追加 `PATCH /api/checkins/:id` 与 `DELETE /api/checkins/:id` 的完整定义、§四 两条接口标记 ✅ 已实现、§二 表清单与 §六 部署记录同步。**这是本项目第一次"改已有接口行为"**——`GET /api/day` 与 `GET /api/checkins` 新增了"跳过已删除项"的语义，按 §五 变更规则属**兼容性变更**（响应形状、字段名、错误码一个没动，只是不再返回已删行），故只升文档版本、不改信封。v1.5 于 2026-10-08 Day 20 补：**契约正文零改动**——只在 §6 部署记录追加 §6.4「云端检查台 + 跨域收紧 + 密钥复核」验收记录；跨域实测补「放行时原样回显具体来源、`*` 通配符出现次数为 0」。v1.4 于 2026-10-07 Day 20：前端已接线——§1.1 跨域约定由「本期不配置」改为「已通并附实测」、新增 §6.3；v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
+- 版本：v2.1（2026-10-28 Day 31 九轮：**新增 §三 `POST /api/plan`**——薯条按问卷排一段日期的训练计划。核心约定：**只生成、不写库**（落库仍走 `POST /api/checkins`，幂等/软删除/象限规则只保留一份实现）；响应里的 `engine` **如实标注**是模型排的（`llm`）还是内置课程表排的（`template`），`fallback` 写明回落原因（`no-key` / `bad-json` / `bad-days` / `http-xxx`）；`days[].text` 复用待办的 1~60 字上限，可直接拿去建待办；健康提示 `caution` 由服务端**无条件**带上。超时口径特殊：前端 18 秒、云函数 20 秒，模型 12 秒不返回就回落模板（宁可给模板，也不让用户空手）。**零新增数据表、零新增 npm 依赖**。v2.0（2026-10-28 Day 31 二轮：**多用户账号体系**——新增 `db/schema-5.sql`（`app_users` / `auth_tokens` 两张**身份表**，四张业务表零改动），§1.4 身份约定改为「令牌优先」：`Authorization: Bearer <token>` → 平台 uid → `DEMO_UID` 游客兜底（带令牌但无效一律 401，不回落游客）；§三 追加五条认证接口 `POST /api/auth/register|login|logout`、`GET /api/auth/me`、`GET /api/admin/overview`；密码 scrypt + salt（内置 crypto，无第三方依赖），令牌表只存 sha256、30 天过期；注册需环境变量 `INVITE_CODE` 邀请码，**第一个注册者自动 admin**；总览**只返回数字**（完成数 / 打卡数 / 最后活跃），不含待办文本与心情值）。v1.9（2026-10-27 Day 29 十四轮：**打卡上云**——新建 `db/schema-4.sql`（`habits` / `habit_logs` 两表），§三 追加五条接口：`GET /api/habits?date=`、`PUT/DELETE /api/habits/:clientId`、`PUT /api/habits/:clientId/logs/:date`、`POST /api/habits/import`；`plan_days` / `checkins` 零改动。设计要点：**用前端生成的 `client_id` 当业务主键**（避免 id 映射）；新建与编辑共用 `PUT`（upsert 幂等）；每日次数推**整值**而非 `+1`（重发不叠错）；删除是**真删**且连日志一起删（与 `checkins` 软删除的差异写在接口注释里）。v1.8（2026-10-29 Day 29 十三轮：**心情上云**——新增 §三 `PUT /api/day/:date/mood`（upsert 覆盖）与 `POST /api/day/moods`（本机历史一次性批量导入，1–200 条，整批原子），`plan_days` 表与 `mood` 枚举**零改动**（Day 16 建表时就留好了这一列）；响应用于修正"选了心情刷新就丢"的旧行为（前端原先只写本机，云端空值会把它覆盖掉）。v1.7（2026-10-10 Day 23：**新增 §1.8「错误提示分级约定」**——把"网络层 / 服务端故障 / 业务拒绝"三类的判定口径、统一文案出口 `errKindText()` 与"不许出现的形状"写进契约；**接口路径、字段名、响应信封、错误码一个没动**（`offline` 布尔字段保留，仅新增 `kind`），按 §五 变更规则属兼容性变更，故只升文档版本。v1.6 于 2026-10-09 Day 22：**PATCH / DELETE 两个接口落地**——新增 §1.7「软删除约定」（删除不真删行，只置 `checkins.is_deleted`，查询默认跳过）、§三 追加 `PATCH /api/checkins/:id` 与 `DELETE /api/checkins/:id` 的完整定义、§四 两条接口标记 ✅ 已实现、§二 表清单与 §六 部署记录同步。**这是本项目第一次"改已有接口行为"**——`GET /api/day` 与 `GET /api/checkins` 新增了"跳过已删除项"的语义，按 §五 变更规则属**兼容性变更**（响应形状、字段名、错误码一个没动，只是不再返回已删行），故只升文档版本、不改信封。v1.5 于 2026-10-08 Day 20 补：**契约正文零改动**——只在 §6 部署记录追加 §6.4「云端检查台 + 跨域收紧 + 密钥复核」验收记录；跨域实测补「放行时原样回显具体来源、`*` 通配符出现次数为 0」。v1.4 于 2026-10-07 Day 20：前端已接线——§1.1 跨域约定由「本期不配置」改为「已通并附实测」、新增 §6.3；v1.3 于 2026-10-05 课程要求复核、v1.2 于 2026-10-04 Day 18、v1.1 于 2026-10-03 Day 17、v1.0 于 2026-10-01 Day 15）
 - 作用：**前端和云端之间的"合同"**。前端按这份文档发请求，后端按这份文档回数据；任何一方想改形状，先改这份文档，再改代码（R2 文档先行）。
 - **定位**：这是**第 3 周建表（Day 16）和写接口（Day 17–20）的唯一依据**。
-- **当前实现进度**：✅ 账号体系五条（Day 31 二轮，v2.0）；`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）、**`PATCH /api/checkins/:id` + `DELETE /api/checkins/:id`（Day 22，增删改查四类操作在 `checkins` 上闭环）**；其余仍为占位，按后续每天逐个实现。
+- **当前实现进度**：✅ 账号体系五条（Day 31 二轮，v2.0）；✅ `POST /api/plan`（Day 31 九轮，v2.1，薯条排计划）；`GET /api/health`（Day 15）、`GET /api/day` + `GET /api/checkins`（Day 17）、`POST /api/checkins`（Day 18，第一个写入接口）、**`PATCH /api/checkins/:id` + `DELETE /api/checkins/:id`（Day 22，增删改查四类操作在 `checkins` 上闭环）**；其余仍为占位，按后续每天逐个实现。
 - 依据：`TECH_DESIGN.md` §三 数据模型 / §四 API 列表；并按 `frontend/index.html` 的**实际功能面**补全（Day 15 新增：专注计时 / 纪念&倒数日 / 肯定语 / 主题换肤）。
 
 > **⚠️ 课程示例接口名与本项目的关系**（Day 17 与用户确认，勿再纠结）：
@@ -792,10 +792,76 @@ curl "https://<环境ID>.service.tcloudbase.com/api/health"
 
 ---
 
+### `POST /api/plan` —— 薯条排计划（**v3.6 已实现，只生成不写库**）
+
+**用途**：用户在薯条问答里说"我想运动减肥，不知道该怎么规划"，薯条按问卷答案排出一份**一段日期的训练安排**。
+
+**这个接口不写任何数据**。落库仍走 `POST /api/checkins`（前端拿到计划后逐条写，带幂等键）。理由：计划是"建议"，用户看过预览才决定要不要落到日历上；同时避免把幂等、软删除、四象限这几条规则写成第二份实现。
+
+**请求体**：
+
+```json
+{ "goal": "fat", "perWeek": 3, "weeks": 4, "place": "home",
+  "startDate": "2026-10-28", "note": "膝盖不太好，别排跳跃" }
+```
+
+| 字段 | 必填 | 类型 | 说明 |
+|---|---|---|---|
+| `goal` | ⭕ | string | `fat` 减脂 / `muscle` 增肌 / `move` 动起来；缺省 `fat` |
+| `perWeek` | ✅ | int | 每周练几次，**2~5** |
+| `weeks` | ✅ | int | 排几周，**1~8** |
+| `place` | ⭕ | string | `home` 家里 / `dumbbell` 有哑铃 / `gym` 健身房；缺省 `home` |
+| `startDate` | ⭕ | string | `YYYY-MM-DD`，缺省服务端今天；**必须在今天前后 60 天内**（前端传本机日期，避免时区分歧） |
+| `note` | ⭕ | string | 补充说明，≤60 字（会拼进模型提示词，如"膝盖不好"） |
+
+**响应**：
+
+```json
+{"code":0,"message":"计划排好了","data":{
+  "engine": "template", "fallback": "no-key",
+  "goal": "fat", "place": "home", "perWeek": 3, "weeks": 4,
+  "startDate": "2026-10-28", "endDate": "2026-11-24",
+  "summary": "4 周、每周 3 次，共 12 次训练。先保次数、再谈强度：能一直做下去的强度才有效。",
+  "caution": "有伤病、孕期或慢性病，先问医生再照这个练。",
+  "days": [ { "date": "2026-10-28", "text": "有氧 · 快走或原地踏步 35 分钟（能说话、不能唱歌）+ 拉伸 5 分钟" } ]
+}}
+```
+
+| 字段 | 含义 |
+|---|---|
+| `engine` | **谁排的，如实标注**：`llm` = 调了模型；`template` = 内置课程表 |
+| `fallback` | `engine=template` 的原因：`no-key`（没配 `LLM_API_KEY`）/ `http-401` / `bad-json` / `bad-days` / `error`；没回落时是空串 |
+| `days` | 按日期升序，**同一日期最多一条**；`text` 沿用待办的 1~60 字上限，可直接拿去 `POST /api/checkins` |
+| `caution` | 固定健康提示，**服务端无条件带上**（不依赖模型自觉） |
+
+**两种生成路径**：
+
+- 配了环境变量 `LLM_API_KEY` → 调模型（`LLM_BASE_URL` 缺省 `https://api.deepseek.com/v1/chat/completions`，`LLM_MODEL` 缺省 `deepseek-chat`），要求严格输出 JSON，服务端**逐条校验**（日期越界 / 同一天两条 / 空串 / 超 60 字都会被处理；合格条数不足期望 6 成则整份判废）。
+- 没配 key，或模型超时（12s）/ 格式不对 / 条数不够 → **回落内置课程表**，条数恒等于 `perWeek × weeks`，日期一定落在区间内。
+
+**错误返回**：
+
+| 情况 | 返回 |
+|---|---|
+| 缺 `perWeek` / `weeks` | `{"code":400,"message":"每周次数只能是 2~5 之间的整数","data":null}` |
+| `perWeek` 不在 2~5 | 同上 |
+| `weeks` 不在 1~8 | `{"code":400,"message":"周期只能是 1~8 周","data":null}` |
+| `goal` 不在枚举 | `{"code":400,"message":"目标只能是 fat（减脂）/ muscle（增肌）/ move（动起来）","data":null}` |
+| `place` 不在枚举 | `{"code":400,"message":"场地只能是 home（家里）/ dumbbell（有哑铃）/ gym（健身房）","data":null}` |
+| `startDate` 格式错 | `{"code":400,"message":"开始日期格式不对，应为 YYYY-MM-DD","data":null}` |
+| `startDate` 超出 ±60 天 | `{"code":400,"message":"开始日期要在今天前后 60 天内","data":null}` |
+| `note` 超 60 字 | `{"code":400,"message":"补充说明不超过 60 字","data":null}` |
+| 未取得身份 | `{"code":401,"message":"登录状态失效，请刷新页面","data":null}` |
+
+> **超时比普通接口宽**：前端对这条请求单独给 18 秒（其余接口 5 秒），云函数超时同步调到 20 秒（`cloudbaserc.json`）。
+> 模型再慢也不会让用户空手：12 秒没等到就回落模板。
+
+---
+
 ## 四、待实现接口（后续每天逐个补；标 ✅ 的已在 §三 实现）
 
 > 以下是第 3 周要落地的全部接口。**先定名字和形状，避免前端先写死后端再改。**
-> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；✅ `PATCH /api/checkins/:id`、✅ `DELETE /api/checkins/:id`（Day 22）；✅ `PUT /api/day/:date/mood`、✅ `POST /api/day/moods`（Day 29 十三轮，心情上云 + 本机历史一次性迁移）；✅ `GET /api/habits`、✅ `PUT/DELETE /api/habits/:clientId`、✅ `PUT /api/habits/:clientId/logs/:date`、✅ `POST /api/habits/import`（Day 29 十四轮，打卡上云）；其余待做。
+> **实现进度**：✅ `GET /api/day`、✅ `GET /api/checkins`（Day 17）；✅ `POST /api/checkins`（Day 18）；✅ `PATCH /api/checkins/:id`、✅ `DELETE /api/checkins/:id`（Day 22）；✅ `PUT /api/day/:date/mood`、✅ `POST /api/day/moods`（Day 29 十三轮，心情上云 + 本机历史一次性迁移）；✅ `GET /api/habits`、✅ `PUT/DELETE /api/habits/:clientId`、✅ `PUT /api/habits/:clientId/logs/:date`、✅ `POST /api/habits/import`（Day 29 十四轮，打卡上云）；✅ `POST /api/plan`（Day 31 九轮，薯条排计划）；其余待做。
 
 ### 📌 先记住这条：别忘了「列表读取」接口
 

@@ -7,7 +7,7 @@
       "name": "api",
       "handler": "index.main",
       "runtime": "Nodejs20.19",
-      "timeout": 10,
+      "timeout": 20,
       "memorySize": 256,
       "installDependency": false,
       "description": "自律计划唯一后端入口：单函数承载全部 REST 路由",

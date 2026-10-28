@@ -579,7 +579,12 @@ const writeResponder = (opt) => {
   const idxSrc = readSrc('index.js');
   const dbSrc = readSrc('db.js');
 
-  ok('路由层不再自己调 fetch（数据库访问已全部搬走）', idxSrc.indexOf('fetch(') === -1);
+  // v3.6 修正：原来这条是"index.js 里一个 fetch( 都不许有"。加了薯条排计划之后，
+  // 路由层确实要多一个 fetch —— 但那一个是**调大模型**，不是读写数据库。
+  // 所以判据收紧成"除了排计划那一段，别处不许出现 fetch("，分层之意不变。
+  const planSection = idxSrc.slice(idxSrc.indexOf('// 六、薯条排计划'), idxSrc.indexOf('// 七、路由表'));
+  ok('路由层不再自己读写数据库（fetch 只出现在排计划的模型调用里）',
+     planSection.length > 0 && idxSrc.replace(planSection, '').indexOf('fetch(') === -1);
   ok('路由层不再出现数据库 REST 基址', idxSrc.indexOf('tcloudbasegateway') === -1);
   ok('路由层不再出现数据库列名 client_req_id', idxSrc.indexOf('client_req_id') === -1);
   ok('路由层不再出现数据库列名 done_at', idxSrc.indexOf('done_at') === -1);
@@ -1441,6 +1446,114 @@ const writeResponder = (opt) => {
   r = await callWith({ httpMethod: 'GET', path: '/api/auth/me' }, tokenB);
   eq('登出：别的设备的令牌不受影响', r.code === 0 ? r.data.user.username : null, '小李');
   delete process.env.INVITE_CODE;
+  }
+
+  // -------------------------------------------------------------------------
+  // 14. 薯条排计划（v3.6）：只生成不写库，engine 如实标注，模型胡来就回落
+  // -------------------------------------------------------------------------
+  {
+    installFakeFetch();
+    responder = () => ({ rows: [] });
+
+    const plan = (body) => call({ httpMethod: 'POST', path: '/api/plan', body: JSON.stringify(body) });
+    const BASE = { goal: 'fat', perWeek: 3, weeks: 4, place: 'home', startDate: '2026-10-28' };
+    const shift = (ds, n) => {
+      const d = new Date(ds + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    };
+
+    let r = await plan(BASE);
+    eq('计划：没配 key 也能排（模板兜底）', r.code, 0, r.message);
+    ok('计划：engine 如实标 template，并写明回落原因',
+       r.data.engine === 'template' && r.data.fallback === 'no-key');
+    eq('计划：条数 = 每周次数 × 周数', r.data.days.length, 12);
+    ok('计划：日期全部落在 [startDate, endDate] 内',
+       r.data.days.every((d) => d.date >= r.data.startDate && d.date <= r.data.endDate),
+       r.data.startDate + ' ~ ' + r.data.endDate);
+    ok('计划：同一日期最多一条', new Set(r.data.days.map((d) => d.date)).size === r.data.days.length);
+    ok('计划：每条 1~60 字（能直接当待办存进去）',
+       r.data.days.every((d) => d.text.length >= 1 && d.text.length <= 60),
+       r.data.days.map((d) => String(d.text.length)).join(','));
+    ok('计划：只排在周一/三/五（隔天练，留恢复）',
+       r.data.days.every((d) => [1, 3, 5].indexOf(((new Date(d.date + 'T00:00:00Z').getUTCDay() + 6) % 7) + 1) > -1),
+       r.data.days.map((d) => d.date).join(','));
+    ok('计划：有总述，也有无条件的健康提示（不靠模型自觉）',
+       r.data.summary.length > 0 && r.data.caution.indexOf('医生') > -1);
+    ok('计划：只生成不写库（一次数据库请求都没发）', captured.length === 0, captured.length + ' 次');
+
+    eq('计划：每周 9 次 → 400', (await plan(Object.assign({}, BASE, { perWeek: 9 }))).code, 400);
+    eq('计划：周期 0 → 400', (await plan(Object.assign({}, BASE, { weeks: 0 }))).code, 400);
+    eq('计划：目标非法 → 400', (await plan(Object.assign({}, BASE, { goal: 'run' }))).code, 400);
+    eq('计划：场地非法 → 400', (await plan(Object.assign({}, BASE, { place: 'moon' }))).code, 400);
+    eq('计划：开始日期格式错 → 400', (await plan(Object.assign({}, BASE, { startDate: '2026-13-01' }))).code, 400);
+    eq('计划：补充说明超 60 字 → 400',
+       (await plan(Object.assign({}, BASE, { note: 'x'.repeat(61) }))).code, 400);
+    const far = new Date(Date.now() + 8 * 3600 * 1000 + 90 * 86400000).toISOString().slice(0, 10);
+    eq('计划：开始日期超过 60 天 → 400',
+       (await plan(Object.assign({}, BASE, { startDate: far }))).code, 400);
+
+    const savedUid = process.env.DEMO_UID;
+    delete process.env.DEMO_UID;
+    eq('计划：没有身份 → 401', (await plan(BASE)).code, 401);
+    process.env.DEMO_UID = savedUid;
+
+    // ---- 模型分支：把全局 fetch 临时换成"模型" ----
+    const prevFetch = global.fetch;
+    const llmCalls = [];
+    let llmContent = '';
+    global.fetch = async (url, init) => {
+      llmCalls.push({ url: String(url), headers: (init && init.headers) || {}, body: JSON.parse(init.body) });
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: llmContent } }] }) };
+    };
+    process.env.LLM_API_KEY = 'test-llm-key';
+
+    let llmDays = [];
+    for (let i = 0; i < 12; i++) llmDays.push({ date: shift('2026-10-28', i * 2), text: '训练 ' + (i + 1) + ' · 按你说的排' });
+    llmContent = '好的，以下是计划：\n```json\n'
+      + JSON.stringify({ summary: '按你的膝盖情况把跳跃去掉了', days: llmDays }) + '\n```';
+    r = await plan(BASE);
+    ok('计划：配了 key 就走模型（engine=llm）',
+       r.code === 0 && r.data.engine === 'llm' && r.data.fallback === '', r.message);
+    eq('计划：模型给的条数原样采用', r.data.days.length, 12);
+    eq('计划：模型给的 summary 也用上了', r.data.summary, '按你的膝盖情况把跳跃去掉了');
+    ok('计划：调用模型带 Bearer key，走可配的 chat/completions 地址',
+       llmCalls.length === 1
+       && String(llmCalls[0].headers.Authorization) === 'Bearer test-llm-key'
+       && llmCalls[0].url.indexOf('chat/completions') > -1);
+    ok('计划：提示词里带上了日期区间与硬性条数',
+       llmCalls[0].body.messages[1].content.indexOf('2026-10-28 至 2026-11-24') > -1
+       && llmCalls[0].body.messages[1].content.indexOf('恰好 12 条') > -1);
+
+    // 模型胡来：越界 / 同一天两条 / 空文本 —— 全被过滤，剩不足 6 成 → 整份判废、回落模板
+    llmContent = JSON.stringify({ summary: '瞎排', days: [
+      { date: '2026-10-28', text: 'A' },
+      { date: '2027-05-01', text: 'B' },        // 越界
+      { date: '2026-10-28', text: 'C' },        // 同一天第二条
+      { date: '2026-10-30', text: '   ' },      // 空
+    ] });
+    r = await plan(BASE);
+    ok('计划：模型排得太离谱 → 回落模板，条数照样对',
+       r.data.engine === 'template' && r.data.days.length === 12, JSON.stringify(r.data.days.length));
+    eq('计划：回落原因写明 bad-days', r.data.fallback, 'bad-days');
+
+    llmContent = '我觉得你应该先跑五公里再练深蹲';
+    r = await plan(BASE);
+    ok('计划：模型没按格式回 JSON → 回落模板', r.data.engine === 'template' && r.data.days.length === 12);
+    eq('计划：回落原因写明 bad-json', r.data.fallback, 'bad-json');
+
+    // 模型超长文本会被截到 60 字（待办上限），而不是整条丢掉
+    llmDays = [];
+    for (let i = 0; i < 12; i++) {
+      llmDays.push({ date: shift('2026-10-28', i * 2), text: '很长的训练说明'.repeat(20) });
+    }
+    llmContent = JSON.stringify({ summary: 'ok', days: llmDays });
+    r = await plan(BASE);
+    ok('计划：模型写超长也截到 60 字，不会撑爆待办约束',
+       r.data.engine === 'llm' && r.data.days.every((d) => d.text.length === 60));
+
+    delete process.env.LLM_API_KEY;
+    global.fetch = prevFetch;
   }
 
   global.fetch = realFetch;

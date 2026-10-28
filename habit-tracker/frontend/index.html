@@ -133,6 +133,16 @@
     .week button.today{ background:var(--accent); }
     .week button.today .wd{ color:var(--accent-ink); }
     .week button.today .dn{ color:var(--accent-ink); }
+    /* v3.6 周历翻页：没有它，薯条排到下周的计划在界面上根本翻不到。
+       箭头 26px 是拇指可点下限附近的取舍（整行 320 宽，再大就挤掉日期格）。 */
+    .week-head{ display:flex; align-items:center; gap:6px; margin:-6px 2px 7px; }
+    .week-head .wk-nav{ width:28px; height:26px; padding:0; border:1px solid var(--line);
+                        border-radius:9px; background:var(--card); color:var(--ink);
+                        font-size:14px; line-height:1; cursor:pointer; }
+    .week-head .wk-nav[disabled]{ opacity:.4; cursor:default; }
+    .week-head .wk-label{ flex:1; text-align:center; font-size:11.5px; color:var(--muted);
+                          background:transparent; border:none; padding:2px 0; cursor:pointer; }
+    .week-head .wk-label.off{ color:var(--accent-deep); font-weight:600; }
 
     /* Day 30（v2.3）：筛选标签整行删除——待办与打卡合并成一张「今日待做」，
        不再有「全部/时间轴/打卡」三态，筛选状态行与无结果态一并下线。 */
@@ -302,6 +312,28 @@
     .pet-ans button{ margin-top:8px; border:none; background:var(--accent);
                      color:var(--accent-ink); font-size:12.5px; border-radius:999px;
                      padding:6px 14px; cursor:pointer; }
+    /* ===== v3.6 薯条排计划：问卷 / 预览 / 进度三种状态共用一套样式 =====
+       放在问答框内部，所以宽度受 #pet-qa（320px）约束，全部按"窄栏"设计：
+       分段按钮允许换行、日期列固定宽度、正文允许折行 —— 390 宽手机上不会挤成一条线。 */
+    .plan-box{ margin-top:4px; }
+    .plan-row{ margin-bottom:9px; }
+    .plan-label{ display:block; font-size:11.5px; color:var(--muted); margin-bottom:4px; }
+    .plan-seg{ display:flex; flex-wrap:wrap; gap:5px; }
+    .plan-seg button{ border:1px solid var(--line); background:var(--card2); color:var(--ink);
+                      font-size:12px; border-radius:8px; padding:4px 9px; cursor:pointer; }
+    .plan-seg button.on{ background:var(--accent); border-color:var(--accent);
+                         color:var(--accent-ink); font-weight:600; }
+    .plan-week{ margin:9px 0 3px; font-size:11.5px; color:var(--muted); }
+    .plan-day{ display:flex; gap:7px; align-items:baseline; font-size:12.5px; line-height:1.5;
+               color:var(--ink); padding:4px 0; border-bottom:1px dashed var(--line); }
+    .plan-day:last-child{ border-bottom:none; }
+    .plan-day .pd-date{ flex:0 0 52px; color:var(--muted); font-size:11.5px; white-space:nowrap; }
+    .plan-meta{ font-size:11.5px; color:var(--muted); margin-top:8px; line-height:1.6; }
+    .plan-acts{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .plan-acts button{ margin-top:8px; }
+    .plan-acts button.ghost{ background:transparent; border:1px solid var(--line); color:var(--ink); }
+    .plan-acts button[disabled]{ opacity:.55; cursor:default; }
+    .plan-progress{ font-size:12.5px; color:var(--accent-deep); margin-top:8px; }
     /* 薯条整体轻摇（C 版原图整体动，不再拆件）；系统「减弱动态」时关停 */
     @keyframes pet-sway{ 0%,70%,100%{ transform:rotate(0); } 78%{ transform:rotate(-3.5deg); } 86%{ transform:rotate(3deg); } }
     @media (prefers-reduced-motion:reduce){
@@ -874,6 +906,11 @@
            （📊 ⚙️ 皆无点击逻辑）按用户要求整块去掉，只留背景大图 -->
       <div class="hero"></div>
 
+      <div class="week-head" id="week-head">
+        <button type="button" class="wk-nav" data-wk="-1" aria-label="上一周">‹</button>
+        <button type="button" class="wk-label" id="week-label" aria-label="回到本周">本周</button>
+        <button type="button" class="wk-nav" data-wk="1" aria-label="下一周">›</button>
+      </div>
       <div class="week" id="week-strip"></div>
 
       <!-- Day 30（v2.3）：原来的「全部 / 时间轴 / 打卡」筛选行整块下线，
@@ -1072,7 +1109,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v3.4</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v3.6</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1626,12 +1663,16 @@
   // （502/504、返回 HTML 错误页）—— 所以这里 status 和 code 都要看，
   // 否则就会把"服务端挂了"误报成"你网络不好"，用户会白折腾半天路由器。
   const apiFetch = async (path, options) => {
+    // v3.6：允许单次请求自带超时。排计划要等服务端调模型，5 秒根本不够；
+    // 其余接口仍走 API_TIMEOUT（5 秒），不因为多了一个慢接口就把所有接口都拖慢。
+    const ms = (options && Number(options.timeout)) || API_TIMEOUT;
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), API_TIMEOUT) : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), ms) : null;
     let res;
     // Day 31：所有请求在这里统一带上令牌（铁律的另一半 —— 别处不许自己拼 Authorization）。
     // 令牌只存本机，且服务端只认 sha256；前端拿不到别人的 uid，就没法冒充。
     const opts = Object.assign({}, options);
+    delete opts.timeout;                       // 它只用于上面那条定时器，不能原样传给 fetch
     opts.headers = Object.assign({}, (options && options.headers) || {});
     if (auth && auth.token) opts.headers.Authorization = 'Bearer ' + auth.token;
     try {
@@ -1672,10 +1713,11 @@
     }
   };
   const apiGet = (path) => apiFetch(path, { method: 'GET' });
-  const apiPost = (path, body) => apiFetch(path, {
+  const apiPost = (path, body, timeout) => apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
+    timeout: timeout,
   });
   // Day 22 新增：改（打勾/改内容）与删。两个都返回同一个信封，所以复用 apiFetch 的解析。
   const apiPatch = (path, body) => apiFetch(path, {
@@ -2332,12 +2374,41 @@
   });
 
   // ===== 周历条：本周周一~周日，今天高亮，点击切换查看日 =====
+  // v3.6：周历再也不是"只能看本周"了 —— 翻页按钮存在的原因很具体：
+  // 薯条把计划排到未来几周，没有翻页就永远看不见第 2 周以后的内容。
+  // weekOffset 只决定"看哪一周"，**不动 currentDate**：一翻页就改查看日期会连带
+  // 触发云端请求与心情弹窗，翻着玩两下就被问"今天心情怎么样"是很烦的。
+  let weekOffset = 0;
+  const WEEK_OFFSET_MAX = 8;                       // 前后各 8 周够用，再多也没内容可看
+  /** 把视图对齐到 currentDate 所在的那一周（切回「今天」时调用，避免"回到今天却在看下周"） */
+  const syncWeekToCurrent = () => {
+    const [cy, cm, cd] = currentDate.split('-').map(Number);
+    const cur = new Date(cy, cm-1, cd);
+    const curMon = new Date(cur); curMon.setDate(cur.getDate() - (cur.getDay()+6)%7);
+    const [ty, tm, td] = todayStr().split('-').map(Number);
+    const t0 = new Date(ty, tm-1, td);
+    const tMon = new Date(t0); tMon.setDate(t0.getDate() - (t0.getDay()+6)%7);
+    weekOffset = Math.round((curMon - tMon) / (7 * 86400000));
+  };
   const renderWeek = () => {
     const strip = el('week-strip');
     strip.textContent = '';
-    const [y, m, d] = todayStr().split('-').map(Number);
+    const [y, m, d] = shiftDate(todayStr(), weekOffset * 7).split('-').map(Number);
     const t = new Date(y, m-1, d);
     const monday = new Date(t); monday.setDate(t.getDate() - (t.getDay()+6)%7);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    const md = (dt) => (dt.getMonth() + 1) + '/' + dt.getDate();
+    const label = el('week-label');
+    if (label) {
+      label.textContent = (weekOffset === 0 ? '本周 · '
+        : (weekOffset < 0 ? '往前 ' + (-weekOffset) + ' 周 · ' : '往后 ' + weekOffset + ' 周 · '))
+        + md(monday) + ' – ' + md(sunday);
+      label.classList.toggle('off', weekOffset !== 0);
+    }
+    const prev = document.querySelector('.wk-nav[data-wk="-1"]');
+    const next = document.querySelector('.wk-nav[data-wk="1"]');
+    if (prev) prev.disabled = weekOffset <= -WEEK_OFFSET_MAX;
+    if (next) next.disabled = weekOffset >= WEEK_OFFSET_MAX;
     for (let i = 0; i < 7; i++) {
       const dt = new Date(monday); dt.setDate(monday.getDate() + i);
       const ds = dateToStr(dt);
@@ -3449,10 +3520,25 @@
       el('view-' + btn.dataset.view).classList.add('active');
       currentView = btn.dataset.view;
       syncFab();
-      if (currentView === 'today') maybeAskMood();
+      if (currentView === 'today') {
+        syncWeekToCurrent(); renderWeek();     // 回到「今天」= 回到正在查看的那天所在周
+        maybeAskMood();
+      }
       if (currentView === 'me') refreshDiag();     // Day 20 补：切到「我的」时顺手刷新检查台
     });
   });
+
+  // v3.6 周历翻页：箭头换周、中间那行字回本周。只重画周历，不发请求、不改查看日期。
+  document.querySelectorAll('.wk-nav').forEach((b) => {
+    b.addEventListener('click', () => {
+      const n = Number(b.dataset.wk) || 0;
+      weekOffset = Math.max(-WEEK_OFFSET_MAX, Math.min(WEEK_OFFSET_MAX, weekOffset + n));
+      renderWeek();
+    });
+  });
+  if (el('week-label')) {
+    el('week-label').addEventListener('click', () => { weekOffset = 0; renderWeek(); });
+  }
 
   // 应用页入口（Day 17 骨架）：待办事项 → 跳回"今天"；专注计时（Day 18）→ 弹窗；其余逐步开放
   document.querySelectorAll('.app-item').forEach(item => {
@@ -4788,7 +4874,12 @@
   };
   const petChips = () => {
     el('pet-chips').textContent = '';
-    PET_QA.slice(0, 4).forEach(r => {
+    // 第一个 chip 固定是「排运动计划」：本轮新能力，得让人一眼看见入口，不能只靠关键词
+    const pc = document.createElement('button');
+    pc.type = 'button'; pc.id = 'pet-chip-plan'; pc.textContent = '让薯条排运动计划';
+    pc.addEventListener('click', () => { el('pet-qa-input').value = ''; renderPlanForm(); });
+    el('pet-chips').appendChild(pc);
+    PET_QA.slice(0, 3).forEach(r => {
       const b = document.createElement('button');
       b.type = 'button'; b.textContent = r.t;
       b.addEventListener('click', () => { el('pet-qa-input').value = r.t; petAnswer(r.t); });
@@ -4796,6 +4887,8 @@
     });
   };
   const petAnswer = (q) => {
+    // v3.6：先分辨是不是在问「运动/减肥怎么练」——这类话展开问卷，而不是用一句 FAQ 打发
+    if (petPlanIntent(q)) { renderPlanForm(); petChips(); return; }
     const box = el('pet-qa-ans'); box.textContent = '';
     const hit = q.trim() ? petMatch(q) : null;
     if (!hit) {
@@ -4816,6 +4909,233 @@
     }
     petChips();
   };
+  // ===== 薯条排计划（v3.6）：把「我想要个运动计划」变成写进日历的一份安排 =====
+  // 四步全在问答框里走完：问卷 → 服务端排 → 预览 → 逐条写待办。
+  // 为什么排计划的逻辑不放前端：动作库、每周几次怎么摊到周几、模型提示词只该有一处，
+  // 前后端各存一份课程表迟早对不上；服务端还会把 engine 告诉前端，回落模板时照实说。
+  const PLAN_OPTS = {
+    goal: [['fat', '减脂'], ['muscle', '增肌'], ['move', '动起来']],
+    perWeek: [[2, '每周 2 次'], [3, '每周 3 次'], [4, '每周 4 次']],
+    weeks: [[2, '先排 2 周'], [4, '先排 4 周'], [6, '先排 6 周']],
+    place: [['home', '家里'], ['dumbbell', '有哑铃'], ['gym', '健身房']],
+  };
+  // 只保留"这一次"的问卷答案与生成结果，不落盘：计划本身没写进日历前什么都不该留下来
+  const planState = { goal: 'fat', perWeek: 3, weeks: 4, place: 'home', data: null, wrote: [] };
+
+  /** 某个日期是这周的第几个训练周（1 起）—— 预览按它分组，不按自然周，跟着 startDate 走 */
+  const planWeekNo = (ds, start) =>
+    Math.floor((new Date(ds + 'T00:00:00Z') - new Date(start + 'T00:00:00Z')) / 604800000) + 1;
+  const planWeekday = (ds) => '日一二三四五六'[new Date(ds + 'T00:00:00').getDay()];
+  const planMd = (ds) => ds.slice(5).replace('-', '/');
+
+  /** 问卷：四行分段按钮，点完按「让薯条排一下」 */
+  const renderPlanForm = () => {
+    const box = el('pet-qa-ans'); box.textContent = '';
+    const b = document.createElement('b'); b.textContent = '跟薯条说几句，我来排'; box.appendChild(b);
+    const p = document.createElement('p');
+    p.textContent = '排出来是「哪天练什么、做几组」，会直接放进对应的日期，到那天打开就能看见。';
+    box.appendChild(p);
+
+    const wrap = document.createElement('div'); wrap.className = 'plan-box';
+    [['goal', '想达成什么'], ['perWeek', '每周能练几次'], ['weeks', '先排多久'], ['place', '在哪儿练']]
+      .forEach((pair) => {
+        const row = document.createElement('div'); row.className = 'plan-row';
+        const lb = document.createElement('span'); lb.className = 'plan-label'; lb.textContent = pair[1];
+        const seg = document.createElement('div'); seg.className = 'plan-seg';
+        PLAN_OPTS[pair[0]].forEach((opt) => {
+          const btn = document.createElement('button');
+          btn.type = 'button'; btn.textContent = opt[1];
+          btn.dataset.val = String(opt[0]);
+          if (planState[pair[0]] === opt[0]) btn.classList.add('on');
+          btn.addEventListener('click', () => {
+            planState[pair[0]] = opt[0];
+            seg.querySelectorAll('button').forEach((x) => x.classList.remove('on'));
+            btn.classList.add('on');
+          });
+          seg.appendChild(btn);
+        });
+        row.append(lb, seg); wrap.appendChild(row);
+      });
+
+    const acts = document.createElement('div'); acts.className = 'plan-acts';
+    const go = document.createElement('button'); go.type = 'button'; go.id = 'plan-go';
+    go.textContent = '让薯条排一下';
+    go.addEventListener('click', () => planGenerate(go));
+    const cancel = document.createElement('button'); cancel.type = 'button';
+    cancel.className = 'ghost'; cancel.textContent = '先不用';
+    cancel.addEventListener('click', () => { planState.data = null; petAnswer(''); });
+    acts.append(go, cancel); wrap.appendChild(acts);
+    box.appendChild(wrap);
+  };
+
+  /** 生成：调 POST /api/plan（超时放宽到 18 秒，模型排计划比普通读写慢得多） */
+  const planGenerate = async (btn) => {
+    if (btn && btn.disabled) return;
+    const wrap = el('pet-qa-ans').querySelector('.plan-box');
+    if (!wrap) return;
+    let tip = wrap.querySelector('.plan-progress');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'plan-progress'; wrap.appendChild(tip); }
+    if (!apiReady()) {
+      tip.textContent = '要连上云端才能排计划，先看看网络喵。';
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = '薯条在想…'; }
+    tip.textContent = '正在排，最多等十几秒…';
+    const r = await apiPost('/plan', {
+      goal: planState.goal, perWeek: planState.perWeek,
+      weeks: planState.weeks, place: planState.place,
+      startDate: todayStr(),          // 用本机日期：服务端的"今天"可能与用户的差一天
+    }, 18000);
+    if (!r.ok) {
+      tip.textContent = errKindText(r);
+      if (btn) { btn.disabled = false; btn.textContent = '再试一次'; }
+      return;
+    }
+    planState.data = r.data;
+    planState.wrote = [];
+    renderPlanPreview();
+  };
+
+  /** 预览：按训练周分组列出每一条，底部两个动作（写进日历 / 换一版） */
+  const renderPlanPreview = () => {
+    const d = planState.data;
+    if (!d || !d.days || !d.days.length) return;
+    const box = el('pet-qa-ans'); box.textContent = '';
+    const b = document.createElement('b');
+    b.textContent = '排好了 · ' + d.weeks + ' 周 ' + d.days.length + ' 次';
+    box.appendChild(b);
+    const p = document.createElement('p'); p.textContent = d.summary; box.appendChild(p);
+
+    const wrap = document.createElement('div'); wrap.className = 'plan-box';
+    let curWeek = 0;
+    d.days.forEach((it) => {
+      const wk = planWeekNo(it.date, d.startDate);
+      if (wk !== curWeek) {
+        curWeek = wk;
+        const h = document.createElement('div'); h.className = 'plan-week';
+        h.textContent = '第 ' + wk + ' 周';
+        wrap.appendChild(h);
+      }
+      const row = document.createElement('div'); row.className = 'plan-day';
+      const dt = document.createElement('span'); dt.className = 'pd-date';
+      dt.textContent = planMd(it.date) + ' 周' + planWeekday(it.date);
+      const tx = document.createElement('span'); tx.textContent = it.text;
+      row.append(dt, tx); wrap.appendChild(row);
+    });
+
+    const meta = document.createElement('div'); meta.className = 'plan-meta';
+    meta.textContent = (d.engine === 'llm'
+      ? '薯条照你说的想了下才排的。'
+      : '这回是薯条照内置课程表排的（还没接上模型），排法固定，但天数和日期不会错。')
+      + d.caution;
+    wrap.appendChild(meta);
+
+    const acts = document.createElement('div'); acts.className = 'plan-acts';
+    const write = document.createElement('button'); write.type = 'button'; write.id = 'plan-write';
+    write.textContent = '加入我的日历';
+    write.addEventListener('click', () => planWrite(write));
+    const again = document.createElement('button'); again.type = 'button';
+    again.className = 'ghost'; again.textContent = '换一版';
+    again.addEventListener('click', renderPlanForm);
+    acts.append(write, again); wrap.appendChild(acts);
+    box.appendChild(wrap);
+  };
+
+  /**
+   * 写进日历：一条一条走 POST /api/checkins（不新开批量接口 —— 幂等键、软删除、
+   * 四象限规则都只有那一份实现，再造一套批量写等于把规则抄第二遍）。
+   * 同一天已有同样内容就跳过，避免"连按两次生成"把清单塞成两倍。
+   */
+  const planWrite = async (btn) => {
+    const d = planState.data;
+    if (!d || (btn && btn.disabled)) return;
+    if (btn) { btn.disabled = true; btn.textContent = '正在加入…'; }
+    const box = el('pet-qa-ans');
+    const tip = document.createElement('div'); tip.className = 'plan-progress';
+    box.appendChild(tip);
+
+    const wrote = [];
+    let skip = 0, fail = 0, lastErr = null;
+    for (let i = 0; i < d.days.length; i++) {
+      const it = d.days[i];
+      tip.textContent = '正在加入 ' + (i + 1) + ' / ' + d.days.length + '…';
+      const exist = (data.todos[it.date] || []).some((t) => t.text === it.text);
+      if (exist) { skip++; continue; }
+      const r = await apiPost('/checkins', {
+        date: it.date, text: it.text, time: null, quad: 'q2',   // q2 = 重要不紧急：健康属于这一类
+        clientReqId: newReqId(),
+      });
+      if (r.ok) {
+        (data.todos[it.date] = data.todos[it.date] || []).push({
+          id: r.data.id, text: r.data.text, time: r.data.time,
+          done: !!r.data.done, quad: r.data.quad,
+        });
+        wrote.push({ id: r.data.id, date: it.date });
+      } else { fail++; lastErr = r; }
+    }
+    if (wrote.length) { saveData(data); renderAll(); }
+    planState.wrote = wrote;
+
+    box.textContent = '';
+    const b = document.createElement('b');
+    b.textContent = wrote.length ? ('已排进日历 · ' + wrote.length + ' 条') : '没有新增';
+    box.appendChild(b);
+    const p = document.createElement('p');
+    let msg = wrote.length
+      ? ('已加到 ' + planMd(d.startDate) + ' 至 ' + planMd(d.endDate) + '。')
+      : '这些日期上已经有同样的安排了。';
+    if (skip) msg += '另有 ' + skip + ' 条之前就加过，跳过了。';
+    if (fail) msg += '还有 ' + fail + ' 条没加上：' + errKindText(lastErr) + '。';
+    p.textContent = msg;
+    box.appendChild(p);
+
+    const acts = document.createElement('div'); acts.className = 'plan-acts';
+    const see = document.createElement('button'); see.type = 'button'; see.textContent = '去看今天';
+    see.addEventListener('click', () => { goToday(); el('pet-qa').hidden = true; });
+    acts.appendChild(see);
+    if (wrote.length) {
+      const undo = document.createElement('button'); undo.type = 'button'; undo.id = 'plan-undo';
+      undo.className = 'ghost'; undo.textContent = '撤销这次计划';
+      undo.addEventListener('click', () => planUndo(undo));
+      acts.appendChild(undo);
+    }
+    box.appendChild(acts);
+  };
+
+  /** 撤销：把刚才写进去的逐条软删（只撤这一次生成的，不碰用户自己的待办） */
+  const planUndo = async (btn) => {
+    if (btn && btn.disabled) return;
+    if (btn) { btn.disabled = true; btn.textContent = '正在撤回…'; }
+    let ok = 0, bad = 0;
+    for (const it of planState.wrote) {
+      const r = await apiDelete('/checkins/' + it.id);
+      if (r.ok) {
+        ok++;
+        data.todos[it.date] = (data.todos[it.date] || []).filter((t) => t.id !== it.id);
+      } else { bad++; }
+    }
+    planState.wrote = [];
+    saveData(data); renderAll();
+    const box = el('pet-qa-ans'); box.textContent = '';
+    const b = document.createElement('b'); b.textContent = bad ? '撤回了一部分' : '已撤回';
+    box.appendChild(b);
+    const p = document.createElement('p');
+    p.textContent = '撤掉了 ' + ok + ' 条' + (bad ? '，还有 ' + bad + ' 条没撤掉，可以在清单里逐条删。' : '。')
+      + '你的其他待办没动。';
+    box.appendChild(p);
+    petChips();
+  };
+
+  /** 这句话是不是在问"运动/减肥怎么练" —— 命中才展开问卷，普通问句照旧走 FAQ */
+  const PET_SPORT = ['减肥', '减脂', '胖', '瘦', '健身', '运动', '锻炼', '跑步', '增肌', '撸铁', '练'];
+  const PET_ASK = /怎么|如何|想|要|帮|计划|规划|安排|开始/;
+  const petPlanIntent = (q) => {
+    const s = (q || '').trim();
+    if (!s) return false;
+    const sporty = PET_SPORT.some((k) => s.indexOf(k) > -1);
+    return sporty && (PET_ASK.test(s) || s.length >= 6);
+  };
+
   // 喵：WebAudio 现场合成一声短喵（无音频文件；不支持的设备静默跳过，气泡照出）
   let petAC = null, petBubbleT = null, petSquashT = null;
   const petMeow = () => {
@@ -4910,6 +5230,18 @@
     if (mood === 'joy' || mood === 'cozy') petMeow();   // 只有高兴时出声，安慰时不吵
   };
   window.__petMoodLines = PET_MOOD_LINES;       // 测试用：断言气泡里的句子确实出自对应心情
+  // 测试用：排计划是异步多步（问卷 → 请求 → 预览 → 逐条写），jsdom 里没有真网络，
+  // 所以把状态与两个渲染入口露出来，好让自检能直接驱动每一步、断言每一步的产物。
+  window.__planUtils = {
+    state: planState,
+    opts: PLAN_OPTS,
+    intent: petPlanIntent,
+    form: renderPlanForm,
+    preview: renderPlanPreview,
+    generate: planGenerate,
+    write: planWrite,
+    undo: planUndo,
+  };
   // ===== 薯条位置（v2.2）：可拖拽，拖到哪停哪，位置存本机 =====
   // 坐标：x = 距手机窗左边，y = 距窗口底部。为什么不用 CSS 的 right/bottom：
   // 宽屏（≥520px）时 .app 是居中的 430px「手机窗」，fixed + right:0 会把薯条甩到窗外桌面上。
