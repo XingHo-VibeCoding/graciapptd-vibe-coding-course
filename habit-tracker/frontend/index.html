@@ -262,9 +262,13 @@
     html[data-theme="dark"] #pet-btn img{
                   filter:brightness(1.12) drop-shadow(0 3px 8px rgba(0,0,0,.55)); }
     #pet-btn.squash img{ transform:scale(1.12,.88); animation:none; }
+    /* v3.2：气泡从「喵～」两个字变成会说话的短句（选完心情接一句）——
+       所以允许折行、最宽 176px；"喵～"这类短句仍是小药丸形状（width:max-content）。
+       横向越界由 JS 的 petBubbleFit 推回手机窗内，别在这里写死左右边界。 */
     .pet-bubble{ position:absolute; top:-6px; right:50%; transform:translate(50%,-100%);
                  background:var(--card); border:1px solid var(--line); color:var(--ink);
-                 font-size:12px; padding:3px 10px; border-radius:12px; white-space:nowrap;
+                 font-size:12px; line-height:1.5; text-align:left; padding:6px 10px;
+                 border-radius:12px; max-width:176px; width:max-content;
                  box-shadow:0 2px 6px rgba(0,0,0,.1); pointer-events:none; }
     /* 薯条被拖到贴近顶部时，气泡翻到下方，免得飘出屏幕 */
     #pet-btn.low .pet-bubble{ top:auto; bottom:-6px; transform:translate(50%,100%); }
@@ -1060,7 +1064,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v3.1</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v3.2</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -3125,6 +3129,7 @@
       moodAskedDate = date;                       // 已回答，今天不再自动弹
       el('mood-modal').hidden = true;
       renderAll();
+      petMoodReact(mood);                         // v3.2：选完心情，薯条接一句（安慰 / 随喜）
       if (!apiReady()) return;
       const r = await apiPut('/day/' + encodeURIComponent(date) + '/mood', { mood: mood });
       if (!r.ok) {
@@ -4820,6 +4825,68 @@
     petSquashT = setTimeout(() => btn.classList.remove('squash'), 220);
     petMeow();
   };
+
+  // ===== 选完心情，薯条接一句（v3.2）=====
+  // 用户："今日心情选择后，我想让薯条会弹出不同的话，比如伤心会安慰，开心会随喜这样"。
+  // 五种心情各三条，用薯条的口吻（不是 App 的提示音、不复述 MOOD.copy 那句）：
+  // 伤心/忧郁先陪着，平静给个稳，惬意说记下来，喜悦就随喜。
+  const PET_MOOD_LINES = {
+    sad:  ['难过就难过一会儿，我趴这儿陪你',
+           '今天不用勉强，靠着我坐会儿',
+           '要不要先喝口水，慢慢来'],
+    blue: ['灰蒙蒙的日子，我陪你待着',
+           '有点闷就说出来，会轻一点',
+           '不用急着变好，先缓一缓'],
+    calm: ['平静的一天，也很好',
+           '稳稳地过，像晒太阳那样',
+           '没什么起伏，我也在'],
+    cozy: ['这么舒服的一天，记下来吧',
+           '惬意的时候，尾巴会自己摇',
+           '慢慢过，不赶'],
+    joy:  ['你开心，我也跟着摇尾巴',
+           '这份高兴，我替你收着',
+           '开心的事，说给我听嘛']
+  };
+  let petLastLine = '';                         // 上一条，避免来回改选时反复听到同一句
+  // 气泡横向收在手机窗内：默认以薯条为中心，越界就整体推回来（左右都能推）
+  const petBubbleFit = (b) => {
+    b.style.transform = '';                     // 回到样式表的居中值再量
+    const btn = el('pet-btn'), f = petFrame();
+    const br = b.getBoundingClientRect(), vr = btn.getBoundingClientRect();
+    if (!br.width || !vr.width) return;         // jsdom 量不到布局：跳过，不影响断言
+    const pad = 4;
+    const leftOver = (f.left + pad) - br.left;
+    const rightOver = br.right - (f.left + f.w - pad);
+    const shift = leftOver > 0 ? leftOver : (rightOver > 0 ? -rightOver : 0);
+    // 薯条贴近顶部时气泡本就翻到下方（.low），内联 transform 会覆盖那条规则，这里一起带上
+    const y = btn.classList.contains('low') ? '100%' : '-100%';
+    b.style.transform = 'translate(calc(50% + ' + Math.round(shift) + 'px), ' + y + ')';
+  };
+  const petSay = (text, ms) => {
+    const b = el('pet-bubble');
+    if (!b || !text) return;
+    b.textContent = text;
+    b.hidden = false;
+    petBubbleFit(b);
+    clearTimeout(petBubbleT);
+    petBubbleT = setTimeout(() => { b.hidden = true; }, ms || 3400);
+  };
+  const petMoodReact = (mood) => {
+    const lines = PET_MOOD_LINES[mood];
+    if (!lines || !lines.length) return;
+    let text = lines[Math.floor(Math.random() * lines.length)];
+    if (lines.length > 1 && text === petLastLine) text = lines[(lines.indexOf(text) + 1) % lines.length];
+    petLastLine = text;
+    petSay(text, 3400);
+    const btn = el('pet-btn');
+    if (btn) {                                  // 说话时轻轻压一下，像伸脖子
+      btn.classList.remove('squash'); void btn.offsetWidth; btn.classList.add('squash');
+      clearTimeout(petSquashT);
+      petSquashT = setTimeout(() => btn.classList.remove('squash'), 220);
+    }
+    if (mood === 'joy' || mood === 'cozy') petMeow();   // 只有高兴时出声，安慰时不吵
+  };
+  window.__petMoodLines = PET_MOOD_LINES;       // 测试用：断言气泡里的句子确实出自对应心情
   // ===== 薯条位置（v2.2）：可拖拽，拖到哪停哪，位置存本机 =====
   // 坐标：x = 距手机窗左边，y = 距窗口底部。为什么不用 CSS 的 right/bottom：
   // 宽屏（≥520px）时 .app 是居中的 430px「手机窗」，fixed + right:0 会把薯条甩到窗外桌面上。
