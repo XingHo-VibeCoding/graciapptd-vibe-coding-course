@@ -23,7 +23,10 @@
        C3 间距节奏：模块间距 14px，卡片内元素间距只用 8/10/12/16
           （周历/心情区等原子组件内部允许 2/4px 微间距），不引入新数值
        C4 象限色板：四象限 + 未分类共五色，只从 QUADS 字典取，
-          禁止在样式表或 JS 里新造第六种分类色 */
+          禁止在样式表或 JS 里新造第六种分类色
+          v3.4 起四象限不再是四种色相，而是**同一主题色的四档深浅**（Q1 最深 → Q4 最浅），
+          具体明度由 applyTheme 里的 paintQuadScale 按当前强调色实时算；未分类仍是中性灰。
+          「删除/警示」的红已从 --q1 拆成 --danger，别再让两件事共用一个变量 */
     :root{
       /* 精进 11：默认基调改为浅色（白色底）——用户要求"默认不要黑色"。
          深色主题改由 html[data-theme="dark"] 显式覆盖，深浅与背景图解耦。 */
@@ -34,8 +37,11 @@
       --accent:#E6A23C; --accent-ink:#4A3418; --accent-deep:#9C6812;
       --accent-line:#C5831E;              /* 细描边/焦点环：比主色深一档才看得见 */
       --accent-chip:#FFE566; --accent-chip-ink:#5C4A3D;
-      /* 四象限 + 未分类五色（C4）：与 PRD v2.2 一一对应 */
-      --q1:#e8604c; --q2:#f5b04b; --q3:#5aa2f0; --q4:#8a94a3; --q5:#7f8ea3;
+      /* 四象限 + 未分类五色（C4）：与 PRD v2.2 一一对应。
+         v3.4：象限色 = 主题色四档深浅（Q1 最重要最深 → Q4 最浅），这里是兜底值，
+         真实值由 paintQuadScale 按当前强调色实时覆写；--danger 是删除/警示专用红 */
+      --q1:#9C6812; --q2:#B87C1E; --q3:#D3943A; --q4:#EFCB93; --q5:#8a94a3;
+      --danger:#e8604c;
       /* ===== 主题换肤（v3.5）：hero 图、遮罩、基调 =====
          accent 系列由 applyTheme 运行时覆写（浅色走 lightPalette 嫩感配方）；
          hero 遮罩与文字跟随界面深浅走（精进 12）*/
@@ -55,6 +61,8 @@
       --accent:#f0d878; --accent-ink:#3a2a06; --accent-deep:#f0d878;
       --accent-chip:transparent; --accent-chip-ink:#f0d878;
       --accent-line:var(--accent);
+      /* 深底上「越深越重要」看不见，改用同一逻辑的反向：Q1 最亮 → Q4 最暗（同样由 paintQuadScale 覆写） */
+      --q1:#F6DDA4; --q2:#E5C178; --q3:#C9A055; --q4:#A67F3C; --q5:#8a94a3;
       --veil-top:.42;
       --scheme:dark;
       --veil-rgb:11,12,14;
@@ -390,7 +398,7 @@
                         border:none; background:transparent; color:var(--ink); font-size:13px;
                         border-radius:8px; cursor:pointer; }
     .todo .menu button:hover, .note .menu button:hover{ background:var(--card2); }
-    .todo .menu button.danger, .note .menu button.danger{ color:var(--q1); }   /* 删除用警示红（与 Q1 同源）*/
+    .todo .menu button.danger, .note .menu button.danger{ color:var(--danger); }   /* 删除用警示红（v3.4 起与象限色脱钩）*/
     /* 精进 2：菜单打开时整卡浮到列表最上层，菜单不再被下方卡片压住 */
     .todo.menu-open, .note.menu-open{ z-index:40; }
     .mini-empty{ text-align:center; color:var(--muted); font-size:13px; padding:14px 0; }
@@ -495,7 +503,7 @@
                        cursor:pointer; display:flex; flex-direction:column; gap:2px;
                        align-items:center; justify-content:center; }
     .mem-swipe .ms-pin{ background:var(--accent); color:var(--accent-ink); }
-    .mem-swipe .ms-del{ background:var(--q1); }
+    .mem-swipe .ms-del{ background:var(--danger); }
     .mem-item{ position:relative; display:flex; align-items:center; gap:12px;
                background:var(--card2); border:1px solid var(--line); border-radius:12px;
                padding:12px; margin-bottom:0; z-index:2; cursor:pointer;
@@ -533,8 +541,8 @@
     .mem-pin-row{ display:flex; align-items:center; gap:6px; font-size:13px;
                   color:var(--muted); margin-bottom:6px; }
     .mem-pin-row input{ accent-color:var(--accent); width:16px; height:16px; }
-    #mem-edit-del{ width:100%; margin-bottom:10px; padding:9px 0; border:1px solid var(--q1);
-                   background:transparent; color:var(--q1); border-radius:10px;
+    #mem-edit-del{ width:100%; margin-bottom:10px; padding:9px 0; border:1px solid var(--danger);
+                   background:transparent; color:var(--danger); border-radius:10px;
                    font-size:13px; cursor:pointer; }
     /* 详情弹窗：hero 渐变虚化背景 + 居中大卡 */
     #mem-detail-box{ background:var(--card); text-align:center; padding:26px 20px 20px;
@@ -550,7 +558,7 @@
         transition:color .15s ease, background .15s ease; }
     #mem-detail-box .md-close{ left:12px; }
     #mem-detail-box .md-edit{ right:12px; color:var(--ink); }
-    #mem-detail-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
+    #mem-detail-box .md-close:hover{ color:var(--danger); background:rgba(231,90,73,.16); }
     #mem-detail-box .md-edit:hover{ color:var(--accent-deep); background:rgba(var(--veil-rgb),.2); }
     #mem-detail-box.bg-hero .md-edit, #mem-detail-box.bg-hero .md-close{
         text-shadow:var(--hero-shadow); }                    /* 图片背景上保证图标可读 */
@@ -592,12 +600,12 @@
     #affirm-box #affirm-bg{ flex:1; padding:12px 0; font-size:13px; color:var(--muted); }
     #affirm-box #affirm-like{ width:50px; height:46px; font-size:22px; display:flex; align-items:center;
                               justify-content:center; color:var(--muted); flex-shrink:0; }
-    #affirm-box #affirm-like.on{ color:var(--q1); border-color:var(--q1); background:rgba(231,90,73,.12); }
+    #affirm-box #affirm-like.on{ color:var(--danger); border-color:var(--danger); background:rgba(231,90,73,.12); }
     /* 关闭键：左上角透明图标，悬停变红（同详情页风格） */
     #affirm-box .md-close{ position:absolute; left:12px; top:12px; z-index:2; border:none;
         background:transparent; color:#fff; font-size:15px; width:34px; height:34px;
         cursor:pointer; text-shadow:0 1px 6px rgba(0,0,0,.5); }
-    #affirm-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
+    #affirm-box .md-close:hover{ color:var(--danger); background:rgba(231,90,73,.16); }
 
     /* ===== 随机话题 · 表达练习（精进 8 改版；v2.7 拆中文 / English 两个板块）===== */
     #topic-box{ position:relative; max-width:340px; }
@@ -605,7 +613,7 @@
     #topic-box .md-close{ position:absolute; left:10px; top:10px; z-index:2; border:none;
         background:transparent; color:var(--muted); font-size:15px; width:34px; height:34px;
         border-radius:999px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-    #topic-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
+    #topic-box .md-close:hover{ color:var(--danger); background:rgba(231,90,73,.16); }
     .topic-cat{ display:inline-block; font-size:11px; color:var(--accent-deep);
                 border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin-bottom:12px; }
     /* v2.7：中英分段（中文 = 概念表达 / English = 生活话题口语） */
@@ -624,7 +632,7 @@
     #topic-box .topic-timer{ font-size:44px; font-weight:700; margin:14px 0 6px;
                 font-variant-numeric:tabular-nums; color:var(--accent-deep); }
     #topic-box .topic-rec-dot{ }                                 /* 录音红点随父级 span 上色 */
-    #topic-rec-dot{ color:var(--q1); animation:topicPulse 1.2s ease-in-out infinite; }
+    #topic-rec-dot{ color:var(--danger); animation:topicPulse 1.2s ease-in-out infinite; }
     @keyframes topicPulse{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
     #topic-box .topic-dur{ display:flex; gap:8px; margin:14px 0 10px; }
     #topic-box .topic-dur button{ flex:1; border:1px solid var(--line); background:var(--card);
@@ -1064,7 +1072,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v3.3</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v3.4</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -4464,6 +4472,19 @@
              deep: rgb2hex(...hsl2rgb(h, .60, fitLight(h, .60, BASE, 4.5, .50, .15))),
              line: rgb2hex(...hsl2rgb(h, .68, fitLight(h, .68, BASE, 3.0, .50, .20))) };
   };
+  // -- v3.4：四象限 = 同一主题色的四档深浅（用户："按重要性由深到浅排列，颜色就是主题色"）--
+  // 浅色底 Q1 最深 → Q4 最浅；深色底反过来（深色在暗底几乎看不见，用「由亮到暗」表达同一个先后顺序）。
+  // 色相与饱和度都取自当前强调色，所以换背景图/换主题色时四档色阶跟着变，始终是「同一个颜色」。
+  const QUAD_STEPS_LIGHT = [.32, .44, .56, .68];
+  const QUAD_STEPS_DARK  = [.84, .72, .60, .48];
+  const paintQuadScale = (accentHex, isLight) => {
+    const hsl = rgb2hsl(...hex2rgb(accentHex));
+    const s = Math.min(.86, Math.max(.42, hsl[1]));
+    const steps = isLight ? QUAD_STEPS_LIGHT : QUAD_STEPS_DARK;
+    steps.forEach((l, i) => {
+      document.documentElement.style.setProperty('--q' + (i + 1), rgb2hex(...hsl2rgb(hsl[0], s, l)));
+    });
+  };
   const applyTheme = (t) => {
     if (!t) return;
     t = Object.assign({}, DEFAULT_THEME, t);   // 兜底：主题对象缺 accent 等字段时不至于加载卡死
@@ -4509,6 +4530,8 @@
                                                     : '0 1px 8px rgba(0,0,0,.55)');
     root.style.setProperty('--veil-rgb', isLight ? sfLight.veil : '11,12,14');
     root.style.setProperty('--hero-img', 'url("' + t.img + '")');
+    // v3.4：四象限色阶按「最终生效的强调色」重算（浅色主题的 accent 已被嫩感配方改写过）
+    paintQuadScale(root.style.getPropertyValue('--accent').trim() || t.accent, isLight);
   };
   const accentName = (hex) => {                              // 分析结果展示用色名（仅文案）
     const h = rgb2hsl(...hex2rgb(hex))[0];
@@ -4666,7 +4689,7 @@
     reader.readAsDataURL(f);
   });
   // 测试暴露口：纯函数直接挂 window（页面运行不依赖）
-  window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette, lightSurface };
+  window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette, lightSurface, paintQuadScale };
   window.__themeTest = { pickTheme, removeCustomBg, THEME_BGS };   // v2.8：上传背景的落盘路径要能被断言
 
 
