@@ -421,7 +421,7 @@
                 border-radius:10px; font-size:14px; background:var(--card2); color:var(--ink);
                 resize:vertical; font-family:inherit; margin-bottom:10px; box-sizing:border-box; }
 
-    /* ===== AI 洞察（Day 15，F3）：本地规则版，数据不出设备 ===== */
+    /* ===== 薯条洞察（原 AI 洞察，Day 15 / v3.3 改名）：本地规则版，数据不出设备 ===== */
     .insight-entry{ display:flex; align-items:center; gap:12px; }
     .insight-entry .ie-txt{ flex:1; min-width:0; }
     .insight-entry .ie-txt h2{ margin-bottom:4px; }
@@ -437,7 +437,7 @@
            padding:12px 14px; font-size:13px; line-height:1.8; color:var(--ink);
            min-height:76px; white-space:pre-wrap; text-align:left; }
     .iout .i-head{ color:var(--muted); font-size:11px; display:block; margin-bottom:6px; }
-    /* AI 洞察弹窗（Day 29 五轮）：✕ 在卡片左上角 */
+    /* 薯条洞察弹窗（Day 29 五轮）：✕ 在卡片左上角 */
     .insight-modal{ position:relative; }
     .i-x{ position:absolute; top:6px; left:6px; font-size:15px; }
 
@@ -917,7 +917,7 @@
     <section id="view-thoughts">
       <div class="card insight-entry">
         <div class="ie-txt">
-          <h2>AI 洞察 <span class="sub">2 种视角</span></h2>
+          <h2>薯条洞察 <span class="sub">2 种视角</span></h2>
           <p>基于你本机数据的轻量洞察，数据不出设备</p>
         </div>
         <button id="insight-open" type="button">看看 ✨</button>
@@ -1040,7 +1040,7 @@
         <ul class="guide">
           <li><b>加待办</b>：点「＋ 新建」写一条，可加时间、象限和日期；点整行 = 完成，··· 编辑或删除</li>
           <li><b>打卡</b>：同样点「＋ 新建」，类型切到「打卡」；设今日次数和起止，点行打卡看扇形</li>
-          <li><b>数据</b>：待办、心情与打卡同步云端；薯条位置暂存本机；AI 洞察只在本地拼装，不上传</li>
+          <li><b>数据</b>：待办、心情与打卡同步云端；薯条位置暂存本机；薯条洞察只在本地拼装，不上传</li>
         </ul>
         <button type="button" id="guide-replay" class="guide-replay">让薯条再教我一遍</button>
       </div>
@@ -1064,7 +1064,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v3.2</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v3.3</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1143,11 +1143,11 @@
   </div>
 </div>
 
-<!-- 弹窗 5：AI 洞察（Day 15；Day 29 五轮精简：只留默认洞察 + MBTI，关闭改左上 ✕，删「换一句」） -->
+<!-- 弹窗 5：薯条洞察（原 AI 洞察，Day 15；v3.3 改名）；Day 29 五轮精简：只留默认洞察 + MBTI，关闭改左上 ✕，删「换一句」） -->
 <div class="overlay" id="insight-modal" hidden>
   <div class="modal insight-modal">
     <button id="i-close" type="button" class="hm-x i-x" aria-label="关闭">✕</button>
-    <h3>AI 洞察</h3>
+    <h3>薯条洞察</h3>
     <div class="imodes" id="imodes">
       <button type="button" data-mode="default" class="on">默认洞察</button>
       <button type="button" data-mode="mbti">MBTI</button>
@@ -2710,7 +2710,7 @@
     el('note-count').textContent = list.length ? list.length + ' 条' : '';
   };
 
-  // ===== AI 洞察（Day 15，F3）：本地规则拼装，只读本机数据，不上传 =====
+  // ===== 薯条洞察（原 AI 洞察，Day 15 / v3.3 改名）：本地规则拼装，只读本机数据，不上传 =====
   // 五种模式共用一份"最近 7 天"统计；演示模式给一份编造的示例统计
   const weekStats = () => {
     if (demoMode) return { total: 4, done: 1, quad: { q1:1, q2:1, q3:0, q4:1, q0:1 },
@@ -3398,7 +3398,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); el('note-ok').click(); }
   });
 
-  // AI 洞察弹窗（Day 15）：切模式即重新生成，全部本地计算
+  // 薯条洞察弹窗（Day 15）：切模式即重新生成，全部本地计算
   el('insight-open').addEventListener('click', () => {
     renderInsight();
     el('insight-modal').hidden = false;
@@ -4741,8 +4741,8 @@
     { k:['专注', '番茄', '计时'], t:'专注计时怎么用？',
       a:'在「应用」页的专注计时：番茄钟 25 分钟、短专注 15、休息 5，选一个开始就行。',
       act:['去应用', () => document.querySelector('nav button[data-view="apps"]').click()] },
-    { k:['洞察', 'AI', 'MBTI', 'mbti'], t:'AI 洞察在哪？',
-      a:'「思考」页顶部的 ✨。它只在这台设备上拼装文案，数据不上传，放心用。',
+    { k:['洞察', 'AI', 'MBTI', 'mbti', '薯条洞察'], t:'薯条洞察在哪？',
+      a:'「思考」页顶部的 ✨。薯条只在你这台设备上读清单拼文案，数据不上传，放心用。',
       act:['去思考', () => document.querySelector('nav button[data-view="thoughts"]').click()] },
     { k:['主题', '深色', '浅色', '背景', '配色'], t:'怎么换主题？',
       a:'「我的」页里可以换深浅主题和背景图。',
