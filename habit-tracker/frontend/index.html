@@ -707,6 +707,13 @@
                          font-size:11px; display:flex; flex-direction:column; gap:2px;
                          align-items:center; justify-content:center; line-height:1.2; }
     .theme-picks .theme-upload b{ font-size:16px; font-weight:400; }
+    /* v2.8：自己上传的背景单独留一格「我的背景」——切到别的图也不会丢，点回来就行 */
+    .theme-picks .tc-wrap{ position:relative; width:52px; height:52px; }
+    .theme-picks .tc-wrap .theme-thumb{ display:block; width:52px; height:52px; }
+    .theme-picks .tc-del{ position:absolute; top:-6px; right:-6px; width:18px; height:18px;
+                          border-radius:50%; border:1px solid var(--line); background:var(--card);
+                          color:var(--muted); font-size:10px; line-height:1; padding:0; cursor:pointer; }
+    .theme-picks .tc-del:hover{ color:var(--ink); }
     .theme-info{ font-size:12px; color:var(--muted); margin-top:8px; }
     .theme-info .tdot{ display:inline-block; width:10px; height:10px; border-radius:50%;
                         background:var(--accent); margin:0 4px 0 2px; vertical-align:-1px; }
@@ -1012,7 +1019,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.7</b> · 2026-10-28</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.8</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1407,13 +1414,16 @@
     id: 'mem-spring', name: '春节', type: 'lunar', month: 1, day: 1,
     book: '节日', advance: 7, isPinned: true, repeat: 'yearly', bg: 'hero', created: Date.now()
   }];
-  // ===== v3.5 主题换肤：内置背景候选（落日 + 5 张肯定语图）与默认主题 =====
+  // ===== v3.5 主题换肤：内置背景候选（落日 + 4 张肯定语图）与默认主题 =====
+  // v2.8：affirm-5.jpg 与 hero.jpg 字节完全相同（md5 76af6b2a…），在候选里是重复的一张，已移出。
+  //       文件本身保留——「肯定语」卡片还在用它，动那张图会连带改掉肯定语的视觉。
   const THEME_BGS = ['assets/hero.jpg', 'assets/affirm-1.jpg', 'assets/affirm-2.jpg',
-                     'assets/affirm-3.jpg', 'assets/affirm-4.jpg', 'assets/affirm-5.jpg'];
+                     'assets/affirm-3.jpg', 'assets/affirm-4.jpg'];
   // 精进 11：默认主题改为「白色底 + 嫩黄强调」——用户要求默认不要黑色底。
   // 强调色改用黄色系（hue 48，#eac73e≈金黄）：实心块 #eac73e / 块上深字 #3a2a06 / 深色主题下的亮黄文字 #f0d878。
   const DEFAULT_THEME = { img: 'assets/hero.jpg', mode: 'light', pref: 'light',
-                          accent: '#eac73e', ink: '#3a2a06', deep: '#f0d878' };
+                          accent: '#eac73e', ink: '#3a2a06', deep: '#f0d878',
+                          custom: null };   // v2.8：本机上传的背景（base64），切走内置图也留着
   // pref：深浅偏好——'light' / 'dark'，与背景图完全解耦（换图不再改深浅）。
   // mode 字段保留为"图片亮度分析结果"留档，不再参与深浅判定。
   // 心情五个取值 —— 与数据库 plan_days_mood_enum、云函数 MOODS 三处一致（Day 29 上云）。
@@ -4233,6 +4243,24 @@
       b.addEventListener('click', () => pickTheme(src));
       wrap.appendChild(b);
     });
+    // v2.8：上传过的图留成一格常驻缩略图（选中态跟当前一致），删掉也有入口
+    if (t.custom) {
+      const box = document.createElement('span');
+      box.className = 'tc-wrap';
+      const cb = document.createElement('button');
+      cb.type = 'button';
+      cb.className = 'theme-thumb theme-custom' + (t.img === t.custom ? ' sel' : '');
+      cb.title = '我的背景';
+      cb.setAttribute('aria-label', '使用我上传的背景');
+      cb.style.backgroundImage = 'url("' + t.custom + '")';
+      cb.addEventListener('click', () => pickTheme(t.custom, { custom: true }));
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'tc-del'; del.textContent = '✕';
+      del.title = '删除我的背景'; del.setAttribute('aria-label', '删除我上传的背景');
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); removeCustomBg(); });
+      box.appendChild(cb); box.appendChild(del);
+      wrap.appendChild(box);
+    }
     const up = document.createElement('button');
     up.type = 'button'; up.className = 'theme-upload'; up.id = 'theme-upload';
     up.title = '从本地上传一张背景图'; up.innerHTML = '<b>＋</b>上传';
@@ -4259,9 +4287,11 @@
       showToast(b.dataset.pref === 'light' ? '已切浅色主题' : '已切深色主题');
     });
   });
-  const pickTheme = async (src) => {
+  // opts.custom=true：这张是本机上传的图，另存一份到 theme.custom，切走别的背景后还能点回来
+  const pickTheme = async (src, opts) => {
     if (demoMode || !data) return;
-    showToast('正在分析图片…');
+    const asCustom = !!(opts && opts.custom);
+    showToast(asCustom ? '正在处理图片…' : '正在分析图片…');
     const analyze = window.__themeAnalyze || analyzeImageSrc; // 测试注入点（jsdom 无 canvas）
     const res = await analyze(src);
     const prev = data.theme || DEFAULT_THEME;
@@ -4272,25 +4302,62 @@
                       deep: res.deep, pref: keepPref }
                   : { img: src, mode: prev.mode, accent: prev.accent, ink: prev.ink,
                       deep: prev.deep, pref: keepPref };
+    t.custom = asCustom ? src : (prev.custom || null);   // 选内置图时，「我的背景」仍留着
     data.theme = t;
+    // v2.8：存不下就如实说，别让用户以为换成功了、刷新却没了
+    try { saveData(data); }
+    catch (e) {
+      data.theme = prev;
+      showToast('这张图没存下（浏览器空间可能满了），换一张试试');
+      return;
+    }
     applyTheme(t);
-    saveData(data);
     renderThemePicks();
-    showToast('背景已更换');
+    showToast(asCustom ? '已设为我的背景，换走也能点回来' : '背景已更换');
   };
-  // 上传：读文件 → canvas 压缩（长边 ≤1080，JPEG 82%）→ 走同一套分析换肤
+  // v2.8：删除「我的背景」；正在用的这张被删时回到默认落日，配色一起重算
+  const removeCustomBg = () => {
+    if (demoMode || !data) return;
+    const prev = data.theme || DEFAULT_THEME;
+    const using = prev.img === prev.custom || String(prev.img).indexOf('data:') === 0;
+    if (using) {
+      data.theme = { img: DEFAULT_THEME.img, mode: DEFAULT_THEME.mode, accent: DEFAULT_THEME.accent,
+                     ink: DEFAULT_THEME.ink, deep: DEFAULT_THEME.deep,
+                     pref: prev.pref === 'dark' ? 'dark' : 'light', custom: null };
+    } else {
+      prev.custom = null;
+      data.theme = prev;
+    }
+    try { saveData(data); } catch (e) { /* 删图只会变小，这里基本不会失败 */ }
+    applyTheme(data.theme);
+    renderThemePicks();
+    showToast('已删除我的背景');
+  };
+  // 上传：读文件 → canvas 压缩（逐档试到长度达标）→ 走同一套分析换肤 → 存成「我的背景」
+  // v2.8 为什么要逐档试：整张图是塞进 localStorage 的（站点配额约 5MB），
+  //      一张手机原图 base64 后能到 10MB，setItem 直接抛 QuotaExceeded → 当时换了、刷新就没了。
+  //      所以按「长边 + 质量」从好到差试，第一版落进限额就停；都不行就返回最小那版，由保存处如实提示。
+  const THEME_IMG_MAX = 400000;   // base64 字符数上限，≈300KB 二进制
+  const THEME_IMG_TRIES = [[1080, .82], [1080, .70], [900, .70], [760, .62], [600, .55]];
   const compressImage = (dataUrl) => new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
+      let smallest = dataUrl;
       try {
-        const max = 1080, scale = Math.min(1, max / Math.max(img.width, img.height));
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.round(img.width * scale));
-        c.height = Math.max(1, Math.round(img.height * scale));
-        const ctx = c.getContext('2d');
-        if (!ctx) return resolve(dataUrl);
-        ctx.drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL('image/jpeg', .82));
+        for (let i = 0; i < THEME_IMG_TRIES.length; i++) {
+          const max = THEME_IMG_TRIES[i][0], q = THEME_IMG_TRIES[i][1];
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * scale));
+          c.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = c.getContext('2d');
+          if (!ctx) return resolve(dataUrl);
+          ctx.drawImage(img, 0, 0, c.width, c.height);
+          const out = c.toDataURL('image/jpeg', q);
+          smallest = out;
+          if (out.length <= THEME_IMG_MAX) return resolve(out);
+        }
+        resolve(smallest);
       } catch (e) { resolve(dataUrl); }
     };
     img.onerror = () => resolve(dataUrl);
@@ -4302,11 +4369,16 @@
     if (!f || demoMode || !data) return;
     if (!/^image\//.test(f.type)) { showToast('请选择图片文件'); return; }
     const reader = new FileReader();
-    reader.onload = () => compressImage(reader.result).then(pickTheme);
+    reader.onload = () => compressImage(reader.result).then((u) => {
+      // 极端情况：canvas 不可用、原图原样返回 → 别硬塞，明确拒绝
+      if (u.length > 1200000) { showToast('这张图太大，换一张小一些的'); return; }
+      return pickTheme(u, { custom: true });
+    });
     reader.readAsDataURL(f);
   });
   // 测试暴露口：纯函数直接挂 window（页面运行不依赖）
   window.__themeUtils = { hex2rgb, rgb2hex, rgb2hsl, hsl2rgb, contrast, fitLight, analyzePixels, accentName, lightPalette, lightSurface };
+  window.__themeTest = { pickTheme, removeCustomBg, THEME_BGS };   // v2.8：上传背景的落盘路径要能被断言
 
 
   // ===== 薯条首访引导（P1，UPGRADE-PLAN §三）：3 步气泡，只自动弹一次 =====
