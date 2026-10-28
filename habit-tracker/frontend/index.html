@@ -593,7 +593,7 @@
         cursor:pointer; text-shadow:0 1px 6px rgba(0,0,0,.5); }
     #affirm-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
 
-    /* ===== 随即话题 · 表达练习（精进 8 改版）===== */
+    /* ===== 随机话题 · 表达练习（精进 8 改版；v2.7 拆中文 / English 两个板块）===== */
     #topic-box{ position:relative; max-width:340px; }
     #topic-box h3{ margin:0 0 14px; font-size:16px; }
     #topic-box .md-close{ position:absolute; left:10px; top:10px; z-index:2; border:none;
@@ -602,8 +602,17 @@
     #topic-box .md-close:hover{ color:var(--q1); background:rgba(231,90,73,.16); }
     .topic-cat{ display:inline-block; font-size:11px; color:var(--accent-deep);
                 border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin-bottom:12px; }
+    /* v2.7：中英分段（中文 = 概念表达 / English = 生活话题口语） */
+    .topic-lang{ display:flex; gap:6px; margin:0 0 14px; padding:4px; border-radius:999px;
+                background:var(--card2); border:1px solid var(--line); }
+    .topic-lang button{ flex:1; border:none; background:transparent; color:var(--muted);
+                border-radius:999px; padding:7px 0; font-size:13px; cursor:pointer;
+                font-family:inherit; transition:background .15s, color .15s; }
+    .topic-lang button.on{ background:var(--accent); color:var(--accent-ink); font-weight:600; }
     #topic-box .topic-word{ font-size:24px; font-weight:700; margin:6px 0 10px; line-height:1.4;
                 color:var(--ink); }
+    /* 英文题面是整句，字号降一档才放得下（纯英文，按用户 2026-10-28 拍板） */
+    #topic-box .topic-word.en{ font-size:19px; font-weight:600; line-height:1.5; }
     #topic-box .topic-phase{ font-size:15px; font-weight:600; margin:0 0 6px; color:var(--ink); }
     #topic-box .topic-hint{ font-size:12px; color:var(--muted); margin:4px 0 0; line-height:1.6; }
     #topic-box .topic-timer{ font-size:44px; font-weight:700; margin:14px 0 6px;
@@ -636,6 +645,11 @@
     .topic-history .th-row{ font-size:12px; color:var(--ink); padding:4px 0;
                 display:flex; justify-content:space-between; gap:8px; }
     .topic-history .th-row .th-d{ color:var(--muted); flex-shrink:0; }
+    .topic-history .th-row .th-lang{ font-size:10px; color:var(--accent-deep);
+                border:1px solid var(--line); border-radius:999px; padding:0 5px; margin-right:5px; }
+    /* 英文题面是整句，历史里必须截断，否则会把日期挤出去 */
+    .topic-history .th-row > span:first-child{ min-width:0; overflow:hidden;
+                text-overflow:ellipsis; white-space:nowrap; }
 
     /* ===== 我的页面（F5 MVP）===== */
     .profile{ display:flex; align-items:center; gap:14px; }
@@ -913,7 +927,7 @@
         </button>
         <button type="button" class="app-item" data-app="topic">
           <span class="ai-badge"><svg class="ai-ic" viewBox="0 0 48 48" aria-hidden="true"><use href="#ic-topic"/></svg></span>
-          <span class="ai-txt"><b>随即话题</b><span>随机一个话题，聊天不冷场</span></span>
+          <span class="ai-txt"><b>随机话题</b><span>抽题练表达 · 中文概念 / English 生活话题</span></span>
           <span class="ai-arrow">›</span>
         </button>
         <button type="button" class="app-item" data-app="widget" disabled>
@@ -998,7 +1012,7 @@
   </main>
 
   <!-- Day 26：v1.0 正式发布的版本标识（回滚演练的肉眼观测点，见 ROLLBACK.md） -->
-  <footer class="app-ver" id="app-ver">自律计划 <b>v2.6</b> · 2026-10-27</footer>
+  <footer class="app-ver" id="app-ver">自律计划 <b>v2.7</b> · 2026-10-28</footer>
 </div>
 
 <!-- FAB：添加待办（写入当前查看的日期，Day 29 七轮放开） -->
@@ -1201,38 +1215,43 @@
   </div>
 </div>
 
-<!-- 精进 8：随即话题改造成表达能力训练——抽概念词 → 了解 5 分钟 → 演讲 10/15 分钟（可录音）→ 攒下来 -->
+<!-- 精进 8：随机话题改造成表达能力训练——抽概念词 → 了解 5 分钟 → 演讲 10/15 分钟（可录音）→ 攒下来
+     v2.7（Day 31）：拆成中文 / English 两个板块——中文沿用原流程；English 是生活话题（童年爱好这类），
+     准备 15 分钟 + 讲 3/5/10 分钟，题面纯英文（用户 2026-10-28 拍板） -->
 <div class="overlay" id="topic-modal" hidden>
   <div class="modal" id="topic-box">
-    <button id="topic-close" class="md-close" type="button" title="关闭" aria-label="关闭随即话题">✕</button>
-    <h3>随即话题 · 表达练习</h3>
+    <button id="topic-close" class="md-close" type="button" title="关闭" aria-label="关闭随机话题">✕</button>
+    <h3>随机话题 · 表达练习</h3>
 
-    <!-- 步骤 1：抽词 -->
+    <!-- v2.7：两个板块——中文（概念表达）/ English（生活话题口语），切换即换题库与流程参数 -->
+    <div class="topic-lang" id="topic-lang" role="group" aria-label="话题语言">
+      <button type="button" data-lang="zh" class="on" aria-pressed="true">中文</button>
+      <button type="button" data-lang="en" aria-pressed="false">English</button>
+    </div>
+
+    <!-- 步骤 1：抽题 -->
     <div id="topic-step-draw">
       <span class="topic-cat" id="topic-cat" role="status"></span>
       <p class="topic-word" id="topic-word"></p>
-      <p class="topic-hint">用你自己的话把这个概念讲明白——能讲清楚，才是真的懂</p>
+      <p class="topic-hint" id="topic-draw-hint">用你自己的话把这个概念讲明白——能讲清楚，才是真的懂</p>
       <div class="topic-actions">
         <button id="topic-redraw" type="button">再抽一次</button>
         <button id="topic-start" type="button">开始</button>
       </div>
     </div>
 
-    <!-- 步骤 2：了解 5 分钟 -->
+    <!-- 步骤 2：准备（中文 = 了解 5 分钟；English = 准备 15 分钟） -->
     <div id="topic-step-learn" hidden>
-      <p class="topic-phase">快速了解「<span id="topic-learn-word"></span>」</p>
+      <p class="topic-phase" id="topic-prep-title">快速了解</p>
       <p class="topic-timer" id="topic-learn-timer">5:00</p>
-      <p class="topic-hint">查资料、记要点，时间到就开始讲</p>
+      <p class="topic-hint" id="topic-prep-hint">查资料、记要点，时间到就开始讲</p>
       <div class="topic-actions"><button id="topic-learn-skip" type="button">跳过，直接讲</button></div>
     </div>
 
-    <!-- 步骤 3：选演讲时长与是否录音 -->
+    <!-- 步骤 3：选时长与是否录音（档位由 JS 按板块渲染：中文 10/15，English 3/5/10） -->
     <div id="topic-step-prep" hidden>
       <p class="topic-phase">准备讲「<span id="topic-prep-word"></span>」</p>
-      <div class="topic-dur" role="group" aria-label="演讲时长">
-        <button type="button" data-dur="10" class="on" aria-pressed="true">10 分钟</button>
-        <button type="button" data-dur="15" aria-pressed="false">15 分钟</button>
-      </div>
+      <div class="topic-dur" id="topic-dur" role="group" aria-label="演讲时长"></div>
       <label class="topic-rec"><input type="checkbox" id="topic-rec-cb" /> 同时录音（会请求麦克风权限）</label>
       <div class="topic-actions"><button id="topic-speak" type="button">开始演讲</button></div>
     </div>
@@ -3751,8 +3770,11 @@
     renderAffirm();
   });
 
-  // ===== 随即话题 · 表达练习（精进 8 改版，F6）=====
-  // 流程：抽概念词 →（再抽一次）→ 开始 → 了解 5 分钟 → 选 10/15 分钟 + 可录音 → 演讲 → 攒下来
+  // ===== 随机话题 · 表达练习（精进 8 改版，F6；v2.7 拆中文 / English 两个板块）=====
+  // 中文：抽概念词 → 了解 5 分钟 → 讲 10/15 分钟 → 攒下来
+  // English：抽生活话题 → 准备 15 分钟 → 讲 3/5/10 分钟 → 攒下来（题面纯英文）
+  // 两个板块共用同一套「准备 → 计时 → 录音 → 攒下」组件，差异全部收在 TOPIC_LANGS 里，
+  // 这样以后加第三门语言只是加一条配置，不用再动流程代码。
   const CONCEPTS = [
     { c: '技术', t: '模型蒸馏' }, { c: '技术', t: '机器学习' }, { c: '技术', t: '区块链' },
     { c: '技术', t: '量子计算' }, { c: '技术', t: '算法偏见' }, { c: '技术', t: '开源软件' },
@@ -3767,6 +3789,63 @@
     { c: '思维', t: '灰犀牛' }, { c: '思维', t: '飞轮效应' }, { c: '思维', t: '路径依赖' },
     { c: '思维', t: '奥卡姆剃刀' }, { c: '思维', t: '系统性思维' }
   ];
+  // 英文题库：生活向（用户指定「童年爱好」这类），不考概念、只求开口能持续说下去
+  const EN_TOPICS = [
+    { c: 'Childhood', t: 'A hobby you loved as a child — and whether you still do it today.' },
+    { c: 'Childhood', t: 'The first friend you ever made. How did the two of you meet?' },
+    { c: 'Childhood', t: 'A childhood trip you still remember clearly. What made it stick?' },
+    { c: 'Childhood', t: 'Something you were afraid of as a kid, and how you got over it.' },
+    { c: 'Childhood', t: 'A toy or small object from your childhood you wish you still had.' },
+    { c: 'Childhood', t: 'A rule your family had when you were little, and whether you keep it now.' },
+    { c: 'Life', t: 'A small daily habit that quietly makes your day better.' },
+    { c: 'Life', t: 'The best meal you have had recently — where was it, and who were you with?' },
+    { c: 'Life', t: 'How you usually spend a free Sunday when nothing is planned.' },
+    { c: 'Life', t: 'Something you bought recently that turned out to be worth the money.' },
+    { c: 'Life', t: 'A place in your city you would take a visitor to, and why that one.' },
+    { c: 'Life', t: 'What your room says about you. Pick three things and explain them.' },
+    { c: 'Life', t: 'A part of your day you would protect even when you are very busy.' },
+    { c: 'Habits', t: 'A habit you are trying to build right now, and how it is going.' },
+    { c: 'Habits', t: 'A habit you would like to quit. Why is it so hard to let go?' },
+    { c: 'Habits', t: 'How your morning routine has changed in the last few years.' },
+    { c: 'Habits', t: 'Something you do every day without thinking about it at all.' },
+    { c: 'Memories', t: 'A moment you laughed so hard you could not breathe.' },
+    { c: 'Memories', t: 'A teacher or coach who changed the way you see something.' },
+    { c: 'Memories', t: 'The last time you felt genuinely proud of yourself.' },
+    { c: 'Memories', t: 'A song that brings back one very specific memory for you.' },
+    { c: 'People', t: 'Someone you admire but have never told them so.' },
+    { c: 'People', t: 'A person you have lost touch with and still think about sometimes.' },
+    { c: 'People', t: 'The most interesting stranger you have ever talked to.' },
+    { c: 'People', t: 'Someone who gave you advice you still use today.' },
+    { c: 'Imagine', t: 'If you could live in any city for a year, where would you go?' },
+    { c: 'Imagine', t: 'A skill you would learn if you had six free months and no pressure.' },
+    { c: 'Imagine', t: 'If your life had a soundtrack, what three songs would be on it?' },
+    { c: 'Imagine', t: 'What would you do with one extra hour every single day?' },
+    { c: 'Opinions', t: 'Is it better to be busy or to have plenty of free time?' },
+    { c: 'Opinions', t: 'Should people share their goals publicly, or keep them private?' },
+    { c: 'Opinions', t: 'What actually makes a friendship last for years?' },
+    { c: 'Opinions', t: 'Is it a strength or a weakness to change your mind often?' },
+    { c: 'Growth', t: 'Something you understand much better now than a year ago.' },
+    { c: 'Growth', t: 'A mistake that taught you more than any success did.' },
+    { c: 'Growth', t: 'What "a good life" means to you at this point in your life.' }
+  ];
+  const TOPIC_LANGS = {
+    zh: {
+      pool: CONCEPTS, durs: [10, 15], prepSec: 300, isEn: false,
+      drawHint: '用你自己的话把这个概念讲明白——能讲清楚，才是真的懂',
+      prepTitle: t => '快速了解「' + t + '」',
+      prepHint: '查资料、记要点，时间到就开始讲',
+      summary: (t, min, rec) => '「' + t + '」讲了 ' + min + ' 分钟' + (rec ? '，已录下' : '')
+    },
+    en: {
+      pool: EN_TOPICS, durs: [3, 5, 10], prepSec: 900, isEn: true,
+      drawHint: 'Talk it through in English. No script, no perfect grammar — just keep going.',
+      prepTitle: t => 'Get ready to talk about: ' + t,
+      prepHint: 'Jot down a few key words, not a full script. The timer will tell you when to start.',
+      summary: (t, min, rec) => '“' + t + '” · ' + min + ' min' + (rec ? ' · recorded' : '')
+    }
+  };
+  let topicLang = 'zh';                                     // 当前板块：zh / en
+  const topicCfg = () => TOPIC_LANGS[topicLang] || TOPIC_LANGS.zh;
   let topicLast = -1, topicWord = null;                     // 当前抽中的词
   let topicDur = 10, topicInterval = null, topicLeft = 0;   // 演讲时长/计时器
   let topicUsedSec = 0, recActive = false;                  // 实际演讲秒数 / 是否在录音
@@ -3775,13 +3854,41 @@
   const stopTopicTimer = () => { if (topicInterval) { clearInterval(topicInterval); topicInterval = null; } };
   const topicStep = (id) => ['topic-step-draw', 'topic-step-learn', 'topic-step-prep', 'topic-step-speak', 'topic-step-done']
     .forEach(s => { el(s).hidden = s !== id; });
+  // 时长档位随板块变（中文 10/15，English 3/5/10），所以按钮只能动态渲染，不能写死在 HTML 里
+  const renderDur = () => {
+    const box = el('topic-dur');
+    box.textContent = '';
+    topicDur = topicCfg().durs[0];
+    topicCfg().durs.forEach((d, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.dur = String(d);
+      b.textContent = d + ' 分钟';
+      b.className = i === 0 ? 'on' : '';
+      b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+      b.addEventListener('click', () => {
+        topicDur = d;
+        box.querySelectorAll('button').forEach(x => {
+          const on = x === b;
+          x.classList.toggle('on', on);
+          x.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+      });
+      box.appendChild(b);
+    });
+  };
   const drawWord = () => {
+    const cfg = topicCfg();
     let i;
-    do { i = Math.floor(Math.random() * CONCEPTS.length); } while (CONCEPTS.length > 1 && i === topicLast);
-    topicLast = i; topicWord = CONCEPTS[i];
-    el('topic-word').textContent = topicWord.t;
+    do { i = Math.floor(Math.random() * cfg.pool.length); } while (cfg.pool.length > 1 && i === topicLast);
+    topicLast = i; topicWord = cfg.pool[i];
+    const w = el('topic-word');
+    w.textContent = topicWord.t;
+    w.classList.toggle('en', !!cfg.isEn);                   // 英文题是整句，字号降一档
+    w.dataset.lang = topicLang;                             // 测试断言用
     el('topic-cat').textContent = topicWord.c;
-    el('topic-word').dataset.idx = i;                       // 测试断言用
+    el('topic-draw-hint').textContent = cfg.drawHint;
+    w.dataset.idx = i;                                      // 测试断言用
   };
   const tickTopic = (onZero) => {                           // 统一节拍：测试注入 __topicFast 提速（60s/拍）
     const fast = !!window.__topicFast;
@@ -3791,11 +3898,14 @@
       ? el('topic-learn-timer').textContent = fmtSec(topicLeft)
       : el('topic-speak-timer').textContent = fmtSec(topicLeft);
   };
-  const startLearn = () => {
+  // 准备步：中文是「了解 5 分钟」，English 是「准备 15 分钟」——时长与文案都由板块配置给
+  const startPrep = () => {
+    const cfg = topicCfg();
     topicStep('topic-step-learn');
-    el('topic-learn-word').textContent = topicWord.t;
-    topicLeft = 5 * 60;
+    el('topic-prep-title').textContent = cfg.prepTitle(topicWord.t);
+    topicLeft = cfg.prepSec;
     el('topic-learn-timer').textContent = fmtSec(topicLeft);
+    el('topic-prep-hint').textContent = cfg.prepHint;
     stopTopicTimer();
     topicInterval = setInterval(() => tickTopic(toPrep), window.__topicFast ? 20 : 1000);
   };
@@ -3834,8 +3944,8 @@
     topicUsedSec = topicDur * 60 - topicLeft;               // 实际演讲秒数
     const wrapUp = (recorded) => {
       topicStep('topic-step-done');
-      el('topic-done-summary').textContent = '「' + topicWord.t + '」讲了 '
-        + Math.max(1, Math.round(topicUsedSec / 60)) + ' 分钟' + (recorded ? '，已录下' : '');
+      el('topic-done-summary').textContent = topicCfg().summary(
+        topicWord.t, Math.max(1, Math.round(topicUsedSec / 60)), recorded);
       const audio = el('topic-audio'), dl = el('topic-dl');
       if (recorded && recChunks.length && window.URL && URL.createObjectURL) {
         const blob = new Blob(recChunks, { type: recChunks[0].type || 'audio/webm' });
@@ -3857,8 +3967,10 @@
   const renderTopicHistory = () => {
     const box = el('topic-history');
     const list = (data && Array.isArray(data.speeches)) ? data.speeches : [];
+    // 老记录没有 lang 字段 → 一律当中文（v2.7 之前的练习都是中文概念题）
     const rows = list.slice(-5).reverse().map(s =>
-      '<div class="th-row"><span>' + s.word + ' · ' + s.minutes + ' 分钟' + (s.recorded ? ' · 🎙' : '')
+      '<div class="th-row"><span><span class="th-lang">' + (s.lang === 'en' ? 'EN' : '中') + '</span>'
+      + s.word + ' · ' + s.minutes + ' 分钟' + (s.recorded ? ' · 🎙' : '')
       + '</span><span class="th-d">' + s.date + '</span></div>').join('');
     box.innerHTML = list.length
       ? '<div class="th-sum">已积累 ' + list.length + ' 次表达练习</div>' + rows
@@ -3867,16 +3979,32 @@
   const saveSpeech = () => {
     if (demoMode || !data) return;
     if (!Array.isArray(data.speeches)) data.speeches = [];
-    data.speeches.push({ date: todayStr(), word: topicWord.t, cat: topicWord.c,
+    data.speeches.push({ date: todayStr(), word: topicWord.t, cat: topicWord.c, lang: topicLang,
                          minutes: Math.max(1, Math.round(topicUsedSec / 60)), recorded: false });
     saveData(data);
     renderTopicHistory();
     showToast('已攒下，第 ' + data.speeches.length + ' 次表达练习');
   };
+  // 切板块：换题库、换时长档位、换文案，并回到抽题步（正在计时就先停掉）
+  const setTopicLang = (lang) => {
+    if (!TOPIC_LANGS[lang] || lang === topicLang) return;
+    stopTopicTimer();
+    topicLang = lang;
+    el('topic-lang').querySelectorAll('button').forEach(b => {
+      const on = b.dataset.lang === lang;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    renderDur();
+    topicStep('topic-step-draw');
+    drawWord();
+  };
   const openTopic = () => {
     stopTopicTimer();
     topicStep('topic-step-draw');
+    renderDur();
     drawWord();
+    renderTopicHistory();        // v2.7：打开就把历史渲染出来（否则刷新后要等完成一次才显示）
     el('topic-modal').hidden = false;
   };
   el('topic-close').addEventListener('click', () => {
@@ -3889,20 +4017,13 @@
     el('topic-modal').hidden = true;
   });
   el('topic-redraw').addEventListener('click', drawWord);
-  el('topic-start').addEventListener('click', startLearn);
+  el('topic-start').addEventListener('click', startPrep);
   el('topic-learn-skip').addEventListener('click', toPrep);
   el('topic-speak').addEventListener('click', startSpeak);
   el('topic-stop').addEventListener('click', finishSpeak);
   el('topic-save').addEventListener('click', saveSpeech);
-  el('topic-box').querySelectorAll('.topic-dur button').forEach(b => {
-    b.addEventListener('click', () => {
-      topicDur = +b.dataset.dur;
-      el('topic-box').querySelectorAll('.topic-dur button').forEach(x => {
-        const on = x === b;
-        x.classList.toggle('on', on);
-        x.setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
-    });
+  el('topic-lang').querySelectorAll('button').forEach(b => {
+    b.addEventListener('click', () => setTopicLang(b.dataset.lang));
   });
 
   // ===== 主题换肤引擎（v3.5）：全部本地 canvas 像素分析，零网络请求（R6 隐私红线）=====
